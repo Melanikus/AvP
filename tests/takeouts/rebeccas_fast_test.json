@@ -1,0 +1,139 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "NORMALS: an animation frame's normals aren't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\tif (!normals_are_valid (p_normal_list, num_polys, num_polys))\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "NORMALS: a bad animation frame normal doesn't refuse the level",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\tif (!normals_are_valid (p_normal_list, num_polys, num_polys))\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n",
+					"to": "\tif (!normals_are_valid (p_normal_list, num_polys, num_polys))\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "TEXTURES: a texture coordinate isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n\t\t\t{\n\t\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t\t\t\treturn;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "TEXTURES: a texture coordinate's u isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n",
+					"to": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n"
+				}
+			]
+		},
+		{
+			"name": "TEXTURES: a texture coordinate's v isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n",
+					"to": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest))\n"
+				}
+			]
+		},
+		{
+			"name": "TEXTURES: the furthest a texture coordinate can be is a texel short",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\t\t\tfloat const furthest = (float)kTextureAnimationFurthestTexel;\n",
+					"to": "\t\t\tfloat const furthest = (float)(kTextureAnimationFurthestTexel - 1);\n"
+				}
+			]
+		},
+		{
+			"name": "TEXTURES: a bad texture coordinate doesn't refuse the level",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n\t\t\t{\n\t\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n",
+					"to": "\t\t\tif (!IsRealNumberFrom(lists[i].vert[j].u, -furthest, furthest) || !IsRealNumberFrom(lists[i].vert[j].v, -furthest, furthest))\n\t\t\t{\n"
+				}
+			]
+		},
+		{
+			"name": "LIGHT SCALE: a light scale's numbers aren't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "\t\tif (!IsRealNumberFrom(numbers[i], -16777216.0f, 16777216.0f))\n\t\t{\n\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t\t\tnumbers[i] = 0;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LIGHT SCALE: a bad number doesn't refuse the level",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t\t\tnumbers[i] = 0;\n",
+					"to": "\t\t\tnumbers[i] = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "LIGHT SCALE: the last number isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "\tfloat numbers[6];\n\tmemcpy(numbers, data, sizeof(numbers));\n\tdata+=sizeof(numbers);\n\n\tfor (int i = 0; i < 6; i++)\n",
+					"to": "\tfloat numbers[6];\n\tmemcpy(numbers, data, sizeof(numbers));\n\tdata+=sizeof(numbers);\n\n\tfor (int i = 0; i < 5; i++)\n"
+				}
+			]
+		},
+		{
+			"name": "LIGHT SCALE: the biggest a number can be is a little too small",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "\t\tif (!IsRealNumberFrom(numbers[i], -16777216.0f, 16777216.0f))\n",
+					"to": "\t\tif (!IsRealNumberFrom(numbers[i], -16777216.0f, 16777215.0f))\n"
+				}
+			]
+		},
+		{
+			"name": "ECHO: a module's amount of echo isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "\tif (!IsRealNumber(reverb))\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "ECHO: a level's amount of echo isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/win95/environment_chunk.cpp",
+					"from": "\tif (!IsRealNumber(reverb))\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t}\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

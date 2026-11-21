@@ -4,6 +4,7 @@
 //   a path's number has to be a place in the list of paths
 //   a name is only read as far as the end of its chunk
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   each point of a path has to be inside the level, as CheckPlace in chunk.hpp says (2026-11-14)
 
 #include "path_chunk.hpp"
 
@@ -48,6 +49,7 @@ AVP_Path_Chunk::AVP_Path_Chunk(Chunk_With_Children* parent,const char* data,size
 	for(int i=0;i<PathLength;i++)
 	{
 		Path[i]=*(ChunkPathPoint*)data;
+		CheckPlace(Path[i].location);
 		data+=sizeof(ChunkPathPoint);
 	}		
 }

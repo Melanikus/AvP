@@ -1,3 +1,7 @@
+// Modified 2026-11-19 by Melanikus (Frost) for the AvP port:
+//   lanes=yes, the lane probe (hudson_lanes.h): HudsonLanesAreOn, its one alien moves while the level's own are kept still, and it ends the run
+// Modified 2026-11-18 by Melanikus (Drake) for the AvP port:
+//   meetsagain= says where he is a second time, that many seconds after meets=yes's first reading (SayWhereHeIsAgainIfItIsTime)
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   the comment on what a run is for no longer points at a plan kept outside the repository (#151), and says where runs are asked for and read
 // Modified 2026-11-08 by Melanikus for the AvP port:
@@ -178,6 +182,11 @@ extern int InGameMenusAreRunning(void);                             // menus.cpp
 #include "pfarlocs.h"
 #include "alien_ways.h"   // AlienWays_PlaceOf, for the per-alien lines (added 2026-11-11, Third)
 #include "floor_is_lava.h"   // floorislava=off: the console's own FLOORISLAVA OFF (added 2026-11-11, Third)
+#include "stock_flags.h"     // stock=yes, and every flag's state in the log (added 2026-11-20, Vasquez)
+#include "debug_view.h"      // normals=yes, wireframe=yes: the debug views, render only (added 2026-11-20, Drake)
+
+extern int WireFrameMode;      // d3d_render.cpp: Rebellion's own WIREFRAMEMODE (1 the environment, 2 the objects, 3 both)
+extern int NormalLinesOn;      // d3d_render.cpp: the NORMAL LINES view (normal_lines.h), J with -dev
 #include "hudson_vision.h"
 #include "hudson_video.h"
 #include "shoulder_lamp.h"
@@ -194,6 +203,7 @@ static const float kHudsonLampWideUp = 200.0f;
 #include "hudson.h"
 #include "load_shape.h"
 #include "hudson_plan.h"
+#include "hudson_lanes.h"   // lanes=yes, the lane probe (added 2026-11-19 by Melanikus (Frost))
 #include "custom_maps.h"
 #include "hmodel.h"
 #include "weapon_hooks.h"
@@ -259,6 +269,7 @@ bool HudsonPeopleStandStill = false;
 int HudsonWayOfDying = -1;
 bool HudsonWorldIsLive = false;
 bool HudsonMarineHoldsFire = false;
+bool HudsonLanesAreOn = false;
 
 static const DWORD kWatchdogLooksEveryMilliseconds = 50;
 static const char kRunFolderName[] = "HudsonRun";
@@ -678,7 +689,7 @@ static void WriteResult(const char *howItEnded, int code)
 
 		if (plan.play)
 		{
-			char playLine[200];
+			char playLine[260];   // play_flares= made the line longer than 200 (Frost 11-20)
 
 			HudsonPlay_ForTheResult(playLine, (int)sizeof(playLine));
 			fprintf(file, "%s\n", playLine);
@@ -917,6 +928,31 @@ int Hudson_CheckBeforeStarting()
 		FloorIsLava_FromWords("OFF", &FloorIsLavaAsked);
 	}
 
+	// stock=yes: every flag of stock_flags.h off, before any level (the owner 2026-11-20: "we need any new behavior we added behind a flag in AVPX or these
+	// tests mean nothing"). Every run then writes each flag's state to the log, before any level, for the run's reader to check: "flags: floorislava=off
+	// newdynamiccollisions=off farlocs4thcorner=off pheromonedoor=off nearwake=off (stock)". Added 2026-11-20 by Melanikus (Vasquez).
+	if (plan.stock)
+	{
+		StockFlags_AllStock();
+	}
+
+	// normals=, normalcolours=, wireframe=: the debug views, before any level. They change how a pixel looks, never what the game decides (debug_view.h), and the log
+	// line below reads them back beside the stock flags. normals=yes is the NORMAL LINES view, J's (normal_lines.h: each polygon's normals stood up as lines over the lit
+	// scene; a network game has none); wireframe=yes is Rebellion's own WIREFRAMEMODE 3, the console's cheat
+	DebugView_Set(plan.viewNormals, plan.viewNormalColours, plan.viewWireframe);
+
+	if (plan.viewNormals)
+	{
+		NormalLinesOn = 1;
+	}
+
+	if (plan.viewWireframe)
+	{
+		WireFrameMode = 3;
+	}
+
+	LogString(std::string("hudson: ") + StockFlags_Words() + "; " + DebugView_Words());
+
 	// yespage=: this run's line waits for the run's own Yes on the yes page, as a player's does, and that yes is held for the run alone
 	// (relay_list.h). Here, before the menus, so the list can't have started yet. Added 2026-11-10 by Melanikus (Third) for the AvP port.
 	if (plan.yesPage != kHudsonYesPageNone)
@@ -1085,6 +1121,40 @@ int Hudson_CheckBeforeStarting()
 			HudsonWorldIsLive = true;
 			HudsonMarineHoldsFire = plan.holdFire;
 			ForceLoad_Alien = TRUE;
+		}
+	}
+
+	// dieroll=N (added 2026-11-20 by Melanikus (Frost), Bishop: the same layout on every A/B and full run): the game's own QUANTUM_ROLL console variable, before
+	// the level loads, so every alternate-location group takes its place N mod its count (object_setup.cpp, select_alternate_location)
+	if (plan.dieRollAsked)
+	{
+		extern int QuantumObjectDieRollOveride;
+
+		QuantumObjectDieRollOveride = plan.dieRoll;
+	}
+
+	// lanes=yes, the lane probe (hudson_lanes.h): before the level loads, as above, so that an alien's models are there. The level's own NPCs,
+	// generators and hive are kept still, and the probe's one alien is let move (Hudson_KeepsStill)
+	// lanes=watch (added 2026-11-20 by Melanikus (Frost)): the level as he plays it, so nothing is kept still: HudsonLanesAreOn stays off, and the probe still ends the run
+	if (plan.lanes)
+	{
+		// supply= (Frost 11-20): the level's own kept still, the probe's supply of aliens the only ones that move
+		HudsonLanesAreOn = !plan.lanesWatch || plan.supply > 0;
+		ForceLoad_Alien = TRUE;
+		HudsonLanes_Begin(plan.alienAtX, plan.alienAtY, plan.alienAtZ, plan.standAtX, plan.standAtY, plan.standAtZ, plan.frames, plan.alienOnCeiling, plan.lanesWatch);
+
+		// lanes=watch with play=yes (probe v3, added 2026-11-20 by Melanikus (Frost)): he plays from the level's own start, holding his fire
+		if (plan.play)
+		{
+			HudsonLanes_HePlays();
+			// watchmost=S: the full-level run plays as long as the level takes (Frost 11-20)
+			HudsonLanes_PlayMost(plan.watchMost);
+			HudsonPlay_HoldFire(plan.lanesWatch);
+			HudsonLanes_Supply(plan.supply, plan.supplyAtX, plan.supplyAtY, plan.supplyAtZ, plan.supplyEvery, plan.supplyAround);
+			HudsonLanes_SupplyAhead(plan.supplyAhead, plan.supplyOpenSky);   // supplyat=ahead, supplyopensky= (Frost 2026-11-21)
+			HudsonLanes_SupplyIn(plan.supplyIn);
+			// supplygate=ceiling: the next alien only once the last one has been on a ceiling (Frost 11-20, the owner)
+			HudsonLanes_SupplyGate(plan.supplyGate);
 		}
 	}
 
@@ -2745,6 +2815,18 @@ static void MoveThePlayerTo(const VECTORCH &place)
 	Global_VDB_Ptr->VDB_World = Player->ObWorld;
 	AllNewModuleHandler();
 	DoObjectVisibilities();
+}
+
+// The lane probe puts the player down the same way (hudson_lanes.cpp). Added 2026-11-19 by Melanikus (Frost): setting the place alone left the
+// player's world place and his rooms behind, and the game had him back at the level's start.
+void Hudson_MoveThePlayerTo(const VECTORCH &place)
+{
+	if (!HudsonRunIsOn || !Player || !Player->ObStrategyBlock || !Player->ObStrategyBlock->DynPtr)
+	{
+		return;
+	}
+
+	MoveThePlayerTo(place);
 }
 
 // Puts him and the player where this view looks from, at the height he's standing at now. False if that's in no room at all. He settles again before the view counts, so a floor that's a little lower there does no harm.
@@ -5026,7 +5108,8 @@ static void GiveTheFilmThisFrame(const D3DSURFACE_DESC &filmSize, double seconds
 
 		if (SUCCEEDED(hr))
 		{
-			if ((plan.siegeRoom[0] || plan.play) && (filmSize.Format == D3DFMT_X8R8G8B8 || filmSize.Format == D3DFMT_A8R8G8B8))
+			// filmclock=off (Frost 2026-11-20, the films for the public): no clock in the corner
+			if ((plan.siegeRoom[0] || plan.play) && !plan.filmClockOff && (filmSize.Format == D3DFMT_X8R8G8B8 || filmSize.Format == D3DFMT_A8R8G8B8))
 			{
 				HudsonPlan_StampNumber((unsigned char *)locked.pBits, locked.Pitch, (int)filmSize.Width, (int)filmSize.Height, GetTickCount());
 			}
@@ -5564,6 +5647,20 @@ bool Hudson_KeepsStill(STRATEGYBLOCK *block)
 		return false;
 	}
 
+	// lanes=yes: the probe's one alien is the only thing that moves
+	if (HudsonLanes_IsTheAlien(block))
+	{
+		return false;
+	}
+
+	// lanes=watch with a supply (Frost 2026-11-20, Bishop for the owner, the snowplow: the level's own alieninoffice, a placed alien in Wait that only its own near
+	// state wakes, was kept still and shoved down Object07 in every supply run): the level's own NPCs act as stock; only its generators stay still (the hive is off
+	// with HudsonLanesAreOn), so the probe's supply is the only thing made. A watch with no supply keeps nothing still (HudsonLanesAreOn stays off)
+	if (HudsonLanes_Watching() && block->I_SBtype != I_BehaviourGenerator)
+	{
+		return false;
+	}
+
 	switch (block->I_SBtype)
 	{
 		case I_BehaviourMarine:
@@ -5925,6 +6022,56 @@ static void DieIfItIsTime()
 		diedAlready = true;
 		LogString("hudson: he dies now, as dieat= asks");
 		CauseDamageToObject(Player->ObStrategyBlock, &certainDeath, ONE_FIXED, NULL);
+	}
+}
+
+// meetsagain=: with meets=yes, where he is and the room he's in are said a second time, that many seconds after the first frame's
+// reading, once in the run. The first reading is on the first frame, where the level put him down; this one is where he stands once he
+// has had time to fall, so a start placed in the air or over nothing reads differently. For the mapper's journey: a start placed in the
+// editor, then played. Added 2026-11-18 by Melanikus (Drake) for the AvP port.
+static void SayWhereHeIsAgainIfItIsTime()
+{
+	static DWORD started = 0;
+	static bool saidAlready = false;
+
+	if (plan.meetsAgainSeconds == 0 || saidAlready)
+	{
+		return;
+	}
+
+	DWORD const now = GetTickCount();
+
+	if (started == 0)
+	{
+		started = now;
+	}
+
+	if (now - started >= (DWORD)plan.meetsAgainSeconds * 1000)
+	{
+		STRATEGYBLOCK *const block = Player ? Player->ObStrategyBlock : NULL;
+
+		// With no one to read, he is read on the next frame he is there
+		if (!block || !block->DynPtr)
+		{
+			return;
+		}
+
+		saidAlready = true;
+
+		char line[300];
+		MODULE const *const room = block->containingModule;
+
+		_snprintf(line, sizeof(line) - 1, "meets-again: he's at %d %d %d", block->DynPtr->Position.vx, block->DynPtr->Position.vy, block->DynPtr->Position.vz);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+
+		_snprintf(line, sizeof(line) - 1, "meets-again: he's in room %s", room && room->name ? room->name : "(none)");
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+
+		_snprintf(line, sizeof(line) - 1, "meets-again: health %d, %d seconds in", block->SBDamageBlock.Health, plan.meetsAgainSeconds);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
 	}
 }
 
@@ -6430,6 +6577,7 @@ void Hudson_EndOfFrame()
 	DieIfItIsTime();
 	FollowTheNamedThing();
 	ReachTheEndIfItIsTime();
+	SayWhereHeIsAgainIfItIsTime();
 
 	// After dying, in single player or in the mode that plays like it: the same lines, for comparing with the first
 	if (levelStartedAgain)
@@ -6547,6 +6695,20 @@ void Hudson_EndOfFrame()
 	if (done == 1 && !GotTheModeItAskedFor())
 	{
 		EndTheLevel("this machine can't draw the mode it was asked for", kHudsonExitModeNotThere);
+		return;
+	}
+
+	// lanes=yes: the lane probe ends the run itself, its verdict written first (hudson_lanes.h)
+	if (plan.lanes)
+	{
+		const char *howItEnded = "";
+		int code = kHudsonExitFinished;
+
+		if (HudsonLanes_EndOfFrame(done, &howItEnded, &code))
+		{
+			EndTheLevel(howItEnded, code);
+		}
+
 		return;
 	}
 
@@ -6798,6 +6960,24 @@ void Hudson_PlayInput(void *playerStatus)
 		{
 			HudsonPlay_SetStepSeconds(plan.playStepSeconds);
 		}
+
+		// flares=yes: a flare at an alien he sees coming (added 2026-11-20 by Melanikus (Frost))
+		HudsonPlay_ThrowFlares(plan.playFlares);
+
+		// aimnearest=yes, holdground=yes: his view on the nearest alien, and he stands or backs off from one close ahead (added 2026-11-20 by Melanikus (Frost))
+		HudsonPlay_AimAtTheNearest(plan.playAimNearest);
+		HudsonPlay_HoldHisGround(plan.playHoldGround);
+		// crouchanywhere=yes: his grid has a place wherever he fits crouched (added 2026-11-20 by Melanikus (Frost)); before his grid is built
+		HudsonPlay_CrouchAnywhere(plan.playCrouchAnywhere);
+		// shootwithin= shootdelay=: he fires at an alien that has been close that long (added 2026-11-20 by Melanikus (Frost), the owner)
+		HudsonPlay_ShootWithin(plan.shootWithin, plan.shootDelay);
+		// doorwalls=yes, ribbon=off (added 2026-11-20 by Melanikus (Frost))
+		HudsonPlay_DoorWalls(plan.playDoorWalls);
+		HudsonPlay_RibbonOff(plan.playRibbonOff);
+		// status=on: his one line on the screen (added 2026-11-20 by Melanikus (Frost))
+		HudsonPlay_ShowStatus(plan.playStatus);
+		// rearguard=MM: he sprints his way and looks back at the close ones (added 2026-11-20 by Melanikus (Frost), the owner)
+		HudsonPlay_RearGuard(plan.rearGuard);
 
 		if (plan.netMode == kHudsonNetJoin)
 		{

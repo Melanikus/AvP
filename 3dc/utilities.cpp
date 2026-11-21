@@ -1,3 +1,5 @@
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   the map editor can give the game a folder of its own to keep its files in (SaveFolder_UseThisFolder, SAVE-FOLDER-1)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a second copy of the game on the same machine keeps its files in a folder of its own, by a fixed name (-dev -secondcopy)
 // Modified 2026-11-04 by Melanikus for the AvP port:
@@ -138,6 +140,29 @@ bool SaveFolder_UseTheSecondCopy()
 	}
 
 	saveFolderIsTheSecondCopy = true;
+	return true;
+}
+
+// Added 2026-11-14 by Melanikus for the AvP port (SAVE-FOLDER-1): a folder of the caller's choosing, the map editor's own. save_folder.h
+// checks it (SaveFolder_WhyNotUsable), and what it gives back, ending in one '\', becomes the save folder, so GetSaveFolderPath just
+// gives it from then on. A refusal changes nothing, and nothing falls back to My Games here: the caller stops.
+bool SaveFolder_UseThisFolder(const char *folder)
+{
+	// Once the folder has been found, or found not to be there, everything since has gone where it said, so it isn't changed. (The same
+	// test as SaveFolder_UseTheSecondCopy's, written the other way round, so a take-out row can name each on its own.)
+	if (noSaveFolder || saveFolder[0] != 0)
+	{
+		return false;
+	}
+
+	// Checked into a space of its own, so a refused folder never leaves half a path where the save folder goes
+	char checked[MAX_PATH];
+	if (SaveFolder_WhyNotUsable(folder, checked, sizeof(checked)) != 0)
+	{
+		return false;
+	}
+
+	strcpy_s(saveFolder, sizeof(saveFolder), checked);
 	return true;
 }
 

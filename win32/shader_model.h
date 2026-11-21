@@ -9,10 +9,12 @@
 #include <string>
 
 // The game's shaders all fit shader model 2. The ones for shadows and lighting need 3, for their length and to draw on several pictures at
-// once. Those are told apart by the start of the file's name.
+// once. Those are told apart by the start of the file's name. The debug views' ("debug", Drake 2026-11-20: the normals view) need 3 for
+// ddx and ddy, and both halves of a pair are given it, as a card won't join a model 2 pixel shader to a model 3 vertex shader.
 inline bool ShaderNeedsModel3(const std::string &fileName)
 {
-	return fileName.compare(0, 6, "shadow") == 0 || fileName.compare(0, 7, "surface") == 0 || fileName.compare(0, 5, "light") == 0 || fileName.compare(0, 6, "relief") == 0;
+	return fileName.compare(0, 6, "shadow") == 0 || fileName.compare(0, 7, "surface") == 0 || fileName.compare(0, 5, "light") == 0 || fileName.compare(0, 6, "relief") == 0 ||
+		fileName.compare(0, 5, "debug") == 0;
 }
 
 #endif

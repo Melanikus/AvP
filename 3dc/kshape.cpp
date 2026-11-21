@@ -2,6 +2,13 @@
 * kshape.c - replacement for all the pipeline stuff previously done in shape.c & clip.c *
 ************************************************************************************KJL*/
 // AvP port by Barry Duncan.
+// Modified 2026-11-18 by Melanikus (Dietrich) for the AvP port:
+//   the level editor's plain polygons (the file's engine type 2, inteng's kind 2 / 3; R_SetEditorDrawPolylines, the editor's flag): drawn in their own colour times the light (the
+//   colour word's three low bytes, R G B), and one with iflag_nolight (I_ZB_Polygon, which the game leaves out) in its colour, as inteng draws them; the game's own untextured way
+//   (the light's grey into red and green) is unchanged. The game never sets the flag
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   the level editor's lines (R_SetEditorDrawPolylines): a polygon the level loader made a line, because its picture can't be had (I_Polyline), is drawn as white lines, the way
+//   inteng draws it, where the game leaves it out. The game never sets it
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   two commented-out calls to DecalWithinFrustum are gone, with the function (see frustum.cpp)
 //   the shoulder lamp's place on the light list carries its own aim, and whether it was a real light is worked out again each frame
@@ -47,6 +54,7 @@
 #include "texture_animation.h"
 #include <math.h>
 #include <vector>
+#include <algorithm>
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
@@ -372,6 +380,15 @@ void ChooseLightingModel(DISPLAYBLOCK *dispPtr)
 * ShapePipeline() - this function processes a shape for rendering by considering each *
 * polygon (item) in turn.                                                             *
 **********************************************************************************KJL*/
+// The level editor's highlighted polygons (d3d_render.cpp, RenderList.cpp): always none in the game
+extern bool RenderListTintNow;
+extern bool RenderListLinesNow;    // RenderList.cpp: the level editor's line mark for a polygon whose picture isn't known
+extern bool EditorDrawPolylines;   // RenderList.cpp: R_SetEditorDrawPolylines
+extern unsigned int RenderListTintColour;
+extern unsigned int EditorHighlightColour;
+extern int EditorHighlightedCount;
+extern bool EditorHighlightedItemsOf(const DISPLAYBLOCK *block, const int **items, int *count);
+
 void ShapePipeline(SHAPEHEADER *shapePtr)
 {
 	ProcessorStageClock clock(kProcessorShapes);
@@ -684,15 +701,44 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 		}
 	}
 
+	// The level editor's highlighted polygons of this block: each is marked as it is added, so the editor's green pass draws it again in its own colour. Nothing here runs in the game.
+	int const itemsInTheShape = numitems;
+	const int *highlightedItems = 0;
+	int highlightedCount = 0;
+	bool const markedAsAWhole = RenderListTintNow;
+	unsigned int const wholeColour = RenderListTintColour;
+
+	if (EditorHighlightedCount && !EditorHighlightedItemsOf(Global_ODB_Ptr, &highlightedItems, &highlightedCount))
+	{
+		highlightedCount = 0;
+	}
+
+	struct PutTheMarkBack
+	{
+		bool was;
+		unsigned int colour;
+		~PutTheMarkBack() { if (EditorHighlightedCount) { RenderListTintNow = was; RenderListTintColour = colour; } }
+	} putTheMarkBack = { markedAsAWhole, wholeColour };
+
 	do {
 		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
 		int pif = PolygonWithinFrustum(polyPtr);
+
+		RenderListLinesNow = false;   // the level editor's line mark is for one item (I_Polyline, below)
+
+		if (highlightedCount)
+		{
+			int const thisItem = itemsInTheShape - numitems;
+			bool const highlighted = std::binary_search(highlightedItems, highlightedItems + highlightedCount, thisItem);
+
+			RenderListTintNow = highlighted || markedAsAWhole;
+			RenderListTintColour = highlighted ? EditorHighlightColour : wholeColour;
+		}
 
 		if (pif) {
 			switch (polyPtr->PolyItemType) {
 #if debug
 
-				case I_Polyline:
 				case I_FilledPolyline:
 				case I_Wireframe:
 				/* NB This is intended to fall through to the GouraudPolygon case */
@@ -707,6 +753,25 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 					//  LOCALASSERT(0);
 					break;
 				}
+
+				// A polygon whose picture isn't known: the level loader made it a white, unlit line (I_Polyline, chunk_load.cpp), which the game leaves out. The level editor
+				// draws it as inteng does (its kind 0xe): the untextured polygon's way, its items marked as lines (R_SetEditorDrawPolylines; Frost 2026-11-17)
+				case I_Polyline:
+					if (!EditorDrawPolylines)
+					{
+						break;
+					}
+
+					RenderListLinesNow = true;
+					// and on into the untextured polygon's way
+
+				// A plain polygon with iflag_nolight (post_process_shape leaves it I_Polygon, so I_ZB_Polygon), which the game leaves out: the level editor draws it in its colour (Dietrich 2026-11-18)
+				case I_ZB_Polygon:
+					if (polyPtr->PolyItemType == I_ZB_Polygon && !EditorDrawPolylines)
+					{
+						break;
+					}
+					// and on into the untextured polygon's way
 
 				case I_ZB_GouraudPolygon: {
 					//                  break;
@@ -859,6 +924,8 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 			}
 		}
 	} while (--numitems);
+
+	RenderListLinesNow = false;
 }
 
 void PredatorThermalVision_ShapePipeline(SHAPEHEADER *shapePtr)
@@ -1233,12 +1300,31 @@ static void GouraudPolygon_Construct(POLYHEADER *polyPtr)
 	VertexNumberPtr = &polyPtr->Poly1stPt;
 	RenderPolygon.TranslucencyMode = TRANSLUCENCY_OFF;
 
+	// The level editor's plain polygon (not one of its lines): its own colour, times the light unless it has iflag_nolight (inteng's kinds 2 / 3)
+	bool const editorColour = EditorDrawPolylines && !RenderListLinesNow;
+	bool const editorUnlit = editorColour && (polyPtr->PolyFlags & iflag_nolight) != 0;
+	int const plainR = (polyPtr->PolyColour >> 16) & 0xff, plainG = (polyPtr->PolyColour >> 8) & 0xff, plainB = polyPtr->PolyColour & 0xff;
+
 	do {
 		renderVerticesPtr->X = RotatedPts[*VertexNumberPtr].vx;
 		renderVerticesPtr->Y = RotatedPts[*VertexNumberPtr].vy;
 		renderVerticesPtr->Z = RotatedPts[*VertexNumberPtr].vz;
 
 		VertexIntensity(renderVerticesPtr);
+
+		if (editorColour)
+		{
+			int const lightR = editorUnlit ? 255 : (renderVerticesPtr->R < 0 ? 0 : renderVerticesPtr->R > 255 ? 255 : renderVerticesPtr->R);
+			int const lightG = editorUnlit ? 255 : (renderVerticesPtr->G < 0 ? 0 : renderVerticesPtr->G > 255 ? 255 : renderVerticesPtr->G);
+			int const lightB = editorUnlit ? 255 : (renderVerticesPtr->B < 0 ? 0 : renderVerticesPtr->B > 255 ? 255 : renderVerticesPtr->B);
+
+			renderVerticesPtr->R = plainR * lightR / 255;
+			renderVerticesPtr->G = plainG * lightG / 255;
+			renderVerticesPtr->B = plainB * lightB / 255;
+			renderVerticesPtr++;
+			VertexNumberPtr++;
+			continue;
+		}
 
 		int colour = (renderVerticesPtr->B + renderVerticesPtr->R + renderVerticesPtr->G) / 3;
 		renderVerticesPtr->R = colour;
@@ -2903,8 +2989,43 @@ void ShapeSpritePointsInstr(SHAPEINSTR *shapeinstrptr)
 // FIXME
 //bool IsSphereInFrustum(Sphere_t &sphere);
 
+extern bool RenderListTintNow;               // RenderList.cpp
+extern unsigned int RenderListTintColour;
+extern unsigned int EditorSelectedColours[];  // d3d_render.cpp: the colour of each tinted block
+extern DISPLAYBLOCK *EditorSelectedBlocks[];   // d3d_render.cpp: the objects the level editor has selected (always none in the game)
+extern int EditorSelectedCount;
+extern int EditorHiddenCount;                   // d3d_render.cpp: the level editor's hidden objects (always none in the game)
+extern bool EditorBlockIsHidden(const DISPLAYBLOCK *block);
+
 void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 {
+	// An object the level editor has hidden is not drawn at all. Nothing here runs in the game.
+	if (EditorHiddenCount && EditorBlockIsHidden(dptr))
+	{
+		return;
+	}
+
+
+	// Everything added for the editor's selected object is marked, so it can be drawn again in green. The mark is let go of on every way out.
+	struct TintForTheSelected
+	{
+		explicit TintForTheSelected(const DISPLAYBLOCK *block)
+		{
+			RenderListTintNow = false;
+
+			for (int i = 0; block && i < EditorSelectedCount; i++)
+			{
+				if (EditorSelectedBlocks[i] == block)
+				{
+					RenderListTintNow = true;
+					RenderListTintColour = EditorSelectedColours[i];
+					break;
+				}
+			}
+		}
+		~TintForTheSelected() { RenderListTintNow = false; }
+	} tintForTheSelected(dptr);
+
 	SHAPEHEADER *shapeheaderptr;
 
 	if (!dptr->ObShape && dptr->SfxPtr) {

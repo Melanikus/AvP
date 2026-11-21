@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-20 by Melanikus (Frost) for the AvP port:
+//   a Hudson lane probe is told what each waypoint search found (HudsonLanes_Searched, hudson_lanes.h); the call only reads
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a marine can ask whether a path can be followed before setting out on it
 //   an NPC with no movement data stops speeding up, instead of crashing
@@ -49,6 +51,7 @@
 #include "huddefs.h"
 #include "io.h"
 #include "tables.h"
+#include "hudson_lanes.h"   // the lane probe's call in NPCGetMovementDirection (added 2026-11-20 by Melanikus (Frost))
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 
@@ -1223,7 +1226,11 @@ void NPCGetMovementDirection(STRATEGYBLOCK *sbPtr, VECTORCH *velocityDirection, 
 	{
 		if ((sbPtr->containingModule->m_aimodule->m_waypoints != NULL) && (waypointManager))
 		{
-			if (NPCGetWaypointDirection(sbPtr->containingModule->m_aimodule->m_waypoints, sbPtr, velocityDirection, targetPosition, waypointManager))
+			int const found = NPCGetWaypointDirection(sbPtr->containingModule->m_aimodule->m_waypoints, sbPtr, velocityDirection, targetPosition, waypointManager);
+
+			HudsonLanes_Searched(sbPtr, targetPosition, velocityDirection, found);   // the lane probe reads what this search found (hudson_lanes.h; only reads)
+
+			if (found)
 			{
 				/* Success! */
 				return;

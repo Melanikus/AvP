@@ -1,3 +1,5 @@
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a zone alert's line is held to the room its text has, as a module's name comes from the level file
 // Modified 2026-11-11 by Melanikus (Third) for the AvP port:
 //   a save can't turn the level's walls off for a marine; its gravity is as saved, as its own code turns it off
 //   (Save_RestoreDynamics, save_checks.h)
@@ -1211,7 +1213,10 @@ void Console_ZoneAlert(int input)
 		target=Global_ModuleArrayPtr[input];
 	}
 
-	sprintf(tempstring,"NEW ZONE ALERT IN %d, '%s'\n",target->m_index,target->name);
+	// A module's name comes from the level file, so the line is held to the room tempstring has, and always ends. (Added 2026-11-14 by
+	// Melanikus for the AvP port; it was a sprintf with no limit.)
+	_snprintf(tempstring,sizeof(tempstring)-1,"NEW ZONE ALERT IN %d, '%s'\n",target->m_index,target->name);
+	tempstring[sizeof(tempstring)-1]=0;
 	ForceCaps(tempstring);
 	NewOnScreenMessage(tempstring);
 

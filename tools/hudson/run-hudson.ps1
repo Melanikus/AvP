@@ -141,6 +141,9 @@ param(
     [string]$StandAt = '', # x,y,z the same way: he stands there
     [switch]$AlienWays,    # lets the alien ways' developer switches below through. The ways themselves are on in every run since the flip (2026-11-11)
     [switch]$FloorIsLavaOff, # the run plays 1999's aliens: floorislava=off, the console's FLOORISLAVA OFF, for the other side of a film
+    [string]$AlienOn = '',   # floor or ceiling: with -Lanes, where the alien is made (alienon=); ceiling hangs it from the ceiling at -AlienAt, for a run of the lane alone (added 2026-11-19 by Melanikus (Frost))
+    [switch]$LanesWatch,     # lanes=watch, the lane probe on the level as he plays it (3dc/avp/hudson_lanes.h): the player stands still at -StandAt, nothing kept still, no alien made; every near alien a line a frame in hudson-lanes.txt (added 2026-11-20 by Melanikus (Frost))
+    [switch]$Lanes,          # lanes=yes, the lane probe (3dc/avp/hudson_lanes.h): the player stands still at -StandAt, one alien is made at -AlienAt, 1999's aliens; hudson-lanes.txt is kept with the run (added 2026-11-19 by Melanikus (Frost))
     [string]$AlienWaysSwitches = '', # more of the game's own -alienways... developer switches, like -alienwaysgrid or -alienwaysgrid=1, as the build names them. Only -alienways switches, letters and an optional =number. Needs -AlienWays
     [int]$AlienWaysWatch = -1, # the game's -alienwayswatch=N, 0 to 63: the alien with the guide's place N gets a log line every frame, where that's in the build. Needs -AlienWays
     [int]$AlienWaysAim = -1, # the game's -alienwaysaim=N, 0 to 10000 mm: how far along its way an alien aims, where that's in the build. Left out, the build's own. Needs -AlienWays
@@ -182,6 +185,28 @@ param(
     [string]$Class = '',   # a gun= run starts as a skirmish, as this marine class: shotgun, revolver or m79
     [switch]$GunMarine,    # a gun= run stands a marine holding that gun in front of him, for pictures of what other players see
     [switch]$Play,         # he plays the level himself, on foot. It reads <level>.play from HudsonChains in the game folder
+    [switch]$Flares,       # with -Play, he throws a flare at an alien he sees coming within 8 m (flares=yes; Frost 2026-11-20)
+    [switch]$AimNearest,   # with -Play, his view and gun on the nearest alien, never firing (aimnearest=yes; Frost 2026-11-20)
+    [switch]$HoldGround,   # with -Play, an alien within 1.5 m ahead on his way and he stands or backs off (holdground=yes; Frost 2026-11-20)
+    [switch]$CrouchAnywhere, # with -Play, his way can go wherever he fits crouched, whatever a floor's duct mark (crouchanywhere=yes; Frost 2026-11-20)
+    [switch]$Normals,      # the NORMAL LINES view: each polygon's normals stood up as lines over the lit scene, as J does with -dev (normals=yes; render only; Drake 2026-11-20)
+    [switch]$NormalColours, # each polygon coloured by its facing, at full brightness (normalcolours=yes; render only; Drake 2026-11-20)
+    [switch]$Wireframe,    # everything drawn as lines, Rebellion's own WIREFRAMEMODE 3 (wireframe=yes; render only; Drake 2026-11-20)
+    [int]$Supply = 0,      # with -LanesWatch -Play, the probe makes this many aliens (1 to 8) at -SupplyAt, one every -SupplyEvery seconds; the level's own are kept still
+    [string]$SupplyAt = '',
+    [int]$SupplyEvery = 0,
+    [int]$ShootWithin = 0, # with -Play, he fires at the nearest alien once one has been nearer than this (mm) for -ShootDelay ms (shootwithin=, shootdelay=; Frost 2026-11-20)
+    [int]$ShootDelay = 0,
+    [switch]$DoorWalls,    # with -Play, a shut door is a wall on his grid till it opens, and a prop he breaks gets him a new grid (doorwalls=yes; Frost 2026-11-20)
+    [int]$RearGuard = 0,   # with -Play, he sprints and looks back at aliens within this many mm, a ceiling's first (rearguard=; Frost 2026-11-20)
+    [switch]$Status,       # with -Play, one line on the screen: his step and what he's doing (status=on; Frost 2026-11-20)
+    [switch]$FilmClockOff, # no machine clock stamped in the film's corner: for public films (filmclock=off; Frost 2026-11-20)
+    [switch]$RibbonOff,    # with -Play, his route isn't drawn on the floor: for films (ribbon=off; Frost 2026-11-20)
+    [switch]$SupplyGate,   # with -Supply, the next alien only once the last one made has been on a ceiling (supplygate=ceiling; Frost 2026-11-20)
+    [int]$DieRoll = -1,    # the game's own QUANTUM_ROLL before the level loads (0 to 65535): every alternate place the same each run (dieroll=; Frost 2026-11-20)
+    [int]$WatchMost = 0,   # with -LanesWatch -Play, the watch plays for at most this many seconds of game time (60 to 7200), not 3 minutes: the full-level run (watchmost=; Frost 2026-11-20)
+    [string]$SupplyOpenSky = '',   # with -Supply -SupplyAt ahead, the open-sky rooms (commas between): the gate times out there at 30 s, supplyopensky= (Frost 2026-11-21)
+    [string]$SupplyIn = '',   # with -Supply, the aliens made only in these rooms (names with commas between them): supplyin= (Frost 2026-11-20)
     [int]$PlayGun = 0,     # with -Play, the slot of the gun he's given and holds, from 1 to 14: 10 is the shotgun
     [int]$StepSeconds = 0, # with -Play, how long one step may take before he's moved to it (a logged cheat), 10 to 600. 0 is the game's 180
     [switch]$GunAlien,     # a gun= run makes an alien in front of him, for a throw or a shot to hit
@@ -469,6 +494,27 @@ if ($ListPlace -ge 0) { $arguments += " listplace=$ListPlace" }
 if ($Class) { $arguments += " class=$Class" }
 if ($GunAlien) { $arguments += " gunalien=yes" }
 if ($Play) { $arguments += " play=yes" }
+if ($Flares) { $arguments += " flares=yes" }
+if ($AimNearest) { $arguments += " aimnearest=yes" }
+if ($HoldGround) { $arguments += " holdground=yes" }
+if ($CrouchAnywhere) { $arguments += " crouchanywhere=yes" }
+if ($WatchMost -gt 0) { $arguments += " watchmost=$WatchMost" }
+if ($DieRoll -ge 0) { $arguments += " dieroll=$DieRoll" }
+if ($SupplyGate) { $arguments += " supplygate=ceiling" }
+if ($DoorWalls) { $arguments += " doorwalls=yes" }
+if ($RibbonOff) { $arguments += " ribbon=off" }
+if ($FilmClockOff) { $arguments += " filmclock=off" }
+if ($Status) { $arguments += " status=on" }
+if ($RearGuard -gt 0) { $arguments += " rearguard=$RearGuard" }
+if ($ShootWithin -gt 0) { $arguments += " shootwithin=$ShootWithin shootdelay=$ShootDelay" }
+if ($Normals) { $arguments += " normals=yes" }
+if ($NormalColours) { $arguments += " normalcolours=yes" }
+if ($Wireframe) { $arguments += " wireframe=yes" }
+if ($Supply -gt 0) { $arguments += " supply=$Supply" }
+if ($SupplyAt) { $arguments += " supplyat=$($SupplyAt -replace 'm', '-')" }   # only when said: supplyin= says where instead
+if ($SupplyEvery -gt 0) { $arguments += " supplyevery=$SupplyEvery" }
+if ($SupplyIn) { $arguments += " supplyin=$SupplyIn" }
+if ($SupplyOpenSky) { $arguments += " supplyopensky=$SupplyOpenSky" }
 if ($PlayGun -gt 0) { $arguments += " playgun=$PlayGun" }
 # The game checks it again (stepseconds=, hudson_plan.cpp); a number outside its range would only be refused there, after the folders are emptied
 if ($StepSeconds -ne 0 -and ($StepSeconds -lt 10 -or $StepSeconds -gt 600)) { Stop-Here "-StepSeconds is a whole number of seconds, from 10 to 600" }
@@ -502,6 +548,9 @@ if ($Uncapped -and $PSBoundParameters.ContainsKey('Fps')) { Stop-Here "-Uncapped
 if ($Uncapped) { $arguments += " fps=uncapped" } else { $arguments += " fps=$Fps" }
 if ($NoFriendlyFire) { $arguments += " friendlyfire=off" }
 if ($FloorIsLavaOff) { $arguments += " floorislava=off" }
+if ($Lanes) { $arguments += " lanes=yes" }
+if ($LanesWatch) { $arguments += " lanes=watch" }
+if ($AlienOn) { $arguments += " alienon=$AlienOn" }
 if ($CoopWalk) { $arguments += " coopwalk=yes" }
 if ($Hostile) { $arguments += " hostile=yes" }
 if ($HostileKind) { $arguments += " hostile=$HostileKind" }
@@ -646,6 +695,10 @@ foreach ($name in @('avp_log.txt', 'hudson-result.txt'))
 # window-place.txt, which nothing writes, so it was never kept (Primary's read, 2026-11-09)
 $windowNotes = Join-Path $saves 'hudson-window.txt'
 if (Test-Path -LiteralPath $windowNotes) { Copy-Item -LiteralPath $windowNotes -Destination $kept }
+
+# lanes=yes: the lane probe's line a frame and its verdict (3dc/avp/hudson_lanes.cpp, kLanesFileName). Added 2026-11-19 by Melanikus (Frost)
+$laneNotes = Join-Path $saves 'hudson-lanes.txt'
+if (Test-Path -LiteralPath $laneNotes) { Copy-Item -LiteralPath $laneNotes -Destination $kept }
 
 $result = Join-Path $kept 'hudson-result.txt'
 

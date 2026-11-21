@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-19 by Melanikus (Frost) for the AvP port:
+//   a Hudson lane probe (lanes=yes) keeps the hive still, as a Hudson run with a marine does (hudson_lanes.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a network game of the same-as-single-player mode, a level's end goes to the host, who moves everyone on
 // Modified 2026-11-05 by Melanikus for the AvP port:
@@ -376,8 +378,8 @@ void UpdateGame(void)
 	/*-------------- Patrick 11/1/97 ----------------
 	Call the alien hive management function
 	-------------------------------------------------*/
-	// a Hudson run with a marine keeps everything else still, so nothing new turns up, unless it asked for a fight
-	if (!HudsonMarineIsOn || HudsonWorldIsLive)
+	// a Hudson run with a marine keeps everything else still, so nothing new turns up, unless it asked for a fight; and so does a lane probe
+	if ((!HudsonMarineIsOn && !HudsonLanesAreOn) || HudsonWorldIsLive)
 	{
 		DoHive();
 		DoSquad();

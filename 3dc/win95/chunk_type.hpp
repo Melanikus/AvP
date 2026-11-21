@@ -263,8 +263,9 @@ class Shape_Sub_Shape_Chunk;
 
 struct a_frame
 {
+	// The spare number starts as 0 too, as a morph's save writes it (Shape_Morphing_Frame_Data_Chunk::prepare_for_output)
 	a_frame()
-	: shape1a (0), shape1b(0), shape2a(0), shape2b(0)
+	: shape1a (0), shape1b(0), shape2a(0), shape2b(0), spare(0)
 	{}
 
 	Shape_Sub_Shape_Chunk * shape1a;

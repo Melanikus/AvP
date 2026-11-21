@@ -57,6 +57,7 @@
 #include "build_identity.h"
 #include "mark_key.h"
 #include "hudson.h"
+#include "hudson_saymarks.h"   // -dev -saymarks: the lane probe watching his own play (Frost 2026-11-21)
 #include "online_screens_page.h"
 #include "texture_relief.h"
 #include "view_settings.h"
@@ -227,6 +228,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	// before anything that uses the save folder, which the log does: a run keeps its files somewhere else
 	Hudson_ReadCommandLine(lpCmdLine);
+	HudsonSayMarks_ReadCommandLine(lpCmdLine);   // SAY marks: nothing unless -dev -saymarks (hudson_saymarks.h)
 
 	// -dev -secondcopy: a second copy of the game on this machine, for trying two players on one PC, keeps its files in a folder of its own,
 	// by a fixed name, so the two don't share a log. It's decided first of all, because the log, opened just below, is in that folder. Only
@@ -1027,6 +1029,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		// after StartGame, because that's when every module that's controlled by something has been told so
 		StaticLevel_BuildThisLevel();
 
+		// what the level takes of its 40 blocks of memory, once it's loaded (mempool.h; Frost 2026-11-21, the owner's track import)
+		LevelMemoryPool_Say();
+
 		/* JH 28/5/97 */
 		/* remove resident loaded 'fast' files */
 //		ffcloseall();
@@ -1125,6 +1130,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 							// A tester's mark: noted now, and its picture taken when this frame is drawn
 							Mark_ReadKey();
+
+							// SAY marks (-dev -saymarks only; hudson_saymarks.h): the probe's watch of his play, a frame on
+							HudsonSayMarks_EndOfFrame();
 
 							// Online play's lines: a player asking to join this host, the relay's news, and the relay and its round trip, kept up
 							// at the top right for as long as the game goes through a relay (online_screens_page.h)

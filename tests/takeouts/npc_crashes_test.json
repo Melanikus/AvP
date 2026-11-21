@@ -29,8 +29,8 @@
 			"changes": [
 				{
 					"file": "3dc/module.cpp",
-					"from": "\tMODULE *mptr = 0;\n\tint gotit;\n\n\tif ((source==NULL)",
-					"to": "\tMODULE *mptr = 0;\n\tint gotit = source->m_flags;\n\n\tif ((source==NULL)"
+					"from": "\tVMODULE *vptr;\n\tint gotit;\n\n\tif ((source==NULL)",
+					"to": "\tVMODULE *vptr;\n\tint gotit = source->m_flags;\n\n\tif ((source==NULL)"
 				}
 			]
 		},
@@ -766,6 +766,16 @@
 					"file": "3dc/avp/bh_predator.cpp",
 					"from": "        sbPtr->SBflags.preserve_until_end_of_level = keptUntilTheLevelEnds ? 1 : 0;\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a zone alert writes the module's name into its line with no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t_snprintf(tempstring,sizeof(tempstring)-1,\"NEW ZONE ALERT IN %d, '%s'\\n\",target->m_index,target->name);\n\ttempstring[sizeof(tempstring)-1]=0;\n",
+					"to": "\tsprintf(tempstring,\"NEW ZONE ALERT IN %d, '%s'\\n\",target->m_index,target->name);\n"
 				}
 			]
 		}

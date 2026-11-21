@@ -23,6 +23,8 @@
 //   yespage= shows an access run the yes page and presses one of its rows, and hostrow= hosts through the Multiplayer page's Host row
 // Modified 2026-11-11 by Melanikus (Third) for the AvP port:
 //   hoston= names the server a host through the rows chooses on the Host on row, and joinon= the server whose game a Find games run joins
+// Modified 2026-11-18 by Melanikus (Drake) for the AvP port:
+//   meetsagain= has a meets=yes run say where he is a second time, that many seconds in
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // Hudson is a marine the camera follows, so that the game can be measured with nobody at the keyboard: see hudson.cpp. A run is asked for like this:
@@ -279,6 +281,7 @@ struct HudsonPlan
 	int windowsTogether;  // windowsof=: how many games share that screen, from 1 to 4. Unless a run asks, 1
 	int windowBig;        // windowbig=: with two windows, the number of the one that has the big part of the screen, the left three quarters. Unless a run asks, -1, and they share it half and half
 	bool meets;           // meets=yes: the log says what the player meets when the level starts, in lines made for comparing runs
+	int meetsAgainSeconds; // meetsagain=: with meets=yes, where he is and his room are said again this many seconds after the first frame's reading, once in the run, to see that he stands where the level put him down (a start in the air or over nothing reads differently). 0 means not asked
 	char siegeRoom[kHudsonLongestWallName + 1]; // siege=: after the smoke test both players go to the room of this name, armed and unable to die, and the host keeps enemies coming. Nothing means none
 	char siegeFar[kHudsonLongestWallName + 1];  // siegefar=: the room a siege's xenoborgs are made in, further off, so that they have time to wake. Nothing means where the others come from
 	char customMap[kCustomMapNameMost + 1]; // custommap=: a custom map made for single player, played instead of level=, which still says who plays. Nothing means none
@@ -291,6 +294,7 @@ struct HudsonPlan
 	bool play;            // play=yes: he plays the level on foot, as a player would. See hudson_play.h
 	bool gunAlien;        // gunalien=yes: a gun= run makes an alien in front of him before the throws and shots that it times, for them to hit
 	bool noFriendlyFire;  // friendlyfire=off: the host of a net= run with coop=yes turns friendly fire off, as its menu row would
+	bool stock;           // stock=yes: every flag of stock_flags.h off before any level starts (FLOORISLAVA, NEWDYNAMICCOLLISIONS, FARLOCS4THCORNER, PHEROMONEDOOR, NEARWAKE): 1999's aliens
 	bool floorIsLavaOff;  // floorislava=off: the run types the console's FLOORISLAVA OFF before any level starts, for 1999's aliens
 	int framesPerSecond;  // fps=: a run goes no faster than this many frames a second. Unless it asks, that's kHudsonDefaultFramesPerSecond. 0, from fps=uncapped, is as fast as it can.
 	int killKind;         // killkind=: this run kills the level's own NPC of this kind, the one placed nearest killat=, from kHudsonBotFight.... 0 for none
@@ -315,6 +319,33 @@ struct HudsonPlan
 	int playGunSlot;      // playgun=: with play=yes, the slot of the gun he's given and holds, from 1 to 14. 0 leaves him what the level gives him
 	int playStepSeconds;  // stepseconds=: with play=yes, how long one step may take before he's moved to it, a logged cheat: 10 to 600. 0 is the usual 180
 	bool flareEachHold;   // flare=yes: he throws a flare as each hold starts, for seeing what a flare's light does. See hudson.cpp
+	bool playFlares;      // flares=yes: with play=yes, he throws a flare at an alien he sees coming within 8 m (hudson_play.h; the owner 11-20)
+	bool playAimNearest;  // aimnearest=yes: with play=yes, his view and gun on the nearest alien, never firing (hudson_play.h; the owner 11-20)
+	bool playHoldGround;  // holdground=yes: with play=yes, an alien close ahead on his way and he stands or backs off (hudson_play.h; Bishop 11-20, the snowplow)
+	bool playDoorWalls;   // doorwalls=yes: with play=yes, a shut door is a wall on his grid till it opens, and a prop he breaks gets him a new grid (hudson_play.h; Frost 11-20)
+	int rearGuard;        // rearguard=MM: with play=yes, he sprints his way, and with an alien within MM (1000 to 20000) turns 3x as fast to the nearest on a ceiling,
+	                      //   then a wall, then the floor, running his way backwards; shootwithin= then fires at that one (hudson_play.h; the owner 11-20, 22:24, 22:27)
+	bool playStatus;      // status=on: with play=yes, one line on the screen: his step, its kind and target, and what he's doing (hudson_play.h; Frost 11-20)
+	bool filmClockOff;    // filmclock=off: no machine clock stamped in the film's corner (it's for join-films; the public films; Frost 11-20)
+	bool playRibbonOff;   // ribbon=off: with play=yes, his route isn't drawn on the floor (the public films; Frost 11-20)
+	bool playCrouchAnywhere;  // crouchanywhere=yes: with play=yes, his grid has a place wherever a crouched marine fits (hudson_grid.h; Frost 11-20, shft21)
+	int shootWithin;      // shootwithin=MM: with play=yes, he fires at the nearest alien once one has been nearer than this (1000 to 20000) for shootdelay= (hudson_play.h;
+	int shootDelay;       //   the owner 11-20: "less than 4m away with a delay of 500ms"); shootdelay=MS, 0 to 5000. 0: he holds his fire as before
+	bool shootDelayAsked;
+	int dieRoll;          // dieroll=N: the game's own QUANTUM_ROLL (QuantumObjectDieRollOveride) before the level loads, 0 to 65535: every alternate place N mod its count
+	bool dieRollAsked;    //   (Bishop 11-20: the same layout on every A/B and full run; Frost). Without it, the game's own random roll
+	int watchMost;        // watchmost=S: with lanes=watch, his play is watched for at most S s of game time, 60 to 7200, not 3 minutes (the full-level run; Frost 11-20). 0: 3 minutes
+	bool viewNormals;     // normals=yes: the normals view, each polygon coloured by its facing at full brightness (3dc/debug_view.h; render only; the owner 11-20)
+	bool viewNormalColours; // normalcolours=yes: each polygon coloured by its facing at full brightness (3dc/debug_view.h; render only)
+	bool viewWireframe;   // wireframe=yes: everything drawn as lines, Rebellion's own WIREFRAMEMODE 3 (3dc/debug_view.h; render only)
+	int supply;           // supply=N: with lanes=watch play=yes, the probe makes N aliens (1 to 8) at supplyat=, one every supplyEvery seconds; the level's own are kept still
+	int supplyAtX, supplyAtY, supplyAtZ;
+	int supplyEvery;      // supplyevery=: seconds between them, 1 to 120; 10 when not said
+	bool supplyAhead;     // supplyat=ahead: made in rooms by his way 15 to 40 m along it, the room list moving with him (hudson_supply.h; Frost 11-21)
+	bool supplyAround;    // supplyat=around: made around him as he moves, each in a room he can't see 15 to 25 m from him, while fewer than supply= are alive (Frost 11-20)
+	bool supplyGate;      // supplygate=ceiling: the supply's next alien only once the last one made has been on a ceiling, or is dead (hudson_lanes.h; the owner 11-20)
+	char supplyOpenSky[512];   // supplyopensky=room,room,...: the open-sky rooms, where the supply gate times out at 30 s (hudson_supply.h; Frost 11-21)
+	char supplyIn[512];   // supplyin=room,room,...: made only in these rooms (the corridors of his route), out of his sight, on his level (hudson_supply.h; Frost 11-20)
 	bool recordVideo;     // a film of what's drawn, in the run's folder. See hudson_video.h. machine=shared has one unless it says film=no or record=numbers. Nothing else can, because reading frames back slows them
 	bool filmMenus;       // film=menus: the film starts at the first frame drawn, the menus' too, not at the level's, and is cut into clips, one for each picture of the menus (hudson.cpp,
 	                      // TakeVideoFrame). It needs a run with a film. Added 2026-11-10 by Melanikus (Third) for the AvP port, for the owner's showcase
@@ -347,6 +378,9 @@ struct HudsonPlan
 	int alienAtMore[kHudsonMostTogether - 1][3];
 	bool standAtSaid;     // standat=x,y,z: he stands here, instead of where the level starts the player
 	int standAtX, standAtY, standAtZ;
+	bool alienOnCeiling;  // alienon=ceiling: with lanes=yes, the alien is made hanging from the ceiling at alienat=, its own gravity up, for a run of the lane alone. alienon=floor is the default. Added 2026-11-19 by Melanikus (Frost)
+	bool lanes;           // lanes=yes: the lane probe (hudson_lanes.h): the player stands still at standat=, one alien is made at alienat=, 1999's aliens, and hudson-lanes.txt has a line a frame of the alien's route and whether it stays on the ceiling. Added 2026-11-19 by Melanikus (Frost)
+	bool lanesWatch;      // lanes=watch: the lane probe on the level as he plays it: the player stands still at standat=, nothing is kept still and no alien is made, and hudson-lanes.txt has a line a frame for every near alien (what it read and why its gravity is as it is). Added 2026-11-20 by Melanikus (Frost)
 	char follow[kHudsonLongestStrategyName + 1];   // follow=: the name of one thing in the level, often an NPC, whose place and state the log says once a second. Nothing means none. For #126's floating facehugger
 	bool walkSaid;        // walkfrom=x,y,z and walkto=x,y,z: he's put at walkfrom= and walks to walkto= as a player does, with the forward key. With dieat=, only once the level has started again. See "A WALK" in hudson.cpp
 	int walkFromX, walkFromY, walkFromZ;
@@ -473,7 +507,16 @@ inline long long HudsonNextFrameDue(long long thisFrameWasDue, long long now, lo
 extern const char *const kHudsonRefusedBotFightWithoutCoop;
 extern const char *const kHudsonRefusedFriendlyFireNotOff;
 extern const char *const kHudsonRefusedFriendlyFireWithoutCoop;
+extern const char *const kHudsonRefusedStockNotYes;
 extern const char *const kHudsonRefusedFloorIsLavaNotOff;
+extern const char *const kHudsonRefusedLanesNotYes;
+extern const char *const kHudsonRefusedLanesNeedsPlaces;
+extern const char *const kHudsonRefusedLanesNotAlone;
+extern const char *const kHudsonRefusedLanesWatchNeedsStand;
+extern const char *const kHudsonRefusedLanesPlayNoStand;
+extern const char *const kHudsonRefusedLanesWatchNoAlien;
+extern const char *const kHudsonRefusedAlienOnNotFloorOrCeiling;
+extern const char *const kHudsonRefusedAlienOnWithoutLanes;
 extern const char *const kHudsonRefusedUnknownName;
 extern const char *const kHudsonRefusedAskedTwice;
 extern const char *const kHudsonRefusedNoLevel;
@@ -539,6 +582,8 @@ extern const char *const kHudsonRefusedClassWithoutGun;
 extern const char *const kHudsonRefusedClassAsPredator;
 extern const char *const kHudsonRefusedCoopWithoutNet;
 extern const char *const kHudsonRefusedMeetsNotYes;
+extern const char *const kHudsonRefusedMeetsAgainNotANumber;
+extern const char *const kHudsonRefusedMeetsAgainWithoutMeets;
 extern const char *const kHudsonRefusedDieAtNotANumber;
 extern const char *const kHudsonRefusedLevelFilmsNotYes;
 extern const char *const kHudsonRefusedScreenWord;
@@ -581,6 +626,38 @@ extern const char *const kHudsonRefusedGunWithAMarine;
 extern const char *const kHudsonRefusedFlareNotYes;
 extern const char *const kHudsonRefusedFlareSpoilsComparing;
 extern const char *const kHudsonRefusedFlareWithoutHolds;
+extern const char *const kHudsonRefusedFlaresNotYes;
+extern const char *const kHudsonRefusedFlaresWithoutPlay;
+extern const char *const kHudsonRefusedAimNearestNotYes;
+extern const char *const kHudsonRefusedAimNearestWithoutPlay;
+extern const char *const kHudsonRefusedHoldGroundNotYes;
+extern const char *const kHudsonRefusedHoldGroundWithoutPlay;
+extern const char *const kHudsonRefusedCrouchAnywhereNotYes;
+extern const char *const kHudsonRefusedCrouchAnywhereWithoutPlay;
+extern const char *const kHudsonRefusedWatchMostOutOfRange;
+extern const char *const kHudsonRefusedDieRollOutOfRange;
+extern const char *const kHudsonRefusedWatchMostWithoutWatch;
+extern const char *const kHudsonRefusedNormalsNotYes;
+extern const char *const kHudsonRefusedWireframeNotYes;
+extern const char *const kHudsonRefusedNormalColoursNotYes;
+extern const char *const kHudsonRefusedSupplyWithoutPlay;
+extern const char *const kHudsonRefusedSupplyNeedsPlace;
+extern const char *const kHudsonRefusedSupplyOutOfRange;
+extern const char *const kHudsonRefusedSupplyGateNotCeiling;
+extern const char *const kHudsonRefusedDoorWallsNotYes;
+extern const char *const kHudsonRefusedDoorWallsWithoutPlay;
+extern const char *const kHudsonRefusedRibbonNotOff;
+extern const char *const kHudsonRefusedFilmClockNotOff;
+extern const char *const kHudsonRefusedStatusNotOn;
+extern const char *const kHudsonRefusedRearGuardOutOfRange;
+extern const char *const kHudsonRefusedRearGuardWithoutPlay;
+extern const char *const kHudsonRefusedShootWithinOutOfRange;
+extern const char *const kHudsonRefusedShootDelayOutOfRange;
+extern const char *const kHudsonRefusedShootDelayWithoutWithin;
+extern const char *const kHudsonRefusedShootWithinWithoutPlay;
+extern const char *const kHudsonRefusedSupplyGateWithoutSupply;
+extern const char *const kHudsonRefusedSupplyInAndAt;
+extern const char *const kHudsonRefusedSupplyInName;
 extern const char *const kHudsonRefusedLampUnknown;
 extern const char *const kHudsonRefusedLampSpoilsComparing;
 extern const char *const kHudsonRefusedLampKindUnknown;

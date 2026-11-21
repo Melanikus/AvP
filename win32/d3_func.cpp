@@ -48,6 +48,12 @@
 // Modified 2026-11-09 by Melanikus for the AvP port:
 //   with -dev -windowed, a test copy draws at the largest of the screen's modes that fits its half of the screen (window_slot.h),
 //   not at the settings' size, which stays as it is
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   the chosen video adapter is stored before the video mode and the depth formats are looked up on it, so they're asked of that
+//   adapter and not of adapter 0
+// Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
+//   the screen list's buffers hold 65536 corners, 16384 quads, the most its 16-bit index numbers reach: the level editor draws every letter of
+//   its panels as a quad, and at 2560 x 1440 they filled the 4096 the game had, so letters and boxes were left out. The game draws as it did.
 #include "d3_func.h"
 #include "hudson.h"
 #include "window_slot.h"
@@ -87,6 +93,12 @@ extern AVPIndexedFont IntroFont_Light;
 const uint32_t kMaxVertices = 4096;
 const uint32_t kMaxIndices  = 9216;
 
+// The screen list's (orthoList's) room: its corners are numbered with 16 bits, so 65536 is the most, 16384 quads of 4 corners and 6 index numbers
+// each. The game's HUD and menus use a few hundred a frame; the level editor's panels, every letter a quad, used more than the game's 4096 at
+// 2560 x 1440 (Frost 2026-11-18).
+const uint32_t kMaxOrthoVertices = 65536;
+const uint32_t kMaxOrthoIndices  = (kMaxOrthoVertices / 4) * 6;
+
 static HRESULT LastError;
 texID_t NO_TEXTURE = 0;
 texID_t MISSING_TEXTURE = 1;
@@ -109,6 +121,65 @@ bool usingStencil = false;
 // Always this folder beside the game. It used to come from the settings file, and a file someone shared could point it at another computer, so that the game fetched
 // shaders from there and ran them. tests/settings_file_test.cpp keeps it out.
 static const std::string shaderPath = "shaders/";
+
+// R_SetShaderTextSource (renderer.h): null in the game, so shaders come from shaderPath; the level editor sets it to its own baked-in text
+static R_ShaderTextSource shaderTextSource = nullptr;
+
+void R_SetShaderTextSource(R_ShaderTextSource source)
+{
+	shaderTextSource = source;
+}
+
+namespace
+{
+	// #include "x.fxh" in a shader compiled from text: served by the same source, as D3DX's own handler reads it beside a shader file. Nothing from the disk.
+	class TextSourceInclude : public ID3DXInclude
+	{
+	public:
+		STDMETHOD(Open)(D3DXINCLUDE_TYPE, LPCSTR fileName, LPCVOID, LPCVOID *data, UINT *bytes)
+		{
+			const char *text = nullptr;
+			size_t length = 0;
+
+			if (!shaderTextSource || !fileName || !data || !bytes || !shaderTextSource(fileName, &text, &length) || !text || length > 0x7fffffffu)
+			{
+				return E_FAIL;
+			}
+
+			*data = text;
+			*bytes = (UINT)length;
+			return S_OK;
+		}
+
+		STDMETHOD(Close)(LPCVOID)
+		{
+			return S_OK;   // the text is the source's own, never freed here
+		}
+	};
+
+	// The shader <fileName> compiled: from the source's text when one is set (D3DXCompileShader, the in-memory form of the call below), else from its file as always
+	HRESULT CompileTheShader(const std::string &fileName, const std::string &actualPath, const char *entry, const char *profile, LPD3DXBUFFER *code, LPD3DXBUFFER *errors,
+		LPD3DXCONSTANTTABLE *constants)
+	{
+		if (shaderTextSource)
+		{
+			const char *text = nullptr;
+			size_t length = 0;
+
+			if (!shaderTextSource(fileName.c_str(), &text, &length) || !text || length > 0x7fffffffu)
+			{
+				LogErrorString("No shader '" + fileName + "' among the ones built in", __LINE__, kThisFile);
+				return E_FAIL;
+			}
+
+			TextSourceInclude include;
+
+			return D3DXCompileShader(text, (UINT)length, NULL, &include, entry, profile, 0, code, errors, constants);
+		}
+
+		return D3DXCompileShaderFromFile(actualPath.c_str(), NULL, NULL, entry, profile, 0, code, errors, constants);
+	}
+}
 std::string videoModeDescription;
 
 bool CreateVolatileResources();
@@ -224,6 +295,8 @@ uint32_t R_GetScreenWidth()
 
 bool ReleaseVolatileResources()
 {
+	extern void ReleaseEditorGroupQueries();
+	ReleaseEditorGroupQueries();   // the editor's occlusion queries (R_SetEditorWorldTriangles groups): default-pool, outstanding between frames
 	FrameTiming_Release();
 	ShadowCapture_GiveUp();
 	extern void ToyShadows_ReleaseTargets();
@@ -574,28 +647,28 @@ uint32_t R_GetNumVideoModes()
 	return d3d.Driver[d3d.CurrentDriver].NumModes;
 }
 
+// The place on the mode list moves round it, and stays 0 when the adapter has no modes, so it's never below 0 or past the end
+// (d3_enumerate.cpp). (Modified 2026-11-14 by Melanikus (Dietrich), #252: with no modes, Previous used to make it -1, and the two
+// functions below then read the mode before the list.)
 void R_NextVideoMode()
 {
-	uint32_t numModes = R_GetNumVideoModes();
-
-	if (++d3d.CurrentVideoMode >= numModes)
-	{
-		d3d.CurrentVideoMode = 0;
-	}
+	d3d.CurrentVideoMode = D3D_NextVideoMode(d3d.CurrentVideoMode, R_GetNumVideoModes());
 }
 
 void R_PreviousVideoMode()
 {
-	uint32_t numModes = R_GetNumVideoModes();
-
-	if (--d3d.CurrentVideoMode < 0)
-	{
-		d3d.CurrentVideoMode = numModes - 1;
-	}
+	d3d.CurrentVideoMode = D3D_PreviousVideoMode(d3d.CurrentVideoMode, R_GetNumVideoModes());
 }
 
 std::string& R_GetVideoModeDescription()
 {
+	// The list is read only at a place on it (#252)
+	if (!D3D_VideoModeIsListed(d3d.CurrentVideoMode, R_GetNumVideoModes()))
+	{
+		videoModeDescription = "no display mode";
+		return videoModeDescription;
+	}
+
 	videoModeDescription = Util::IntToString(d3d.Driver[d3d.CurrentDriver].DisplayMode[d3d.CurrentVideoMode].Width)
 						   + "x" +
 						   Util::IntToString(d3d.Driver[d3d.CurrentDriver].DisplayMode[d3d.CurrentVideoMode].Height);
@@ -610,6 +683,13 @@ char* R_GetDeviceName()
 
 void R_SetCurrentVideoMode()
 {
+	// With no mode on the list there's nothing to change to, and the list is never read outside it (#252)
+	if (!D3D_VideoModeIsListed(d3d.CurrentVideoMode, R_GetNumVideoModes()))
+	{
+		Con_PrintError("No display mode to change to: this adapter listed none of 640 by 480 or more");
+		return;
+	}
+
 	uint32_t currentWidth  = d3d.Driver[d3d.CurrentDriver].DisplayMode[d3d.CurrentVideoMode].Width;
 	uint32_t currentHeight = d3d.Driver[d3d.CurrentDriver].DisplayMode[d3d.CurrentVideoMode].Height;
 
@@ -880,10 +960,10 @@ bool CreateVolatileResources()
 
 	// orthographic projected quads
 	d3d.orthoVB = new VertexBuffer;
-	d3d.orthoVB->Create(kMaxVertices, sizeof(ORTHOVERTEX), USAGE_DYNAMIC);
+	d3d.orthoVB->Create(kMaxOrthoVertices, sizeof(ORTHOVERTEX), USAGE_DYNAMIC);
 
 	d3d.orthoIB = new IndexBuffer;
-	d3d.orthoIB->Create(kMaxIndices * 3, USAGE_DYNAMIC);
+	d3d.orthoIB->Create(kMaxOrthoIndices, USAGE_DYNAMIC);
 
 	// particle vertex buffer
 	d3d.particleVB = new VertexBuffer;
@@ -1419,26 +1499,21 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	LPD3DXBUFFER pCode = NULL;
 	std::string actualPath = shaderPath + fileName;
 
-	// test that the path to the file is valid first (d3dx doesn't give a specific error message for this)
-	std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
-	if (!fileOpenTest.good())
+	// test that the path to the file is valid first (d3dx doesn't give a specific error message for this); not when the text comes from a source (renderer.h)
+	if (!shaderTextSource)
 	{
-		LogErrorString("Can't open vertex shader file '" + actualPath + "'", __LINE__, kThisFile);
-		return false;
+		std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
+		if (!fileOpenTest.good())
+		{
+			LogErrorString("Can't open vertex shader file '" + actualPath + "'", __LINE__, kThisFile);
+			return false;
+		}
+		// close the file
+		fileOpenTest.close();
 	}
-	// close the file
-	fileOpenTest.close();
 
-	// set up vertex shader
-	LastError = D3DXCompileShaderFromFile(actualPath.c_str(), //filepath
-						NULL,            // macro's
-						NULL,            // includes
-						"vs_main",       // main function
-						ShaderNeedsModel3(fileName) ? "vs_3_0" : "vs_2_0",        // shader profile
-						0,               // flags
-						&pCode,          // compiled operations
-						&pErrors,        // errors
-						&vertexShader.constantTable); // constants
+	// set up vertex shader (from the file, or the source's text: CompileTheShader)
+	LastError = CompileTheShader(fileName, actualPath, "vs_main", ShaderNeedsModel3(fileName) ? "vs_3_0" : "vs_2_0", &pCode, &pErrors, &vertexShader.constantTable);
 
 	if (FAILED(LastError))
 	{
@@ -1516,26 +1591,21 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	LPD3DXBUFFER pCode = NULL;
 	std::string actualPath = shaderPath + fileName;
 
-    // test that the path to the file is valid first (d3dx doesn't give a specific error message for this)
-	std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
-	if (!fileOpenTest.good())
+    // test that the path to the file is valid first (d3dx doesn't give a specific error message for this); not when the text comes from a source (renderer.h)
+	if (!shaderTextSource)
 	{
-		LogErrorString("Can't open pixel shader file '" + actualPath + "'", __LINE__, kThisFile);
-		return false;
+		std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
+		if (!fileOpenTest.good())
+		{
+			LogErrorString("Can't open pixel shader file '" + actualPath + "'", __LINE__, kThisFile);
+			return false;
+		}
+		// close the file
+		fileOpenTest.close();
 	}
-	// close the file
-	fileOpenTest.close();
 
-	// set up pixel shader
-	LastError = D3DXCompileShaderFromFile(actualPath.c_str(), //filepath
-						NULL,            // macro's
-						NULL,            // includes
-						"ps_main",       // main function
-						ShaderNeedsModel3(fileName) ? "ps_3_0" : "ps_2_0",        // shader profile
-						0,               // flags
-						&pCode,          // compiled operations
-						&pErrors,        // errors
-						&pixelShader.constantTable);    // constants
+	// set up pixel shader (from the file, or the source's text: CompileTheShader)
+	LastError = CompileTheShader(fileName, actualPath, "ps_main", ShaderNeedsModel3(fileName) ? "ps_3_0" : "ps_2_0", &pCode, &pErrors, &pixelShader.constantTable);
 
 	if (FAILED(LastError))
 	{
@@ -2271,23 +2341,44 @@ bool InitialiseDirect3D()
 		return false;
 	}
 
-	// Get the number of devices/video cards in the system
-	d3d.NumDrivers = d3d.lpD3D->GetAdapterCount();
+	// The video cards in the system, each one's name, and its display modes and their formats, in lists that each have a most
+	// (d3_enumerate.cpp). (Modified 2026-11-14 by Melanikus (Dietrich), D3D-ENUM-1: this was read here, into lists with no bound.)
+	uint32_t numDisplayFormats = sizeof(DisplayFormats) / sizeof(DisplayFormats[0]);
+	D3DEnumeration enumeration;
+	bool const described = D3D_EnumerateAdapters(d3d.lpD3D, DisplayFormats, numDisplayFormats, d3d.Driver, &d3d.NumDrivers, &enumeration);
 
-	Con_PrintMessage("\t Found " + Util::IntToString(d3d.NumDrivers) + " video adapter(s)");
+	Con_PrintMessage("\t Found " + Util::IntToString(enumeration.adaptersFound) + " video adapter(s)");
 
-	// Get adapter information for all available devices (vid card name, etc)
-	for (uint32_t driverIndex = 0; driverIndex < d3d.NumDrivers; driverIndex++)
+	if (!described)
 	{
-		LastError = d3d.lpD3D->GetAdapterIdentifier(driverIndex, /*D3DENUM_WHQL_LEVEL*/0, &d3d.Driver[driverIndex].AdapterInfo);
-		if (FAILED(LastError))
-		{
-			LogDxError(LastError, __LINE__, kThisFile);
-			return false;
-		}
+		LastError = enumeration.failure;
+		LogDxError(LastError, __LINE__, kThisFile);
+		return false;
+	}
+
+	if (enumeration.adaptersFound > MAX_D3D_DRIVERS)
+	{
+		Con_PrintMessage("\t Keeping the first " + Util::IntToString(MAX_D3D_DRIVERS) + " of them, the most the list holds");
+	}
+
+	if (enumeration.modesLeftOut > 0)
+	{
+		Con_PrintMessage("\t " + Util::IntToString(enumeration.modesLeftOut) + " display mode(s) left out: each adapter's list holds " +
+			Util::IntToString(MAX_D3D_DISPLAY_MODES));
+	}
+
+	if (enumeration.formatsLeftOut > 0)
+	{
+		Con_PrintMessage("\t " + Util::IntToString(enumeration.formatsLeftOut) + " display format(s) left out: each adapter's list holds " +
+			Util::IntToString(MAX_D3D_FORMATS));
 	}
 
 	Con_PrintMessage("\t Using device: " + std::string(d3d.Driver[defaultDevice].AdapterInfo.Description) + " on display " + std::string(d3d.Driver[defaultDevice].AdapterInfo.DeviceName));
+
+	// store the index of the driver we want to use, before anything below asks about "the" adapter: the video mode's place is looked up
+	// on its list, and its depth formats are checked on it. (Modified 2026-11-14 by Melanikus (Apone) for the AvP port, D3D-ENUM-1: this
+	// was set only after those, so on a PC whose chosen adapter isn't adapter 0 they asked adapter 0.)
+	d3d.CurrentDriver = defaultDevice;
 
 	// chose an adapter format. take from desktop if windowed.
 	if (windowed)
@@ -2309,74 +2400,6 @@ bool InitialiseDirect3D()
 	{
 		// i assume we shouldn't be guessing this?
 		SelectedAdapterFormat = D3DFMT_X8R8G8B8;
-	}
-
-	// count number of display formats in our array
-	uint32_t numDisplayFormats = sizeof(DisplayFormats) / sizeof(DisplayFormats[0]);
-	uint32_t numFomats = 0;
-
-	// loop through all the devices, getting the list of formats available for each
-	for (uint32_t thisDevice = 0; thisDevice < d3d.NumDrivers; thisDevice++)
-	{
-		d3d.Driver[thisDevice].NumModes = 0;
-
-		for (uint32_t displayFormatIndex = 0; displayFormatIndex < numDisplayFormats; displayFormatIndex++)
-		{
-			// get the number of display moves available on this adapter for this particular format
-			uint32_t numAdapterModes = d3d.lpD3D->GetAdapterModeCount(thisDevice, DisplayFormats[displayFormatIndex]);
-
-			for (uint32_t modeIndex = 0; modeIndex < numAdapterModes; modeIndex++)
-			{
-				D3DDISPLAYMODE DisplayMode;
-
-				// does this adapter support the requested format?
-				d3d.lpD3D->EnumAdapterModes(thisDevice, DisplayFormats[displayFormatIndex], modeIndex, &DisplayMode);
-
-				// Filter out low-resolution modes
-				if (DisplayMode.Width < 640 || DisplayMode.Height < 480)
-					continue;
-
-				uint32_t j = 0;
-
-				// Check if the mode already exists (to filter out refresh rates)
-				for (; j < d3d.Driver[thisDevice].NumModes; j++)
-				{
-					if ((d3d.Driver[thisDevice].DisplayMode[j].Width  == DisplayMode.Width) &&
-						(d3d.Driver[thisDevice].DisplayMode[j].Height == DisplayMode.Height) &&
-						(d3d.Driver[thisDevice].DisplayMode[j].Format == DisplayMode.Format))
-							break;
-				}
-
-				// If we found a new mode, add it to the list of modes
-				if (j == d3d.Driver[thisDevice].NumModes) // we made it all the way throught the list and didn't find a match
-				{
-					assert (DisplayMode.Width != 0);
-					assert (DisplayMode.Height != 0);
-
-					d3d.Driver[thisDevice].DisplayMode[d3d.Driver[thisDevice].NumModes].Width       = DisplayMode.Width;
-					d3d.Driver[thisDevice].DisplayMode[d3d.Driver[thisDevice].NumModes].Height      = DisplayMode.Height;
-					d3d.Driver[thisDevice].DisplayMode[d3d.Driver[thisDevice].NumModes].Format      = DisplayMode.Format;
-					d3d.Driver[thisDevice].DisplayMode[d3d.Driver[thisDevice].NumModes].RefreshRate = DisplayMode.RefreshRate;
-
-					d3d.Driver[thisDevice].NumModes++;
-
-					uint32_t f = 0;
-
-					// Check if the mode's format already exists
-					for (; f < numFomats; f++ )
-					{
-						if (DisplayMode.Format == d3d.Driver[thisDevice].Formats[f]) {
-							break;
-						}
-					}
-
-					// If the format is new, add it to the list
-					if (f == numFomats) {
-						d3d.Driver[thisDevice].Formats[numFomats++] = DisplayMode.Format;
-					}
-				}
-			}
-		}
 	}
 
 	// set CurrentVideoMode variable to index display mode that matches user requested settings
@@ -2519,9 +2542,6 @@ bool InitialiseDirect3D()
 	}
 
 	d3dpp.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT;
-
-	// store the index of the driver we want to use
-	d3d.CurrentDriver = defaultDevice;
 
 #if 0 // NVidia PerfHUD
 	UINT adapter_to_use;
@@ -2894,6 +2914,8 @@ bool InitialiseDirect3D()
 	d3d.effectSystem = new EffectManager;
 
 	d3d.mainEffect  = d3d.effectSystem->Add("main", "vertex.vsh", "pixel.psh", d3d.mainDecl);
+	// the normals view's pair (3dc/debug_view.h, Drake 11-20): the main list's declaration; a folder without them only goes without the view
+	d3d.debugNormalsEffect = d3d.effectSystem->Add("debugNormals", "debugNormals.vsh", "debugNormals.psh", d3d.mainDecl);
 	d3d.orthoEffect = d3d.effectSystem->Add("ortho", "orthoVertex.vsh", "orthoPixel.psh", d3d.orthoDecl);
 	d3d.shoulderLampEffect = d3d.effectSystem->Add("shoulderLamp", "orthoVertex.vsh", "shoulderLamp.psh", d3d.orthoDecl);
 	d3d.decalEffect = d3d.effectSystem->Add("decal", "decal.vsh", "decal.psh", d3d.decalDecl);

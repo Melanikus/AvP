@@ -9,6 +9,7 @@
 #ifndef _shpchunk_hpp
 #define _shpchunk_hpp 1
 
+#include <string>
 #include "chunk.hpp"
 
 #include "chunk_type.hpp"
@@ -56,6 +57,11 @@ public:
 	// says whether the numbers that give this shape's size can be real. See the function itself.
 	bool numbers_are_valid();
 	bool points_fit_box();
+	// Turns round each axis of the shape's box whose largest number is below its smallest, and says how many it turned. See the function itself.
+	int put_box_right_way_round();
+	// The line the level's log gets when this module shape's points don't all lie in its box: the shape's number, the first point outside it, the axis and the box
+	// on that axis. Empty when they all do.
+	std::string box_refusal_line(int shape_number);
 
 	// I want the external file load to be as transparent as possible
 	// i.e. we have a shape which is loaded as usaul - it should then
@@ -785,9 +791,9 @@ class Shape_Morphing_Frame_Data_Chunk : public Chunk
 {
 public:
 
-	// constructor from wherever
+	// constructor from wherever: the flags and the speed start as 0, as the save writes them (fill_data_block)
 	Shape_Morphing_Frame_Data_Chunk (Shape_Morphing_Data_Chunk * parent)
-	: Chunk (parent, "FRMMORPH"), num_frames(0), frame_store(0)
+	: Chunk (parent, "FRMMORPH"), a_flags(0), a_speed(0), num_frames(0), frame_store(0)
 	{}
 	// constructor from buffer
 	Shape_Morphing_Frame_Data_Chunk (Shape_Morphing_Data_Chunk * parent,const char *, size_t);

@@ -1,3 +1,5 @@
+// Modified 2026-11-17 by Melanikus for the AvP port:
+//   the level editor's pick, FindDrawnPolygonInLineOfSight
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   it notes which polygon of its shape a ray hit, for -shadowshoot
 /* routines which check an object to see if it is in the player's line of sight */
@@ -20,6 +22,10 @@ extern int IsThisObjectVisibleFromThisPosition_WithIgnore(DISPLAYBLOCK *objectPt
 
 void FindPolygonInLineOfSight(VECTORCH *viewpointDirectionPtr, VECTORCH *viewpointPositionPtr, int useOnScreenBlockList, DISPLAYBLOCK *objectToIgnorePtr);
 void FindPolygonInLineOfSight_TwoIgnores(VECTORCH *viewpointDirectionPtr, VECTORCH *viewpointPositionPtr, int useOnScreenBlockList, DISPLAYBLOCK *objectToIgnorePtr,DISPLAYBLOCK *next_objectToIgnorePtr);
+
+/* The level editor's pick: as FindPolygonInLineOfSight, but a polygon counts only if it is drawn (a face turned away from the eye only when it is
+   iflag_no_bfc, never an iflag_notvis one), as inteng's pick takes only what it drew. The game itself never calls it. */
+void FindDrawnPolygonInLineOfSight(VECTORCH *viewpointDirectionPtr, VECTORCH *viewpointPositionPtr, int useOnScreenBlockList, DISPLAYBLOCK *objectToIgnorePtr);
 
 /* Line Of Sight data */
 extern VECTORCH 		LOS_Point;	 		/* point in world space which player has hit */

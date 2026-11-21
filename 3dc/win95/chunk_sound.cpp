@@ -7,6 +7,7 @@
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
 //   a chunk for collections of sounds, which was only ever a comment, is gone
+//   a sound has to be inside the level, as CheckPlace in chunk.hpp says
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -51,6 +52,7 @@ Sound_Object_Chunk::Sound_Object_Chunk (Chunk_With_Children * parent, const char
 {
 	char const * const chunk_start = data;
 	position = *((ChunkVectorInt *) data);
+	CheckPlace(position);
 	data += sizeof(ChunkVectorInt);
 
 	inner_range = *((int *)data);

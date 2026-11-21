@@ -194,23 +194,9 @@ struct RHW_VERTEX
 	float v;
 };
 
-/*
-  Maximum number of Direct3D drivers ever
-  expected to be resident on the system.
-*/
-#define MAX_D3D_DRIVERS 5
-
-/*
-  Description of a D3D driver.
-*/
-
-typedef struct D3DDriverInfo
-{
-	D3DFORMAT				Formats[20];
-	D3DADAPTER_IDENTIFIER9	AdapterInfo;
-	D3DDISPLAYMODE			DisplayMode[100];
-	uint32_t				NumModes;
-} D3DDRIVERINFO;
+// The list of video adapters, MAX_D3D_DRIVERS and D3DDRIVERINFO, with each list's bound, are in d3_enumerate.h (D3D-ENUM-1, 2026-11-14,
+// Melanikus (Dietrich))
+#include "d3_enumerate.h"
 
 typedef struct D3DInfo
 {
@@ -257,6 +243,7 @@ typedef struct D3DInfo
 
 	// shader IDs
 	effectID_t				mainEffect;
+	effectID_t				debugNormalsEffect;   // the normals view (3dc/debug_view.h), kNullEffectID when its shaders aren't there
 	effectID_t				shadowBlurEffect;
 	effectID_t				decalEffect;
 	effectID_t				orthoEffect;

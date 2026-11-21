@@ -4,10 +4,15 @@
 //   level file is checked against the size of its chunk
 //   counted lists are measured against their chunks before they're made
 //   a light's times have to be ones that don't wrap round
+//   a light has to reach somewhere: a range of 0 or less refuses the level
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   one of a level's lights has to be inside the level, as CheckPlace in chunk.hpp says
+//   a light scale's six numbers have to be real numbers no bigger than 2^24 either way
+//   the two ways of applying a light scale, which nothing called, are gone (2026-11-14)
 
 #include "chunk.hpp"
 #include "chunk_light.hpp"
+#include "real_numbers.h"
 
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(chunk_light)
@@ -108,6 +113,21 @@ void Light_Chunk::fill_data_block ( char * data_start)
 	
 }
 
+// A light's range is how far it reaches, in millimetres. The game lights only what's nearer than that, and divides the light's
+// brightness by it. A range of 0 or less would be a light that reaches nothing, so the level is refused instead. The shortest in the
+// game's own levels is 900 for one of a level's lights, and 100 for a placed light. (Added 2026-11-14 by Melanikus for the AvP port.)
+// The longest a range may be is 2^28 millimetres, about 268 kilometres, so that the sums the game makes with it stay whole numbers it
+// can hold. The longest in the game's own levels is 1,024,900. (Added 2026-11-14.)
+static int const LongestLightRange = 1 << 28;
+
+static void CheckLightRange(int range)
+{
+	if (range <= 0 || range > LongestLightRange)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
+
 Light_Chunk::Light_Chunk(Chunk_With_Children * parent, const char * data, size_t const /*size*/)
 : Chunk (parent, "STDLIGHT")
 {
@@ -115,6 +135,7 @@ Light_Chunk::Light_Chunk(Chunk_With_Children * parent, const char * data, size_t
 	data += 4;
 
 	light.location = *((ChunkVectorInt *) data);
+	CheckPlace(light.location);
 	data += sizeof(ChunkVectorInt);
 	
 	light.orientation = *((ChunkMatrix *) data);
@@ -126,6 +147,7 @@ Light_Chunk::Light_Chunk(Chunk_With_Children * parent, const char * data, size_t
 	data += 4;
 	light.range = *((int *) data);
 	data += 4;
+	CheckLightRange(light.range);
 
 	light.colour = *((int *) data);
 	data += 4;
@@ -274,19 +296,32 @@ Light_Scale_Chunk::Light_Scale_Chunk(Chunk_With_Children* parent,const char* dat
 {
 	LightMode=*(int*)data;
 	data+=4;
-	prelight_multiply=*(float*)data;
-	data+=4;
-	prelight_multiply_above= (int) *(float*)data;
-	data+=4;
-	prelight_add= (int) *(float*)data;
-	data+=4;
-	
-	runtime_multiply=*(float*)data;
-	data+=4;
-	runtime_multiply_above= (int) *(float*)data;
-	data+=4;
-	runtime_add= (int) *(float*)data;
-	data+=4;
+
+	// Six fractions follow: the prelight's multiplier, the level it starts above and what it adds, then the same three for the light at
+	// run time. Four of them are made whole numbers here, so each has to be a real number no bigger than 2^24 either way, or the level is
+	// refused. One that isn't is kept as 0. Nothing else in the game uses them: they're kept so that the chunk can be written back as it
+	// was. No level of the game's own has a light scale.
+	// Whether each is a real number is told from its bits (real_numbers.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+	float numbers[6];
+	memcpy(numbers, data, sizeof(numbers));
+	data+=sizeof(numbers);
+
+	for (int i = 0; i < 6; i++)
+	{
+		if (!IsRealNumberFrom(numbers[i], -16777216.0f, 16777216.0f))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			numbers[i] = 0;
+		}
+	}
+
+	prelight_multiply=numbers[0];
+	prelight_multiply_above= (int) numbers[1];
+	prelight_add= (int) numbers[2];
+
+	runtime_multiply=numbers[3];
+	runtime_multiply_above= (int) numbers[4];
+	runtime_add= (int) numbers[5];
 
 	spare1=*(int*)data;
 	data+=4;
@@ -329,24 +364,6 @@ void Light_Scale_Chunk::fill_data_block(char* data_start)
 	data_start+=4;
 }
 
-int Light_Scale_Chunk::ApplyPrelightScale(int l)
-{
-	if(l<prelight_multiply_above)return l;
-	l+=(prelight_add-prelight_multiply_above);
-	l= (int)(l*prelight_multiply);
-	l+=prelight_multiply_above;
-	l=min(l,255);
-	return max(l,prelight_multiply_above);
-}
-int Light_Scale_Chunk::ApplyRuntimeScale(int l)
-{
-	if(l<runtime_multiply_above)return l;
-	l+=(runtime_add-runtime_multiply_above);
-	l=(int)( l*runtime_multiply);
-	l+=runtime_multiply_above;
-	l=min(l,255);
-	return max(l,runtime_multiply_above);
-}
 ////////////////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("PLOBJLIT",Placed_Object_Light_Chunk,60)
 
@@ -356,6 +373,8 @@ Placed_Object_Light_Chunk::Placed_Object_Light_Chunk(Chunk_With_Children * paren
 	char const * const start = data;
 	light=*(Placed_Object_Light_Data*) data;
 	data+=sizeof(Placed_Object_Light_Data);
+
+	CheckLightRange(light.range);
 
 	// A light's times are in thousandths of a second, and the game multiplies each one by 65536. A bigger number than this wraps round, and a light whose times
 	// all came to nothing would change state for ever, which would hang the game. The largest in the game's own levels is 10,000.

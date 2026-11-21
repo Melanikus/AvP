@@ -5,7 +5,8 @@
 // that uses this route, the game's shape drawing never sees those walls. All that's left is to say which runs of the buffer to draw.
 //
 // WHICH FRAMES: only ordinary ones. The vision modes, the mirror and the cheats all change a wall's colour or corners in ways the buffer knows nothing about,
-// so those frames go the old way, and so does a frame that's being compared. Decided once, before anything is drawn.
+// so those frames go the old way, and so does a frame that's being compared. So does a frame with the level editor's Filled polyline on (DrawFilledOutlines,
+// d3d_render.cpp): it outlines the polygons of the game's list, and only the old way puts the walls there. Decided once, before anything is drawn.
 //
 // WHICH WALLS: a module goes this way only if every polygon it draws is in the buffer. See-through and animated polygons aren't, so a room with any of those
 // stays wholly on the old route, which is about one room in twenty-five. So does a module that isn't marked as already lit: StaticLevel only holds the light
@@ -40,7 +41,9 @@
 #include <vector>
 
 extern int WireFrameMode;
+extern bool EditorUntextured;   // RenderList.cpp: the level editor's Untextured
 extern int DrawFullBright;
+extern int DrawFilledOutlines;      // d3d_render.cpp: the level editor's Filled polyline switch
 extern bool MirroringActive;
 extern int RequestedGammaSetting;
 
@@ -129,7 +132,7 @@ static bool FrameCanUseThisRoute()
 		return false;
 	}
 
-	if (CurrentVisionMode != VISION_MODE_NORMAL || MirroringActive || DrawFullBright || WireFrameMode || !StaticScene_ViewAllows())
+	if (CurrentVisionMode != VISION_MODE_NORMAL || MirroringActive || DrawFullBright || WireFrameMode || DrawFilledOutlines || EditorUntextured || !StaticScene_ViewAllows())
 	{
 		return false;
 	}

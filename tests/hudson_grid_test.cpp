@@ -136,6 +136,35 @@ static void TestAskedAgain()
 	Check(calls == grid.LastSearchLooks(), "looking at one place each go");
 }
 
+// A SWITCH ON A CONSOLE (Frost 2026-11-20; the medlab section run 2026-11-20-231007: put 753 mm from opslev01, a switch at the top of a console 2.3 m tall, his way
+// was one point, his own place, moved onto the switch itself because it was within 900 mm, so he walked into the console for 90 s, jumped onto its top and fell
+// off it, again and again). The end of the way goes to the goal asked only where he could stand there: a place in its column at about his own height.
+static void TestASwitchOnAConsole()
+{
+	World world;
+	HudsonGrid grid;
+
+	AddFloor(&world, 0, 0, 12000, 12000, 1000);
+	AddWall(&world, 6000, 6000, 6000, 7000, 1000, -1300);
+	AddWall(&world, 7000, 6000, 7000, 7000, 1000, -1300);
+	AddWall(&world, 6000, 6000, 7000, 6000, 1000, -1300);
+	AddWall(&world, 6000, 7000, 7000, 7000, 1000, -1300);
+	AddFloor(&world, 6000, 6000, 7000, 7000, -1300);
+	grid.Build(world);
+
+	for (int startX = 2000; startX <= 5000; startX += 1500)
+	{
+		Check(Search(grid, startX, 1000, 6500, 6150, -1150, 6500) != kHudsonGridSearching && !grid.Way().empty(), "a way toward a switch on a console from x " + std::to_string(startX));
+
+		HudsonGridPoint const &last = grid.Way().back();
+
+		Check(last.x <= 6000 - 300 || last.y < 0, "and it ends where he can stand, not inside the console: " + std::to_string(last.x) + " " + std::to_string(last.y));
+	}
+
+	// and on a plain floor the end is still the goal itself
+	Check(Search(grid, 2000, 1000, 2000, 4100, 1000, 3100) == kHudsonGridFound && grid.Way().back().x == 4100 && grid.Way().back().z == 3100, "a goal on the floor is still reached exactly");
+}
+
 static void TestAWall()
 {
 	World world;
@@ -229,6 +258,86 @@ static void TestHeights()
 		AddCeiling(&world, 4000, 0, 8000, 3000, 1000 - 1100);
 		grid.Build(world);
 		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridNoWay, "but not one 1100 high");
+	}
+
+	// WHERE HE CROUCHES when he plays (the owner 11-20, watching the lane probe: "he's crouching like aliens", all along rooms only MARKED as ducts; "hudson doesn't
+	// need to follow that flag"): only where standing doesn't fit and crouched does, measured, whatever the floor's mark. Added 2026-11-20 by Melanikus (Frost).
+	{
+		World world;
+
+		AddFloor(&world, 0, 0, 12000, 3000, 1000, true);
+		AddCeiling(&world, 4000, 0, 8000, 3000, 1000 - 1300);
+		AddWall(&world, 0, 0, 12000, 0, 1000, -4000);
+		AddWall(&world, 0, 3000, 12000, 3000, 1000, -4000);
+		grid.Build(world);
+		Check(!grid.OnlyCrouchedFits(2000, 1000, 1500), "a floor marked as a duct under a high ceiling: he stands");
+		Check(grid.OnlyCrouchedFits(6000, 1000, 1500), "under a ceiling 1300 up: he crouches");
+		Check(!grid.OnlyCrouchedFits(10000, 1000, 1500), "and stands again past it");
+		Check(!grid.OnlyCrouchedFits(2000, 1000, 100), "against a wall, crouching wouldn't help: he stands");
+	}
+
+	{
+		World world;
+
+		AddFloor(&world, 0, 0, 12000, 3000, 1000);
+		AddCeiling(&world, 4000, 0, 8000, 3000, 1000 - 1300);
+		grid.Build(world);
+		Check(grid.OnlyCrouchedFits(6000, 1000, 1500), "a ceiling 1300 up over a floor with no mark: he crouches all the same");
+	}
+
+	// CROUCHED, ANYWHERE (crouchanywhere=yes; added 2026-11-20 by Melanikus (Frost): shft21's walkway on the owner's second stretch has about 1950 of room, crouch-only,
+	// and no duct mark, and with Airduct off on every plotted room no duct is marked at all, so his way can't go where a player crouches): a place wherever a crouched
+	// marine fits, whatever the floor's mark; off unless asked
+	{
+		World world;
+
+		AddFloor(&world, 0, 0, 12000, 3000, 1000);
+		AddCeiling(&world, 4000, 0, 8000, 3000, 1000 - 1300);
+		AddWall(&world, 0, 0, 12000, 0, 1000, -4000);
+		AddWall(&world, 0, 3000, 12000, 3000, 1000, -4000);
+		grid.Build(world);
+		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridNoWay, "a ceiling 1300 up over a floor with no mark: no way under it, as before");
+		grid.SetCrouchAnywhere(true);
+		grid.Build(world);
+		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridFound, "crouched anywhere: his way goes under it");
+		Check(grid.OnlyCrouchedFits(6000, 1000, 1500) && !grid.OnlyCrouchedFits(2000, 1000, 1500), "crouched under it, standing before it");
+		grid.SetCrouchAnywhere(false);
+		grid.Build(world);
+		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridNoWay, "and off again when it's asked off");
+	}
+
+	{
+		World world;
+
+		AddFloor(&world, 0, 0, 12000, 3000, 1000);
+		AddCeiling(&world, 4000, 0, 8000, 3000, 1000 - 1100);
+		grid.SetCrouchAnywhere(true);
+		grid.Build(world);
+		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridNoWay, "but not under 1100, where even crouched he doesn't fit");
+		grid.SetCrouchAnywhere(false);
+	}
+
+	// SHUT DOORS (doorwalls=yes; added 2026-11-20 by Melanikus (Frost), Bishop for the owner, the full Genshd1 run: "He's choosing a closed door again", his way to
+	// opslev01 ran through shftdr02, which only opslev01-04 open): the places inside a shut door's box are left out of every search until it opens
+	{
+		World world;
+
+		AddFloor(&world, 0, 0, 12000, 3000, 1000);
+		AddWall(&world, 0, 0, 12000, 0, 1000, -4000);
+		AddWall(&world, 0, 3000, 12000, 3000, 1000, -4000);
+		grid.Build(world);
+		Check(Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridFound, "a corridor with nothing shut: his way goes along it");
+
+		std::vector<HudsonGridBox> const door = { { 5000, -4000, -1000, 6000, 2000, 4000 } };
+
+		grid.SetShut(door);
+		Check(grid.ShutPlaces() > 0 && Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridNoWay, "a shut door across it: no way through");
+		Check(Search(grid, 1000, 1000, 1500, 4000, 1000, 1500) == kHudsonGridFound, "but his side of it is as before");
+		grid.SetShut(std::vector<HudsonGridBox>());
+		Check(grid.ShutPlaces() == 0 && Search(grid, 1000, 1000, 1500, 11000, 1000, 1500) == kHudsonGridFound, "and once it's open, through it again");
+		grid.SetShut(door);
+		grid.Build(world);
+		Check(grid.ShutPlaces() == 0, "a new build forgets the shut places (the caller says them again: the places are new)");
 	}
 
 	// Two floors, one over the other, are different places
@@ -924,6 +1033,7 @@ int main()
 	TestAFloor();
 	TestAskedAgain();
 	TestAWall();
+	TestASwitchOnAConsole();
 	TestHeights();
 	TestStairs();
 	TestSlopes();

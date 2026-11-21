@@ -11,11 +11,17 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   added the "holding at least" registrations, so that a kind of chunk that always reads a fixed set of fields is never made from a chunk too small to hold them
 //   removed CHUNK_EXTRACT_ARRAY, which sized a list from a count in the file with no check: only code in a comment used it
+//   added CheckPlace, which refuses a level that gives a place farther than 2^24 millimetres from its middle
+//   added CheckRadius, which refuses a shape's radius that isn't a real number from 0 to 2^24
+//   CheckRadius and TurnPartFits ask real_numbers.h whether a number is real, so the game has one rule for it
+//   added CheckTurn, which refuses a turn with a part that isn't a real number from -2 to 2
 
 #ifndef _chunk_hpp
 #define _chunk_hpp
 
 	#include <string.h>
+	#include <type_traits>
+	#include "real_numbers.h"
 	#include "3dc.h"
 	#include "mem3dc.h" // for debug new and delete
 	#include "inline.h"
@@ -477,6 +483,66 @@ inline char * CopyOptionalNameFromChunk(char const * start, size_t size, char co
 	}
 
 	return copy;
+}
+
+// The farthest a place in a level can be from the level's middle, along each of x, y and z: 2^24 millimetres, about 16.8 kilometres.
+// Every place a level file gives, and every corner of a box it gives, has to be within this, so that the sums and differences the
+// game makes with places stay whole numbers it can hold. The farthest in the game's own levels is 1,855,168, a light in Breakout.
+// (Added 2026-11-14 by Melanikus for the AvP port.)
+static int const FarthestPlace = 1 << 24;
+
+// Refuses the level if this place is farther out than FarthestPlace along any of x, y and z. A place is anything with an x, a y and a z
+// that are whole numbers, as each kind of chunk keeps its own. The compiler holds every caller to whole numbers: a place kept as a
+// fraction could be something that isn't a number, which the game's fast arithmetic isn't promised to compare properly, so it would
+// need a check of its own.
+template <class Place>
+inline void CheckPlace(Place const & place)
+{
+	static_assert(std::is_integral<decltype(place.x)>::value && std::is_integral<decltype(place.y)>::value && std::is_integral<decltype(place.z)>::value,
+		"CheckPlace is for whole-number places; a place kept as a fraction needs a check for NaN too");
+
+	if (place.x < -FarthestPlace || place.x > FarthestPlace ||
+		place.y < -FarthestPlace || place.y > FarthestPlace ||
+		place.z < -FarthestPlace || place.z > FarthestPlace)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
+
+// A shape's radius is how far its points reach from its middle. The file keeps it as a fraction, and the game makes a whole number of it
+// and adds it to other distances, so it has to be a real number from 0 up to FarthestPlace. The largest in the game's own levels is
+// 1,520,512.6. Whether it's a real number, and not endless or not a number at all, is told from its bits (real_numbers.h): the game is
+// built for fast arithmetic, which isn't promised to compare something that isn't a number properly. (Added 2026-11-14 by Melanikus
+// for the AvP port.)
+inline void CheckRadius(float radius)
+{
+	if (!IsRealNumberFrom(radius, 0.0f, (float)FarthestPlace))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
+
+// A turn, which is how something is turned from where it started, is kept as four fractions, x, y, z and w. Each part of a real turn is
+// from -1 to 1, and one saved by a tool can be a rounding step past that, so each part has to be a real number from -2 to 2. The game
+// makes a whole number of each part, so it has to stay one the game can hold. Every part of every turn in the game's own levels is from
+// -1 to 1. Whether a part is a real number is told from its bits, as for a radius. (Added 2026-11-14 by Melanikus for the AvP port.)
+inline bool TurnPartFits(float part)
+{
+	return IsRealNumberFrom(part, -2.0f, 2.0f);
+}
+
+// Refuses the level unless each part of this turn fits. The compiler holds every caller to a turn kept as four floats.
+template <class Turn>
+inline void CheckTurn(Turn const & turn)
+{
+	static_assert(std::is_same<decltype(turn.x), float>::value && std::is_same<decltype(turn.y), float>::value &&
+		std::is_same<decltype(turn.z), float>::value && std::is_same<decltype(turn.w), float>::value,
+		"CheckTurn is for a turn kept as four floats");
+
+	if (!TurnPartFits(turn.x) || !TurnPartFits(turn.y) || !TurnPartFits(turn.z) || !TurnPartFits(turn.w))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 ///////////////////////////////////////////////

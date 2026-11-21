@@ -612,6 +612,27 @@ static void TestTheLoadersAsk()
 	Check(Has(ReadSourceFile("3dc/avp/bh_generator.cpp"), "if(Save_NumberIsInRange(block->GenerationRate, 1, (60 * ONE_FIXED * 100) / 4))"), "a generator's rate has to be one it could reach");
 	Check(Has(ReadSourceFile("3dc/avp/bh_generator.cpp"), "if(Save_NumberIsInRange(block->generatorNPCsPerMinute, GENSPERMINUTE_MIN, GENSPERMINUTE_MAX))"), "and its NPCs a minute");
 	Check(Has(ReadSourceFile("3dc/avp/bh_predator.cpp"), "if(Save_NumberIsInRange(block->personalNumber, 0, PRED_MAXIDENTITY))"), "a predator's number has to pick one of its settings");
+
+	// Added 2026-11-14 by Melanikus for the AvP port: a saved fan's speed, and a saved track's timer and speed, have to be ones the game could reach
+	Check(Has(ReadSourceFile("3dc/avp/bh_fan.cpp"), "if(Save_NumberIsInRange(block->speed_mult, 0, ONE_FIXED))"), "a fan's speed has to be from nothing to full");
+	{
+		std::string const fan = ReadSourceFile("3dc/avp/bh_fan.cpp");
+		std::string::size_type const loader = fan.find("void LoadStrategy_Fan(");
+		std::string::size_type const worked = fan.find("\tf_bhv->wind_speed=MUL_FIXED(f_bhv->speed_mult,f_bhv->fan_wind_strength);\n\n\t//load the track position");
+
+		Check(loader != std::string::npos && worked != std::string::npos && worked > loader && !Has(fan, "COPYELEMENT_LOAD(wind_speed)"),
+			"and its wind is worked out from that speed, never taken from the save");
+	}
+	{
+		std::string const track = ReadSourceFile("3dc/avp/track.cpp");
+		std::string::size_type const section = track.find("tc->current_section = Save_PlaceInListOrNone(block->current_section, tc->num_sections);");
+		std::string::size_type const timer = track.find("if (Save_NumberIsInRange(block->timer, 0, longest_timer))");
+
+		Check(Has(track, "int const longest_timer = (section_time > latest_start) ? section_time : latest_start;") && timer != std::string::npos,
+			"a track's timer has to be inside its section, or its start");
+		Check(section != std::string::npos && section < timer, "and its section is settled before the timer is measured against it");
+		Check(Has(track, "if (Save_NumberIsInRange(block->speed_mult, 0, ONE_FIXED))"), "and its speed has to be from nothing to full");
+	}
 	Check(Has(ReadSourceFile("3dc/avp/bh_binary_switch.cpp"), "if(bs_bhv->bs_tac && Save_TextureSequenceIsValid(bs_bhv->bs_tac->tac_txarray, block->txanim_sequence))"), "a switch's sequence has to be its own");
 	Check(Has(ReadSourceFile("3dc/avp/bh_link_switch.cpp"), "if(ls_bhv->ls_tac && Save_TextureSequenceIsValid(ls_bhv->ls_tac->tac_txarray, block->txanim_sequence))"), "and a linked switch's");
 	Check(Has(ReadSourceFile("3dc/avp/bh_light.cpp"), "if (Save_TextureSequenceIsValid(tac->tac_txarray, sequence))"), "and a light's");

@@ -25,6 +25,7 @@
 #include "showcmds.h"
 #include "pldghost.h"
 #include "ai_module_door.h"
+#include "stock_flags.h"   // PHEROMONEDOOR (Vasquez 2026-11-20)
 
 #if 1
 static unsigned int *Pher_Player1;
@@ -225,6 +226,30 @@ static bool DoorIsOpen(MODULE *door)
 // The scent goes through an AI module unless it's a locked proximity door, or a lift or switch door that isn't open (ai_module_door.h)
 int AIModuleAdmitsPheromones(AIMODULE *targetModule)
 {
+	// PHEROMONEDOOR off (stock_flags.h, Vasquez 2026-11-20): 1999's test, AIModuleAdmitsPheromones in AvP-assembla branches/reb PHEROMON.C 199-262. The door's
+	// kind came from any module on the list (AIModuleIsADoor), but whether it was locked or open was asked of the list's FIRST module. That first module is
+	// read here through the same guarded readers: a block that is no proximity door's counts as unlocked (1999 read it as one's), and GetState says
+	// shut for a block that is no lift or switch door's, as 1999's GetState did
+	if (!PheromoneDoorOn)
+	{
+		int kind = kAIModuleNotADoor;
+		MODULE *const *const list = targetModule->m_module_ptrs;
+		AIModuleDoor_Find(list, AIModuleDoorKindOf, &kind);
+		MODULE *const first = list ? *list : 0;
+
+		if (kind == kAIModuleProxDoor)
+		{
+			return ProxDoorIsLocked(first) != 1 ? 1 : 0;
+		}
+
+		if (kind == kAIModuleLiftDoor || kind == kAIModuleSecurityDoor)
+		{
+			return DoorIsOpen(first) ? 1 : 0;
+		}
+
+		return 1;
+	}
+
 	return AIModuleDoor_LetsScentThrough(targetModule->m_module_ptrs, AIModuleDoorKindOf, ProxDoorIsLocked, DoorIsOpen) ? 1 : 0;
 }
 

@@ -16,16 +16,22 @@
 // For every other vector the sums are the ones the game always did, written the same way, so the answers are the same to the last bit.
 //
 // This file touches nothing in the game, so tests/normalise_test.cpp can try any vector.
+//
+// Modified 2026-11-14 by Melanikus for the AvP port: whether a float length is a real number is told from its bits (real_numbers.h).
 #ifndef NORMALISE_H
 #define NORMALISE_H
 
 #include <float.h>
 #include <math.h>
+#include "real_numbers.h"
 
-// A float length that can be divided by: a real number above 0, and not infinity. "Not a number" is never above 0, so it fails too.
+// A float length that can be divided by: a real number above 0. Whether it's a real number, and not "not a number" or infinity, is told
+// from its bits first: the game is built with the compiler's fast rules for fractions, under which a comparison isn't promised to catch
+// "not a number" or infinity. Once it's known to be a real number, comparing it with 0 is safe, and it can't be above the largest float.
+// (Changed 2026-11-14 by Melanikus for the AvP port; it was "length > 0.0f && length <= FLT_MAX".)
 inline bool Normalise_LengthIsReal(float length)
 {
-	return length > 0.0f && length <= FLT_MAX;
+	return IsRealNumber(length) && length > 0.0f;
 }
 
 // Normalise: three whole numbers, made 65536 long, or left as nothing

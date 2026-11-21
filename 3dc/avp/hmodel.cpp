@@ -76,6 +76,53 @@ extern int GlobalFrameCounter;
 extern VIEWDESCRIPTORBLOCK *Global_VDB_Ptr;
 
 int GlobalGoreRate = NORMAL_GORE_RATE;
+
+// Editor only (the game never sets it): the hierarchy section the level editor has selected is drawn again over the model in one colour (kshape.cpp / RenderList.cpp's tint, d3d_render.cpp's tint pass)
+const SECTION_DATA *EditorSelectedSection = NULL;
+extern bool RenderListTintNow;               // RenderList.cpp
+extern unsigned int RenderListTintColour;
+void R_SetEditorSelectedSection(const SECTION_DATA *section)
+{
+	EditorSelectedSection = section;
+}
+
+// Editor only (the game never sets it): inteng's TURRET sequence in the Hierarchy view. The sections UNDER the "dum turret" section play another sequence (type, sub, at a position of its own) while the rest play the
+// controller's, and the "dum turret" section itself is turned by an elevation (degrees). Process_Section reads these two lines of globals where it works out a section's pose.
+SECTION_DATA *EditorTurretSection = NULL;
+int EditorTurretSequenceType = 0, EditorTurretSubSequence = 0, EditorTurretTimer = 0, EditorTurretElevation = 0;
+void Init_Sequence_Recursion(SECTION_DATA *this_section_data, int sequence_type, int subsequence, int seconds_for_sequence);
+
+// turret: the "dum turret" section (null: no turret sequence); type and sub: the turret sequence; timer: its position (0 to 65535); elevation: degrees
+void R_SetEditorTurret(SECTION_DATA *turret, int type, int sub, int timer, int elevation)
+{
+	bool const changed = turret != EditorTurretSection || (turret && (type != EditorTurretSequenceType || sub != EditorTurretSubSequence));
+
+	if (changed)
+	{
+		// the sections under the old turret go back to the controller's sequence, those under the new one start the turret sequence (the game's own per-section start, Init_Sequence_Recursion)
+		if (EditorTurretSection && EditorTurretSection->my_controller)
+		{
+			for (SECTION_DATA *child = EditorTurretSection->First_Child; child; child = child->Next_Sibling)
+			{
+				Init_Sequence_Recursion(child, EditorTurretSection->my_controller->Sequence_Type, EditorTurretSection->my_controller->Sub_Sequence, EditorTurretSection->my_controller->Seconds_For_Sequence);
+			}
+		}
+
+		if (turret)
+		{
+			for (SECTION_DATA *child = turret->First_Child; child; child = child->Next_Sibling)
+			{
+				Init_Sequence_Recursion(child, type, sub, ONE_FIXED);
+			}
+		}
+	}
+
+	EditorTurretSection = turret;
+	EditorTurretSequenceType = type;
+	EditorTurretSubSequence = sub;
+	EditorTurretTimer = timer;
+	EditorTurretElevation = elevation;
+}
 int incIDnum; /* Has to be global. */
 int GlobalLevelOfDetail_Hierarchical;
 
@@ -1295,6 +1342,27 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 		AddVector(parent_position, &(this_section_data->World_Offset));
 		/* Create the absolute rotation matrix for this section. */
 		MatrixMultiply(parent_orientation, &(this_section_data->RelSecMat), &(this_section_data->SecMat));
+
+		if (EditorTurretSection != NULL && this_section_data == EditorTurretSection && EditorTurretElevation != 0)
+		{
+			// READ from inteng (FUN_0047ef70 0x47f176-0x47f1d8, dump-all-2.txt): index = 0x1000 - (elevation << 12) / 360; the matrix (in memory order m0..m8, the game's mat11..mat33) is
+			// { cos, 0, -sin,  0, 65536, 0,  sin, 0, cos } (cos = the table at 0x5f51b0, sin = the table at 0x5f11b0: their first words are 65536 and 0), a turn about the section's Y axis, and the section's own
+			// absolute matrix becomes rotation x SecMat by FUN_004b34b0(rotation, SecMat, SecMat), which is exactly the game's MatrixMultiply(rotation, SecMat, out). Done after the section's place is worked out, before its children.
+			int const at = (0x1000 - (EditorTurretElevation * 4096) / 360) & 0xfff;
+			MATRIXCH rotation, turned;
+
+			rotation.mat11 = cosine[at];
+			rotation.mat12 = 0;
+			rotation.mat13 = -sine[at];
+			rotation.mat21 = 0;
+			rotation.mat22 = 65536;
+			rotation.mat23 = 0;
+			rotation.mat31 = sine[at];
+			rotation.mat32 = 0;
+			rotation.mat33 = cosine[at];
+			MatrixMultiply(&rotation, &(this_section_data->SecMat), &turned);
+			this_section_data->SecMat = turned;
+		}
 		/* Set the initialised flag... */
 		this_section_data->flags |= section_data_initialised;
 	}
@@ -1347,7 +1415,14 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 		while (child_ptr != NULL)
 		{
 			LOCALASSERT(child_ptr->My_Parent == this_section_data);
-			Process_Section(controller, child_ptr, &(this_section_data->World_Offset), &(this_section_data->SecMat), frame_timer, sequence_type, subsequence, render);
+			if (EditorTurretSection != NULL && this_section_data == EditorTurretSection)
+			{
+				Process_Section(controller, child_ptr, &(this_section_data->World_Offset), &(this_section_data->SecMat), EditorTurretTimer, EditorTurretSequenceType, EditorTurretSubSequence, render);
+			}
+			else
+			{
+				Process_Section(controller, child_ptr, &(this_section_data->World_Offset), &(this_section_data->SecMat), frame_timer, sequence_type, subsequence, render);
+			}
 			child_ptr = child_ptr->Next_Sibling;
 		}
 	}
@@ -1460,7 +1535,20 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 						D3D_DecalSystem_End();
 					}
 
+		bool const editorSelected = EditorSelectedSection != NULL && this_section_data == EditorSelectedSection;
+
+		if (editorSelected)
+		{
+			RenderListTintNow = true;
+			RenderListTintColour = 0xFFFFFF00u;
+		}
+
 		RenderThisHierarchicalDisplayblock(&dummy_displayblock);
+
+		if (editorSelected)
+		{
+			RenderListTintNow = false;
+		}
 	}
 	else if (controller->View_FrameStamp != GlobalFrameCounter)
 	{

@@ -13,9 +13,16 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   every place an object, a track, an alternative location or a module's entry point gives has to be inside the level, as CheckPlace in
+//   chunk.hpp says
+//   every turn an object, a track or an alternative location gives has to fit, as CheckTurn in chunk.hpp says
+//   a module's amount of echo has to be a real number
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   an item in a module's list of what it can see may have no flags, and a module only the flags a level maker can set
 
 #include <string>
 #include "chunk.hpp"
+#include "real_numbers.h"
 #include "chunk_type.hpp"
 #include "mishchnk.hpp"
 #include "chunk_object.hpp"
@@ -421,9 +428,11 @@ flags(0), version_no (0), associated_shape (0)
 	hdata+=20;
 
 	parent_object->object_data_store->location = *(ChunkVectorInt*) hdata;
+	CheckPlace(parent_object->object_data_store->location);
 	hdata+=sizeof(ChunkVectorInt);
 
 	parent_object->object_data_store->orientation = *((ChunkQuat *) hdata);
+	CheckTurn(parent_object->object_data_store->orientation);
 	hdata+=sizeof(ChunkQuat);
 
 	parent_object->object_data_store->index_num = *(int *) hdata;
@@ -718,6 +727,14 @@ VModule_Array_Chunk::VModule_Array_Chunk (Chunk_With_Children * parent, const ch
 		vmod_array[i].flags = *((int *) vmdata);
 		vmdata += 4;
 
+		// An item's flags belong to the game while it runs: whether it has already turned the branch's number into a place in the list
+		// (module.h). A file has no business setting them, and none of the 299,874 items in the game's own levels sets any, so any flag
+		// at all refuses the level. Added 2026-11-14 by Melanikus for the AvP port.
+		if (vmod_array[i].flags != 0)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+
 		vmod_array[i].spare = *((int *) vmdata);
 		vmdata += 4;
 			
@@ -789,6 +806,7 @@ Adjacent_Module_Entry_Points_Chunk::Adjacent_Module_Entry_Points_Chunk (Chunk_Wi
 		data += 4;
 
 		am.entry_point = *((ChunkVectorInt *) data);
+		CheckPlace(am.entry_point);
 		data += sizeof(ChunkVectorInt);
 
 		
@@ -807,12 +825,24 @@ Module_Flag_Chunk::Module_Flag_Chunk(Object_Module_Data_Chunk* parent)
 	Flags=spare=0;
 }
 
+// The flags a module may have in a level file: the ones a level maker can set in the editor (fields-spec.md, MODFLAGS): air duct
+// 0x80000000, stairs 0x40000000, sky 0x20000000, fog 0x10000000, a message number 0x0FE00000, not passable 0x00100000, not a doorway
+// 0x00080000, a doorway 0x00040000, sneaky 0x00020000, victory zone 0x00010000, and exclude from the map 0x00000200. The low bits are
+// the game's own state while it runs, such as "already turned its lists' numbers into places" (m_flag_gotptrs, module.h), and a file
+// has no business setting them. All 478 in the game's own levels keep to this. Added 2026-11-14 by Melanikus for the AvP port.
+static unsigned int const FlagsALevelMayGiveAModule = 0xFFFF0200u;
+
 Module_Flag_Chunk::Module_Flag_Chunk(Chunk_With_Children* parent,const char* data,size_t)
 :Chunk(parent,"MODFLAGS")
 {
 	Flags=*(int*)data;
 	data+=4;
 	spare=*(int*)data;
+
+	if ((unsigned int)Flags & ~FlagsALevelMayGiveAModule)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 void Module_Flag_Chunk::fill_data_block(char* data_start)
@@ -883,6 +913,13 @@ Module_Acoustics_Chunk::Module_Acoustics_Chunk(Chunk_With_Children* parent,const
 	reverb=*(float*)data;
 	data+=4;
 	spare=*(int*)data;
+
+	// A module's amount of echo has to be a real number: the game compares it to choose what it means, so each answer has to be one
+	// the comparison can give. Told from its bits (real_numbers.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (!IsRealNumber(reverb))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 void Module_Acoustics_Chunk::fill_data_block(char* data_start)
@@ -990,6 +1027,14 @@ Object_Track_Chunk2::Object_Track_Chunk2 (Chunk_With_Children * parent,const cha
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 		}
+
+		// A section's pivots and the object's offset from them are places too, so they have to be inside the level (CheckPlace, in
+		// chunk.hpp). (Added 2026-11-14 by Melanikus for the AvP port.)
+		CheckPlace(sections[i].pivot_start);
+		CheckPlace(sections[i].pivot_end);
+		CheckPlace(sections[i].object_offset);
+		CheckTurn(sections[i].quat_start);
+		CheckTurn(sections[i].quat_end);
 	}
 
 	if(timer_start<0 || timer_start>latest_start)
@@ -1121,6 +1166,8 @@ Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Ch
 	for(int i=0;i<num_locations;i++)
 	{
 		locations[i] = *(AltObjectLocation*) data;
+		CheckPlace(locations[i].position);
+		CheckTurn(locations[i].orientation);
 		data+=sizeof(AltObjectLocation);
 	}
 }

@@ -20,6 +20,9 @@ struct KObject
 	int DrawBeforeEnvironment;
 };
 
+/* The level editor shows the whole level at once, so it asks for room for more visible modules than the game's 400 (kzsort.cpp). The game never calls this. */
+extern void KRender_AllowManyModules(bool on);
+
 /* render with new z-sort */
 extern void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr);
 

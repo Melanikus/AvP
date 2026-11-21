@@ -3,6 +3,8 @@
 //   removed code only the level editor used: the game itself never runs it
 //   a name is only read as far as the end of its chunk
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   a dummy object and its box have to be inside the level, as CheckPlace in chunk.hpp says
+//   a dummy object's turn has to fit, as CheckTurn in chunk.hpp says
 
 #include "chunk_dummy.hpp"
 
@@ -54,7 +56,11 @@ Dummy_Object_Data_Chunk::Dummy_Object_Data_Chunk(Chunk_With_Children* parent,con
 	CHUNK_EXTRACT(location,ChunkVectorInt)
 	CHUNK_EXTRACT(min_extents,ChunkVectorInt)
 	CHUNK_EXTRACT(max_extents,ChunkVectorInt)
+	CheckPlace(location);
+	CheckPlace(min_extents);
+	CheckPlace(max_extents);
 	CHUNK_EXTRACT(orientation,ChunkQuat)
+	CheckTurn(orientation);
 	CHUNK_EXTRACT_STRING(name,chunk_start,chunk_bytes)
 }
 
@@ -81,7 +87,7 @@ void Dummy_Object_Data_Chunk::fill_data_block(char* data)
 size_t Dummy_Object_Data_Chunk::size_chunk()
 {
 	chunk_size=12+3*sizeof(ChunkVectorInt)+sizeof(ChunkQuat);
-	chunk_size+=(strlen(name)+4)&~3;
+	chunk_size+=((name ? strlen(name) : 0)+4)&~3;   // (no name is 0 bytes of it: an empty name is read as none, CopyOptionalNameFromChunk)
 	return chunk_size;
 }
 

@@ -353,6 +353,7 @@
     <ClCompile Include="..\..\3dc\avp\secstats.cpp" />
     <ClCompile Include="..\..\3dc\avp\sfx.cpp" />
     <ClCompile Include="..\..\3dc\avp\shapes\cube.cpp" />
+    <ClCompile Include="..\..\3dc\avp\stock_flags.cpp" />
     <ClCompile Include="..\..\3dc\avp\strategy_def.cpp" />
     <ClCompile Include="..\..\3dc\avp\near_wake.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\console_batch.cpp" />
@@ -431,8 +432,10 @@
     <ClCompile Include="..\..\3dc\avp\win95\pldnet.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\progress_bar.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_lanes.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_plan.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_play.cpp" />
+    <ClCompile Include="..\..\3dc\avp\hudson_saymarks.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_strategies.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_vision.cpp" />
     <ClCompile Include="..\..\3dc\avp\hudson_video.cpp" />
@@ -456,6 +459,7 @@
     <ClCompile Include="..\..\3dc\ConfigFile.cpp" />
     <ClCompile Include="..\..\3dc\console.cpp" />
     <ClCompile Include="..\..\3dc\d3d_render.cpp" />
+    <ClCompile Include="..\..\3dc\debug_view.cpp" />
     <ClCompile Include="..\..\3dc\FastFile.cpp" />
     <ClCompile Include="..\..\3dc\FileStream.cpp" />
     <ClCompile Include="..\..\3dc\FmvCutscenes.cpp" />
@@ -576,6 +580,7 @@
     <ClCompile Include="..\..\3dc\win95\plspecfn.cpp" />
     <ClCompile Include="..\..\3dc\win95\videomodes.cpp" />
     <ClCompile Include="..\..\3dc\win95\win_func.cpp" />
+    <ClCompile Include="..\d3_enumerate.cpp" />
     <ClCompile Include="..\d3_func.cpp" />
     <ClCompile Include="..\di_func.cpp" />
   </ItemGroup>
@@ -687,6 +692,7 @@
     <ClInclude Include="..\..\3dc\avp\sequences.h" />
     <ClInclude Include="..\..\3dc\avp\sfx.h" />
     <ClInclude Include="..\..\3dc\avp\status_panel.h" />
+    <ClInclude Include="..\..\3dc\avp\stock_flags.h" />
     <ClInclude Include="..\..\3dc\avp\strategy_def.h" />
     <ClInclude Include="..\..\3dc\avp\support\command.hpp" />
     <ClInclude Include="..\..\3dc\avp\support\console_batch.hpp" />
@@ -876,6 +882,7 @@
     <ClInclude Include="..\..\3dc\win95\plat_shp.h" />
     <ClInclude Include="..\..\3dc\win95\showcmds.h" />
     <ClInclude Include="..\..\3dc\win95\shpanim.h" />
+    <ClInclude Include="..\d3_enumerate.h" />
     <ClInclude Include="..\d3_func.h" />
     <ClInclude Include="..\shader_model.h" />
     <ClInclude Include="..\resource.h" />

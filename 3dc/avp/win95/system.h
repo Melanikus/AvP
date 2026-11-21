@@ -92,6 +92,9 @@ typedef enum {
 
 /****************** BUFFER SIZES **********************/
 #define maxobjects 750
+/* The room the display block lists have, for the level editor, which shows a whole level at once (the biggest stock level has 608 modules). The game
+   still hands out only maxobjects blocks, as always: DisplayBlocksMost (object.cpp) is maxobjects unless the editor asks for more. */
+#define maxdisplayblocks 2048
 extern int maxshapes;
 #define maxstblocks 1000
 

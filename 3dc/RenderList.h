@@ -27,6 +27,8 @@
 //   Its buffers can be missing without harm
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   DrawOpaqueAgain can draw the list backwards, to find where polygons tie in the surface pictures
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   an item can be drawn as lines (RenderListLinesNow), for the level editor's polygons whose picture can't be had (R_SetEditorDrawPolylines)
 
 #include <stdint.h>
 #include <vector>
@@ -61,9 +63,28 @@ struct RenderItem
 	 */
 	uint32_t sortKey;
 
+	// Whether this item was added while the level editor's selected object was being added (RenderListTintNow below), so the editor can draw
+	// the selected object again in green. Always false in the game. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port (R-DRAW-CHAIN-1 D5).
+	bool tinted;
+
+	// The colour the editor draws that object in (ARGB; 0 when not tinted): the selected objects' green, a module's link colour. Added 2026-11-15 by
+	// Melanikus (Dietrich) for the AvP port.
+	uint32_t tintColour;
+
+	// Drawn as lines whatever the card's fill: a polygon whose picture isn't known, which the level editor draws as inteng does (RenderListLinesNow below). Always false in
+	// the game. Added 2026-11-17 by Melanikus (Frost) for the AvP port.
+	bool lines;
+
 	// for std::sort - sort on the above sortKey value to allow sorting render states
 	bool operator < (const RenderItem& rhs) const {return sortKey < rhs.sortKey;}
 };
+
+// True only while AddShape adds the object the level editor has selected (R_SetEditorSelectedBlock): every item added then is tinted.
+extern bool RenderListTintNow;
+extern uint32_t RenderListTintColour;   // the colour of what is added while RenderListTintNow is true
+extern bool RenderListTintLines;        // the editor's tint pass draws lines (in the colour as it is) rather than see-through solids (half see-through)
+extern bool RenderListLinesNow;         // true while kshape adds a polygon whose picture isn't known, for the level editor (R_SetEditorDrawPolylines): its items are lines
+extern bool EditorDrawPolylines;        // R_SetEditorDrawPolylines: kshape draws such polygons (I_Polyline) at all; the game leaves them out
 
 class RenderList
 {
@@ -106,7 +127,7 @@ class RenderList
 
 		void Reset();
 		void Init(size_t size);
-		void DrawOpaqueAgain(class VertexDeclaration *declaration, bool withRelief = false, bool withHeight = false, bool backwards = false);
+		void DrawOpaqueAgain(class VertexDeclaration *declaration, bool withRelief = false, bool withHeight = false, bool backwards = false, bool onlyTinted = false, bool onlyTextured = false);
 
 //		size_t GetCapacity() const { return capacity; }
 		size_t GetSize()     const { return listIndex; }

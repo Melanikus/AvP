@@ -261,7 +261,7 @@ void RestartLevel()
 		//   the aliens' ways go with the aliens; the alien ways map stays, as the level's shape does (alien_ways.h)
 		AlienWays_LevelRestarts();
 
-		i = maxobjects;
+		i = maxdisplayblocks;
 		InitialiseObjectBlocks();
 		while (i --)
 		{
@@ -435,7 +435,9 @@ void UnloadRifFile()
 const char *GameDataDirName = "avp_rifs";
 const char *FileNameExtension = ".rif";
 
-void LoadRifFile()
+// Loads the level the game is set to start (Env_List[AvP.CurrentEnv]), reading its file with "load", one of the two ways below. Gives
+// back false if its file can't be loaded: the level's log is written first, and nothing of the level is in.
+static bool LoadTheLevel(RIFFHANDLE (*load)(const char *))
 {
 	char file_and_path[MAX_PATH];
 	
@@ -465,17 +467,16 @@ void LoadRifFile()
 	{
 		file_and_path[sizeof(file_and_path) - 1] = '\0';
 		pathMade = true;
-		env_rif = avp_load_rif((const char*)&file_and_path[0]);
+		env_rif = load((const char*)&file_and_path[0]);
 	}
 	Set_Progress_Bar_Position(PBAR_LEVEL_START+PBAR_LEVEL_INTERVAL*.4);
 
 	if (INVALID_RIFFHANDLE == env_rif)
 	{
-		// The level can't be loaded, so its log is always written, before the game stops
+		// The level can't be loaded, so its log is always written, before the caller hears of it
 		LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, pathMade ? file_and_path : "", true);
-//		finiObjects();
-		exit(0x3421);
-	};
+		return false;
+	}
 
 	// Which level file this machine loaded, with its size and MD5 sum, as the loader worked them out from its own reads of it. Every
 	// machine in a network game should load the same file, and this line lets testers' logs be compared (level_file_sum.h).
@@ -494,6 +495,25 @@ void LoadRifFile()
 	LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, file_and_path, false);
 
 	textureRelief.LogWhatIsHeld();
+	return true;
+}
+
+// The editor's way to start a level: a file the loader refuses comes back as false, with nothing shown (avp_try_load_rif), so the
+// mapper is told why instead of the editor ending. (Changed 2026-11-14 by Melanikus for the AvP port: it used to read the file the
+// game's way, which shows a message and stops at a refused file before this could give anything back.)
+bool TryLoadRifFile()
+{
+	return LoadTheLevel(avp_try_load_rif);
+}
+
+// The game's own way to start a level. A file the loader refuses shows its message and stops the game inside avp_load_rif, exactly
+// as it always has; a level that can't be loaded otherwise stops the game here, with the same exit code as it always has.
+void LoadRifFile()
+{
+	if (!LoadTheLevel(avp_load_rif))
+	{
+		exit(0x3421);
+	}
 }
 
 int Destroy_CurrentEnvironment(void)
@@ -523,7 +543,7 @@ int Destroy_CurrentEnvironment(void)
 			ActiveStBlockList[i] = NULL;
 		}
 
-		i = maxobjects;
+		i = maxdisplayblocks;
 		InitialiseObjectBlocks();
 		while (i --)
 		{

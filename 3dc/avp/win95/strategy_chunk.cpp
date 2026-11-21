@@ -3,11 +3,13 @@
 //   an ID's name is built in text that grows as needed instead of a fixed 100-byte box
 //   a strategy reads from a copy of its chunk and has to be exactly its own size, and every counted list is measured first
 //   a message's number has to be a place in the table of level messages
+//   a fan's times to speed up and slow down have to be at least a thousandth of a second
 //   removed the chunk for a lift in another level file, which nothing used and which read with no look at its size; a strategy too short to hold its three numbers is refused
 //   a name is only read as far as the end of its chunk
 //   memory made with new[] goes back with delete[], and a mission objective now gives back its two lists
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   every place an object's properties or a strategy's box or camera gives has to be inside the level, as CheckPlace in chunk.hpp says
 #include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"
@@ -301,6 +303,7 @@ Virtual_Object_Properties_Chunk::Virtual_Object_Properties_Chunk(Chunk_With_Chil
 {
 	char const * const chunk_start = data;
 	location=*(ChunkVectorInt*)data;
+	CheckPlace(location);
 	data+=sizeof(ChunkVectorInt);
 	size=*(int*)data;
 	data+=sizeof(int);
@@ -1060,6 +1063,8 @@ AreaSwitchStrategy::AreaSwitchStrategy(const char* data_start,size_t size)
 	data_start+=sizeof(ChunkVectorInt);	
 	trigger_max=*(ChunkVectorInt*)data_start;
 	data_start+=sizeof(ChunkVectorInt);	
+	CheckPlace(trigger_min);
+	CheckPlace(trigger_max);
 	
 	area_pad1=*(int*)data_start;
 	data_start+=4;
@@ -1685,6 +1690,16 @@ FanStrategy::FanStrategy(const char* data_start,size_t /*size*/ )
 	data_start+=4;
 	pad2=*(int*)data_start;
 
+	// A fan takes these times to speed up and to slow down, in 65536ths of a second. The game divides one second by each, keeping only 32 bits of
+	// the answer, to find how much faster or slower the fan gets each second (add_fan, object_setup.cpp). Under 65 that answer isn't a sensible
+	// speed, so each time has to be at least 65, about a thousandth of a second: the shortest a track's section may take too
+	// (Object_Track_Chunk2). The shortest in the game's own levels is 65536, a second. (Added 2026-11-14 by Melanikus for the AvP port.)
+	int const quickest_fan_time=65;
+
+	if(speed_up_time<quickest_fan_time || slow_down_time<quickest_fan_time)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 
@@ -1719,6 +1734,8 @@ DeathVolumeStrategy::DeathVolumeStrategy(const char* data_start,size_t /*size*/ 
 	data_start+=sizeof(ChunkVectorInt);
 	volume_max=*(ChunkVectorInt*)data_start;
 	data_start+=sizeof(ChunkVectorInt);
+	CheckPlace(volume_min);
+	CheckPlace(volume_max);
 
 	flags=*(int*)data_start;
 	data_start+=4;
@@ -2039,6 +2056,8 @@ MummyTriggerVolumeStrategy::MummyTriggerVolumeStrategy(const char* data,size_t)
 	
 	CHUNK_EXTRACT(trigger_min,ChunkVectorInt);
 	CHUNK_EXTRACT(trigger_max,ChunkVectorInt);
+	CheckPlace(trigger_min);
+	CheckPlace(trigger_max);
 	CHUNK_EXTRACT(targetID,ObjectID);
 
 	CHUNK_EXTRACT(spare1,int);
@@ -2096,6 +2115,8 @@ MummyPivotObjectStrategy::MummyPivotObjectStrategy(const char* data,size_t)
 	{
 		CHUNK_EXTRACT(trigger_min,ChunkVectorInt);
 		CHUNK_EXTRACT(trigger_max,ChunkVectorInt);
+		CheckPlace(trigger_min);
+		CheckPlace(trigger_max);
 	}
 }
 
@@ -2132,6 +2153,7 @@ MummyChestStrategy::MummyChestStrategy(const char* data,size_t)
 	CHUNK_EXTRACT(objectives[3],unsigned char);
 
 	CHUNK_EXTRACT(camera_location,ChunkVectorInt);
+	CheckPlace(camera_location);
 	CHUNK_EXTRACT(spare,int);
 }
 
@@ -2162,6 +2184,8 @@ MummyAlterCameraRangeStrategy::MummyAlterCameraRangeStrategy(const char* data,si
 
 	CHUNK_EXTRACT(zone_min,ChunkVectorInt)	
 	CHUNK_EXTRACT(zone_max,ChunkVectorInt)	
+	CheckPlace(zone_min);
+	CheckPlace(zone_max);
 	
 	CHUNK_EXTRACT(enter_range,int)	
 	CHUNK_EXTRACT(exit_range,int)	

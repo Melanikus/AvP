@@ -1,0 +1,138 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "REAL: a double's exponent is looked for in the wrong bits",
+			"changes": [
+				{
+					"file": "3dc/real_numbers.h",
+					"from": "inline bool IsNaNOrEndless(double value)\n{\n\tuint64_t bits;\n\tmemcpy(&bits, &value, sizeof(bits));\n\treturn ((bits >> 52) & 0x7FF) == 0x7FF;",
+					"to": "inline bool IsNaNOrEndless(double value)\n{\n\tuint64_t bits;\n\tmemcpy(&bits, &value, sizeof(bits));\n\treturn ((bits >> 53) & 0x7FF) == 0x7FF;"
+				}
+			]
+		},
+		{
+			"name": "REAL: a float's exponent is looked for in the wrong bits",
+			"changes": [
+				{
+					"file": "3dc/real_numbers.h",
+					"from": "inline bool IsNaNOrEndless(float value)\n{\n\tuint32_t bits;\n\tmemcpy(&bits, &value, sizeof(bits));\n\treturn ((bits >> 23) & 0xFF) == 0xFF;",
+					"to": "inline bool IsNaNOrEndless(float value)\n{\n\tuint32_t bits;\n\tmemcpy(&bits, &value, sizeof(bits));\n\treturn ((bits >> 24) & 0xFF) == 0xFF;"
+				}
+			]
+		},
+		{
+			"name": "REAL: a float's NaN is asked about with a comparison",
+			"changes": [
+				{
+					"file": "3dc/real_numbers.h",
+					"from": "inline bool IsRealNumber(float value)\n{\n\treturn !IsNaNOrEndless(value);\n}",
+					"to": "inline bool IsRealNumber(float value)\n{\n\treturn value == value && value - value == 0.0f;\n}"
+				}
+			]
+		},
+		{
+			"name": "REAL: a double's NaN is asked about with a comparison",
+			"changes": [
+				{
+					"file": "3dc/real_numbers.h",
+					"from": "inline bool IsRealNumber(double value)\n{\n\treturn !IsNaNOrEndless(value);\n}",
+					"to": "inline bool IsRealNumber(double value)\n{\n\treturn value == value && value - value == 0.0;\n}"
+				}
+			]
+		},
+		{
+			"name": "REAL: a float's NaN is taken for endless",
+			"changes": [
+				{
+					"file": "3dc/real_numbers.h",
+					"from": "\treturn ((bits >> 23) & 0xFF) == 0xFF && (bits & 0x007FFFFFu) != 0;",
+					"to": "\treturn ((bits >> 23) & 0xFF) == 0xFF;"
+				}
+			]
+		},
+		{
+			"name": "REAL: a double's NaN is taken for endless",
+			"changes": [
+				{
+					"file": "3dc/real_numbers.h",
+					"from": "\treturn ((bits >> 52) & 0x7FF) == 0x7FF && (bits & 0x000FFFFFFFFFFFFFull) != 0;",
+					"to": "\treturn ((bits >> 52) & 0x7FF) == 0x7FF;"
+				}
+			]
+		},
+		{
+			"name": "REAL: a float's range doesn't ask if it's a real number",
+			"changes": [
+				{
+					"file": "3dc/real_numbers.h",
+					"from": "inline bool IsRealNumberFrom(float value, float lowest, float highest)\n{\n\treturn IsRealNumber(value) && value >= lowest && value <= highest;",
+					"to": "inline bool IsRealNumberFrom(float value, float lowest, float highest)\n{\n\treturn value >= lowest && value <= highest;"
+				}
+			]
+		},
+		{
+			"name": "REAL: a double's range doesn't ask if it's a real number",
+			"changes": [
+				{
+					"file": "3dc/real_numbers.h",
+					"from": "inline bool IsRealNumberFrom(double value, double lowest, double highest)\n{\n\treturn IsRealNumber(value) && value >= lowest && value <= highest;",
+					"to": "inline bool IsRealNumberFrom(double value, double lowest, double highest)\n{\n\treturn value >= lowest && value <= highest;"
+				}
+			]
+		},
+		{
+			"name": "REAL: a float's range leaves out its top end",
+			"changes": [
+				{
+					"file": "3dc/real_numbers.h",
+					"from": "inline bool IsRealNumberFrom(float value, float lowest, float highest)\n{\n\treturn IsRealNumber(value) && value >= lowest && value <= highest;",
+					"to": "inline bool IsRealNumberFrom(float value, float lowest, float highest)\n{\n\treturn IsRealNumber(value) && value >= lowest && value < highest;"
+				}
+			]
+		},
+		{
+			"name": "REAL: a double's range has no bottom",
+			"changes": [
+				{
+					"file": "3dc/real_numbers.h",
+					"from": "inline bool IsRealNumberFrom(double value, double lowest, double highest)\n{\n\treturn IsRealNumber(value) && value >= lowest && value <= highest;",
+					"to": "inline bool IsRealNumberFrom(double value, double lowest, double highest)\n{\n\treturn IsRealNumber(value) && value <= highest;"
+				}
+			]
+		},
+		{
+			"name": "CONSOLE: a typed decimal that isn't a number is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_value.h",
+					"from": "\tif (IsNaN(typed))\n\t{\n\t\treturn false;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an endless decimal at the console takes the wrong end",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_value.h",
+					"from": "*value = (bits >> 63) ? minVal : maxVal;",
+					"to": "*value = (bits >> 63) ? maxVal : minVal;"
+				}
+			]
+		},
+		{
+			"name": "a length is only asked whether it's above nothing",
+			"changes": [
+				{
+					"file": "3dc/win95/normalise.h",
+					"from": "return IsRealNumber(length) && length > 0.0f;",
+					"to": "return length > 0.0f;"
+				}
+			]
+		}
+	]
+}

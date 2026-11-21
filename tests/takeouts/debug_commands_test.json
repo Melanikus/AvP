@@ -129,7 +129,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/gadgets/console_value.h",
-					"from": "\tif (typed != typed)\n\t{\n\t\treturn false;\n\t}\n\n",
+					"from": "\tif (IsNaN(typed))\n\t{\n\t\treturn false;\n\t}\n\n",
 					"to": ""
 				}
 			]

@@ -42,7 +42,7 @@
 extern void AllNewModuleHandler(void);
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;
 
-DISPLAYBLOCK *OnScreenBlockList[maxobjects];
+DISPLAYBLOCK *OnScreenBlockList[maxdisplayblocks];
 int NumOnScreenBlocks;
 
 extern DISPLAYBLOCK *ActiveBlockList[];

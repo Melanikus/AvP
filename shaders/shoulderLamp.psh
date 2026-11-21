@@ -14,18 +14,21 @@
 // - Its edge is very soft: the slope covered 60% of the way in. At 12% it looked like a mask.
 // - It gets brighter along its length, from 0.3 at the shoulder to 1 at the far end, which is what says which way the light is going.
 
-// THIS SHADER IS FULL. It takes 63 of the 64 sums shader model 2 allows, with both the game's own compiler and the newest. A number that used to be fixed here costs more when it comes from the
-// game, because the compiler can't work it out beforehand. So measure before adding anything: tests/shader_test.cpp is the one that counts.
+// THIS SHADER IS FULL. It takes 62 of the 64 sums shader model 2 allows, with the game's own compiler. A number that used to be fixed here costs more when it comes from the
+// game, because the compiler can't work it out beforehand. So measure before adding anything: tests/shader_test.cpp is the one that counts, and it prints the number.
+// (Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port: R-LAMP-1's shoulder place cost 7 sums here, more than there was room for, so the game works out the beam
+// and one over its length squared, and sends them in Beam. That took it from 70 back to 62, where it was 63.)
 //
 // THIS GOES WITH THE GAME. It reads the numbers in Spot, so a game too old to send them draws no spot at all. Copy this file and the exe together.
 //
 // ---- HOW IT LOOKS. All of it is these numbers. The game reads this file as it starts, so changing one needs no rebuild, only a restart.
 // Places on the screen go from (0, 0) at the top left to (1, 1) at the bottom right. Sizes are parts of the screen's height.
 
-// Where the cone starts: just off the right of the screen, three quarters of the way up.
-static const float2 kShoulder = float2(1.05f, 0.25f);
+// Where the cone starts comes from the game, in Swing.zw: the LAMPSHOULDER command, playing alone (R-LAMP-1, 3dc/shoulder_lamp.h). As built it's just above the top right
+// corner, (1.00, -0.10). (Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port: it was fixed here, at (1.05, 0.25).)
 
-// Where it's aimed, and so where the spot is: the middle of the screen, which is what he's looking at.
+// Where it's aimed, and so where the spot is: the middle of the screen, which is what he's looking at. The game works out the beam from the same place, so this has to be
+// kShoulderLampPaintedAim in 3dc/shoulder_lamp.h, which is where a change has to go as well.
 static const float2 kAim = float2(0.50f, 0.50f);
 
 // THE SPOT'S SIZE AS BUILT: how far it reaches from its middle, unless the LAMPSPOTSIZE command says otherwise. The spot's edges are worked out for this size, and a different one
@@ -57,10 +60,12 @@ static const float3 kGlow = float3(0.026f, 0.024f, 0.019f);
 // How much of a wall's own colour the spot shows, where it's strongest and the wall is close. 1 shows the wall as bright as its picture.
 static const float3 kOnWalls = float3(1.1f, 1.02f, 0.88f);
 
-// How far away, in millimetres, the light on a wall has fallen to half. This is what makes near walls brighter than far ones.
-static const float kHalfDistance = 7000.0f;
+// How far away the light on a wall has fallen to half comes from the game, in Spot.w, as one over that distance in millimetres: the LAMPSPOTHALFDISTANCE command, playing
+// alone (R-LAMP-1). It's what makes near walls brighter than far ones. As built it's 0, and the light doesn't fall away at all, as on 2026-11-05. (Modified 2026-11-14 by
+// Melanikus (Dietrich) for the AvP port: it was fixed here, at 7000.)
 
 // The lamp is on a little robot arm, and follows where he's looking a moment behind him. This is how much of that shows, from 0 for a spot that never leaves the middle of the screen, to 1 for all of it. How fast it follows, and how far behind it can get, are in 3dc/shoulder_lamp.h, and those need a rebuild.
+// The game works out the beam with this too, so it has to be kShoulderLampPaintedFollowing in 3dc/shoulder_lamp.h. (Modified 2026-11-14 by Melanikus (Dietrich).)
 static const float kFollowing = 1.0f;
 
 // ---- THE REST WORKS FROM THOSE
@@ -77,12 +82,19 @@ sampler2D SurfaceDistance : register(s4);   // how far away it is
 // .x is how strong the lamp is at this moment, which is where the flicker comes in. .y is 0 to brighten and 1 to add. .w is how wide the screen is for its height.
 float4 Lamp : register(c0);
 
-// .xy is how far the lamp's aim is from the middle of the screen, as a place on the screen.
+// .xy is how far the lamp's aim is from the middle of the screen, as a place on the screen. .zw is where the cone starts, already measured in screen heights across, the way
+// "here" is below: LAMPSHOULDER. (Modified 2026-11-14 by Melanikus (Dietrich): .zw was 0.)
 float4 Swing : register(c1);
 
 // What the LAMPSPOTSIZE and LAMPINTENSITY commands ask for: see ShoulderLamp_SpotNumbers. .x is the spot's size now, which is also how wide the cone is where it arrives.
 // .y is kSizeAtFarEnd over that, which turns a distance into what it would be at the size the edges are worked out for. .z is how strong the spot is, where 1 is as built.
+// .w is one over the spot's half-distance on walls, or 0 for no fall at all: LAMPSPOTHALFDISTANCE. (Modified 2026-11-14 by Melanikus (Dietrich): .w was 0.)
 float4 Spot : register(c2);
+
+// The cone's line, from the game (ShoulderLamp_PaintedBeam in 3dc/shoulder_lamp.h): .xy is the way from where it starts to where it's aimed, measured as "here" is, and .z is
+// one over that line's length squared. The game never takes that length as less than a ten-thousandth of the screen, so a shoulder put where the aim is can't make this
+// divide by nothing. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port (R-LAMP-1).
+float4 Beam : register(c3);
 
 // 1 well inside the edge, 0 outside it, and a slope between
 float Inside(float distance, float edge)
@@ -95,12 +107,12 @@ float4 ps_main(in PS_INPUT In) : COLOR
     // Measured in screen heights across as well as down, so that the spot stays round on a wide screen
     float2 wide = float2(Lamp.w, 1.0f);
     float2 here = In.Place * wide;
-    float2 start = kShoulder * wide;
+    float2 start = Swing.zw;
     float2 aim = (kAim + Swing.xy * kFollowing) * wide;
-    float2 beam = aim - start;
+    float2 beam = Beam.xy;
 
     // The cone. How far along the line from the shoulder to the spot this pixel is, from 0 to 1, and so how far it is from that line.
-    float along = saturate(dot(here - start, beam) / dot(beam, beam));
+    float along = saturate(dot(here - start, beam) * Beam.z);
     float cone = Inside(distance(here, start + beam * along), lerp(kSizeAtShoulder, Spot.x, along)) * lerp(kBrightnessAtShoulder, 1.0f, along);
     float3 haze = kHaze * cone;
 
@@ -110,7 +122,7 @@ float4 ps_main(in PS_INPUT In) : COLOR
 
     // The wall's own colour, less the further away it is. With no pictures to read, DrawShoulderLamp leaves these stages empty, which reads as black, and black adds nothing.
     float4 surface = tex2D(SurfaceColour, In.Place);
-    float howFar = tex2D(SurfaceDistance, In.Place).r / kHalfDistance;
+    float howFar = tex2D(SurfaceDistance, In.Place).r * Spot.w;
     float3 onWall = surface.rgb * kOnWalls / (1.0f + howFar * howFar);
 
     // Only the spot lights anything. All the cone ever does is add its haze, and the haze is left out of how strong the spot is, so that LAMPINTENSITY can't turn the cone into night vision.

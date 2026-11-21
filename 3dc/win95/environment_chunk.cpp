@@ -9,9 +9,14 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   a level's scale has to be from 0.5 to 1
+//   a level's amount of echo has to be a real number
+//   a set of random textures has to have a name
+//   whether a level's scale is a real number is asked of real_numbers.h, the game's one rule for it
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
+#include "real_numbers.h"
 #include "path_chunk.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -142,6 +147,28 @@ void Environment_Data_Header_Chunk::prepare_for_output()
 // Class Environment_Scale_Chunk functions
 RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ENVSDSCL",Environment_Scale_Chunk,8)
 
+// A level's scale is a number from the file, with a fraction, that the game multiplies every place, size and distance in the level by as it
+// loads it, turning each answer back into a whole number (projload.cpp's set_local_scale, then object_setup.cpp and chunk_load.cpp).
+// It has to be from 0.5 to 1, or the level is refused:
+// - at 1 or less, any whole number the game multiplies by it is still a whole number it can hold;
+// - the game's own levels that have a scale use 0.8 or 0.9, and the rest have none, which is 1, so half leaves room below them;
+// - a number that isn't a number (NaN), or is endless, is refused too.
+// (Added 2026-11-14 by Melanikus for the AvP port.)
+Environment_Scale_Chunk::Environment_Scale_Chunk (Chunk_With_Children * parent, const char * sdata, size_t /*ssize*/)
+: Chunk (parent, "ENVSDSCL"),
+scale ( *((double *) sdata) )
+{
+	double const smallest_scale = 0.5;
+	double const largest_scale = 1.0;
+
+	// Whether it's NaN or endless is told from its bits (real_numbers.h), because the game is built with the compiler's fast rules for
+	// fractions (/fp:fast), under which a comparison isn't promised to treat NaN as it should. Only a real number is then compared.
+	if (!IsRealNumberFrom(scale, smallest_scale, largest_scale))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
+
 void Environment_Scale_Chunk::fill_data_block ( char * data_start)
 {
 	strncpy (data_start, identifier, 8);
@@ -175,6 +202,13 @@ Environment_Acoustics_Chunk::Environment_Acoustics_Chunk(Chunk_With_Children* pa
 	reverb=*(float*)data;
 	data+=4;
 	spare=*(int*)data;
+
+	// The level's amount of echo has to be a real number: the game compares it to choose what it means, so each answer has to be one
+	// the comparison can give. Told from its bits (real_numbers.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (!IsRealNumber(reverb))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 void Environment_Acoustics_Chunk::fill_data_block(char* data_start)
@@ -244,6 +278,13 @@ Random_Texture_ID_Chunk::Random_Texture_ID_Chunk(Chunk_With_Children* parent,con
 {
 	char const * const start = data;
 	CHUNK_EXTRACT_STRING(name,start,size);
+
+	// A set of random textures is found by its name, the kind of NPC it's for, so one with no name is refused. Every one in the game's own
+	// levels has a name. (Added 2026-11-14 by Melanikus for the AvP port.)
+	if (!name)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 	
 	int type;
 	int const num_types=ReadListCount(start,data,size,sizeof(int));

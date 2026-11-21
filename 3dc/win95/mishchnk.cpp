@@ -1,4 +1,9 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-17 by Melanikus for the AvP port:
+//   the file's SHA-256 is worked out from the same reads as its MD5 (level_file_sum.h, sha256_stream.h), for the level editor's proof
+//   that the loader read exactly the bytes it wrote; the game's MD5 and its log line are as they were
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a file with no level environment is refused, a level or a model alike
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a level file's size is read as a 64-bit number, and a file too short to hold a level's heading, or larger than any level the
 //   game can use, is refused before any memory is set aside for it, and the log says why; every read has to get all the bytes it
@@ -20,6 +25,8 @@
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   a hierarchy the game couldn't build refuses the level
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a file that holds a hierarchy has to give its own name
 
 #include <string>
 #include "chunk.hpp"
@@ -31,6 +38,7 @@
 #include "huffman.hpp"
 #include "mbstring.h"
 #include "md5.h"
+#include "sha256_stream.h"
 #include "logstring.h"
 
 // Class Lockable_Chunk_With_Children functions
@@ -162,6 +170,10 @@ File_Chunk::File_Chunk(const char * file_name)
 	MD5Context sum_so_far;
 	MD5Init(&sum_so_far);
 
+	// And its SHA-256, from the same reads, for the level editor's proof that the loader read exactly the bytes it wrote
+	Sha256Stream sha256_so_far;
+	Sha256_Start(&sha256_so_far);
+
 	// Each read has to get every byte it asked for. The size above says they are all there, so getting fewer means the file
 	// isn't what it said it was.
 	if (!ReadFile(rif_file, id_buffer, 8, &bytes_read, 0) || bytes_read != 8)
@@ -172,6 +184,7 @@ File_Chunk::File_Chunk(const char * file_name)
 	}
 
 	MD5Update(&sum_so_far, (md5byte const *)id_buffer, 8);
+	Sha256_Add(&sha256_so_far, id_buffer, 8);
 
 	/* KJL 16:46:14 19/09/98 - check for a compressed rif */
 	if (!strncmp (id_buffer, COMPRESSED_RIF_IDENTIFIER, 8))
@@ -202,6 +215,7 @@ File_Chunk::File_Chunk(const char * file_name)
 
 		// The rest of the file as it is on disk, still packed: the sum is of the file, not of the level unpacked from it
 		MD5Update(&sum_so_far, (md5byte const *)(buffer+8), file_size-8);
+		Sha256_Add(&sha256_so_far, buffer+8, file_size-8);
 
 		// Every level the game comes with is compressed, so this runs before anything else looks at the file. A decoder that trusted what the
 		// file says could be made to write past the end of its table, or of the memory for the result. This one knows the file's size and checks.
@@ -233,6 +247,7 @@ File_Chunk::File_Chunk(const char * file_name)
 
 		// The 4 bytes just as they were read from the file
 		MD5Update(&sum_so_far, (md5byte const *)&file_size_from_file, 4);
+		Sha256_Add(&sha256_so_far, &file_size_from_file, 4);
 
 		if (file_size != file_size_from_file)
 		{
@@ -253,12 +268,14 @@ File_Chunk::File_Chunk(const char * file_name)
 		}
 
 		MD5Update(&sum_so_far, (md5byte const *)buffer, file_size-12);
+		Sha256_Add(&sha256_so_far, buffer, file_size-12);
 		buffer_ptr = buffer;
 	}
 
 	// Every byte of the file has now been read, and added to the sum. The size kept is the file's own: for a packed file,
 	// file_size above has become the size of the level unpacked from it.
 	MD5Final(file_sum.md5, &sum_so_far);
+	Sha256_Finish(&sha256_so_far, file_sum.sha256);
 	file_sum.bytes = (unsigned int)bytes_on_disk;
 
 	// Process the RIF
@@ -288,11 +305,35 @@ File_Chunk::File_Chunk(const char * file_name)
 
 	CloseHandle (rif_file);
 
+	// Every file the game loads, a level or a model, has to hold a level environment (REBENVDT). Both loaders keep it for the
+	// game (load_rif and load_rif_non_env, in chunk_load.cpp), and copying the file into the game reads it straight away
+	// (copy_rif_data, in projload.cpp, for a level and for a model alike). So a file with none is refused here, the one place both
+	// loaders pass through, and load_rif stops with its error message. All 86 of the game's own files, 63 levels and 23 models,
+	// hold exactly one. Added 2026-11-14 by Melanikus for the AvP port.
+	if (!error_code && !lookup_single_child ("REBENVDT"))
+	{
+		error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
 	// After a failed load the tree is only part of a level, and this step relies on all of it being there. load_rif
 	// sees error_code and stops the level with its error message.
 	if (!error_code)
 	{
 		post_input_processing();
+	}
+
+	// A file that holds a hierarchy is a model, and the game keeps each model it loads under the file's own name, which the file gives
+	// in its level environment (RIFFNAME). It reads that name straight away (Global_Hierarchy_Store, in projload.cpp), so a file with a
+	// hierarchy and no name is refused here, and load_rif stops with its error message. All 18 of the game's own files with a hierarchy
+	// give their name. Added 2026-11-14 by Melanikus for the AvP port.
+	if (!error_code && lookup_single_child ("OBJCHIER"))
+	{
+		Chunk * const environment = lookup_single_child ("REBENVDT");
+
+		if (!environment || environment->r_u_miscellaneous() || !((Chunk_With_Children *) environment)->lookup_single_child ("RIFFNAME"))
+		{
+			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
 	}
 }
 
@@ -494,8 +535,15 @@ void File_Chunk::post_input_processing()
 			return;
 		}
 
+		// a module's box with an axis the wrong way round, as inteng's save writes after turning a module, is read the right way round first (put_box_right_way_round)
+		if (ol()->lookup_single_child ("MODULEDT"))
+		{
+			shape_array[object_header->shape_id_no]->put_box_right_way_round();
+		}
+
 		if (ol()->lookup_single_child ("MODULEDT") && !shape_array[object_header->shape_id_no]->points_fit_box())
 		{
+			LogErrorStringC(shape_array[object_header->shape_id_no]->box_refusal_line(object_header->shape_id_no).c_str());   // the level's log says why (it was silent)
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			delete[] shape_array;
 			return;

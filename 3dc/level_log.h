@@ -40,6 +40,12 @@ static const int kLevelLogMostLines = 500;
 // puts it in front of the name of a file found in avp_rifs/custom)
 static const char *const kLevelLogCustomFolder = "Custom/";
 
+// and this for a level file that AVP_OpenInteng, the level editor built on this code, opened from outside: it copies the file into
+// avp_rifs/OpenedByEditor and loads it as OpenedByEditor/<its name> (its open_with.cpp), so the log goes beside that copy, named after
+// the name's last part. (Added 2026-11-16 by Melanikus (Vasquez): every level opened that way logged "one whose name can't be used as a
+// file name", and its log went to the game's folder as level_errorlog.txt.)
+static const char *const kLevelLogEditorFolder = "OpenedByEditor/";
+
 // Is this file name safe to name a file after, in a folder of the game's choosing? It has to be 1 to kLevelLogLongestName characters,
 // with none of the characters Windows uses to mean a folder, a drive, a device or more than one file, no character below a space, no
 // "..", no space at the start or the end, and no dot at the end, which Windows quietly takes off. And it mustn't be the name of a
@@ -97,8 +103,9 @@ inline bool LevelLog_NameIsSafe(const char *name)
 	return true;
 }
 
-// Splits the name the game loads a level by into its folder and its file name: "invasion_a" is no folder and "invasion_a", and
-// "Custom/mymap" is "Custom/" and "mymap". It says false for any other folder, and for a file name that isn't safe.
+// Splits the name the game loads a level by into its folder and its file name: "invasion_a" is no folder and "invasion_a",
+// "Custom/mymap" is "Custom/" and "mymap", and "OpenedByEditor/mymap" is "OpenedByEditor/" and "mymap". It says false for any other
+// folder, a folder inside one of those, and a file name that isn't safe.
 inline bool LevelLog_SplitName(const char *levelName, std::string *folder, std::string *file)
 {
 	if (!levelName)
@@ -106,17 +113,21 @@ inline bool LevelLog_SplitName(const char *levelName, std::string *folder, std::
 		return false;
 	}
 
-	size_t const customLength = strlen(kLevelLogCustomFolder);
+	static const char *const folders[] = { kLevelLogCustomFolder, kLevelLogEditorFolder };
 	char const *fileName = levelName;
 
-	if (_strnicmp(levelName, kLevelLogCustomFolder, customLength) == 0)
+	*folder = "";
+
+	for (size_t i = 0; i < sizeof(folders) / sizeof(folders[0]); i++)
 	{
-		fileName = levelName + customLength;
-		*folder = kLevelLogCustomFolder;
-	}
-	else
-	{
-		*folder = "";
+		size_t const folderLength = strlen(folders[i]);
+
+		if (_strnicmp(levelName, folders[i], folderLength) == 0)
+		{
+			fileName = levelName + folderLength;
+			*folder = folders[i];
+			break;
+		}
 	}
 
 	if (!LevelLog_NameIsSafe(fileName))

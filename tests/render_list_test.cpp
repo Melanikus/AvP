@@ -216,6 +216,9 @@ void ChangeZWriteEnable(enum ZWRITE_ENABLE setting)
 	depthWritesNow = setting;
 }
 
+texID_t NO_TEXTURE = 0;   // the game's "no picture" (d3_func.cpp); RenderList.cpp compares with it when it puts the stage back after the editor's plain picture
+RENDERSTATES CurrentRenderStates = {};   // the game's record of the card's settings (d3_func.cpp); RenderList.cpp reads its fill only for the editor's No Textures fill, which this test never turns on
+
 bool R_SetTexture(uint32_t stage, texID_t picture)
 {
 	if (stage == 0)
@@ -1680,7 +1683,10 @@ static SourceFindings ReadTheWriters(std::string const &source)
 
 		if (!twoParts && CountOf(body, "orthoList->AddItem(4,") + CountOf(body, "coronaList->AddItem(4,") == 1)
 		{
-			int const corners = CountOf(body, "orthoVBOffset++") + 4 * CountOf(body, "orthoVBOffset += 4");
+			// a writer may write its corners in a loop of four, one step each (DrawQuadSharp: "for (int corner = 0; corner < 4; corner++)" around one orthoVBOffset++): that step is
+			// written once and counts four times, so the loop adds three
+			int const cornerLoops = CountOf(body, "for (int corner = 0; corner < 4; corner++)");
+			int const corners = CountOf(body, "orthoVBOffset++") + 3 * cornerLoops + 4 * CountOf(body, "orthoVBOffset += 4");
 
 			if (corners != 4)
 			{
@@ -1754,6 +1760,31 @@ static std::string Names(std::vector<std::string> const &names)
 	return all;
 }
 
+// The level editor's line polygons (RenderListLinesNow, R_SetEditorDrawPolylines): an item drawn as lines never joins its filled neighbour, though both use the same
+// states, or one of them would be drawn the other's way. (Added 2026-11-18 by Melanikus (Frost) for the AvP port.)
+static void CheckLinesStayApart()
+{
+	TestList t("lines", 10, 100, 100, sizeof(ORTHOVERTEX));
+	bool const wasWire = CurrentRenderStates.WireFrameModeIsOn != 0;
+
+	t.Open();
+	RenderListLinesNow = true;
+	bool const lineAdded = WriteShape(t, 4, 1);
+	RenderListLinesNow = false;
+	bool const filledAdded = WriteShape(t, 4, 1);
+	bool const secondFilled = WriteShape(t, 4, 1);
+	t.Close();
+
+	// the card already draws lines, so neither way changes its fill (this test has no card)
+	CurrentRenderStates.WireFrameModeIsOn = 1;
+	drawn.clear();
+	t.list.Draw();
+	CurrentRenderStates.WireFrameModeIsOn = wasWire ? 1 : 0;
+
+	Check(lineAdded && filledAdded && secondFilled && drawn.size() == 2, "a line polygon and two filled ones with the same states are two items, not one (" +
+		std::to_string(drawn.size()) + " drawn)");
+}
+
 static void CheckTheRealWriters()
 {
 	printf("Reading the real writers in d3d_render.cpp:\n");
@@ -1797,6 +1828,7 @@ static void CheckTheRealWriters()
 		{ "an answer that's looked at and ignored", "if (!decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {\n\t\treturn;\n\t}", "if (!decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {\n\t}", &SourceFindings::addItemNotFollowed, "D3D_Decal_Output" },
 		{ "an answer that's thrown away with a cast", "if (!decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {\n\t\treturn;\n\t}", "(void)decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);", &SourceFindings::addItemNotFollowed, "D3D_Decal_Output" },
 		{ "a writer that writes one corner too many", "if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {\n\t\treturn;\n\t}", "if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {\n\t\treturn;\n\t}\n\torthoVBOffset++;", &SourceFindings::wrongCornerCount, "DrawFadeQuad" },
+		{ "a writer whose loop of four writes each corner twice", "orthoVertex[orthoVBOffset].v = vs[corner];\n\t\torthoVBOffset++;", "orthoVertex[orthoVBOffset].v = vs[corner];\n\t\torthoVBOffset++;\n\t\torthoVBOffset++;", &SourceFindings::wrongCornerCount, "DrawQuadSharp" },
 		{ "a writer that writes before it asks", "\tif (!particleList->AddItem(4,", "\tparticleVertex[pVb].x = 0.0f;\n\tif (!particleList->AddItem(4,", &SourceFindings::writesBeforeAsking, "D3D_Particle_Output" },
 		{ "a corona that returns", "continue; // no room for this one", "return; // no room for this one", &SourceFindings::wrongWayOut, "DrawCoronas" },
 		{ "rain that doesn't make room", "if (!mainList->Check(3)) {\n\t\t\tFlushLists();\n\t\t}", "", &SourceFindings::mainWithoutRoom, "D3D_DrawParticle_Rain" },
@@ -1929,6 +1961,47 @@ static void CheckTheRealWriters()
 	Check(shapes.size() > 100000 && shapes.find("->AddItem(") == std::string::npos, "and the only other file that uses the lists doesn't add shapes to them");
 }
 
+// THE SCREEN LIST'S ROOM (Frost 2026-11-18): the level editor draws every letter of its panels as a quad on the screen list, and at 2560 x 1440 they
+// filled the 4096 corners the game made it with, so letters and boxes were left out ("Render list orthoList is full"). d3_func.cpp makes it with
+// 65536 corners now, the most its 16-bit index numbers can number: read there, then a list of that size filled to the brim.
+static void CheckTheScreenListsRoom()
+{
+	printf("The screen list's room:\n");
+
+	std::string const device = JustTheCode(WithoutReturns(ReadSourceFile("win32/d3_func.cpp")));
+	Check(device.find("const uint32_t kMaxOrthoVertices = 65536;") != std::string::npos, "d3_func.cpp gives the screen list 65536 corners, the most 16-bit numbers reach");
+	Check(device.find("const uint32_t kMaxOrthoIndices  = (kMaxOrthoVertices / 4) * 6;") != std::string::npos, "and the index numbers for that many quads");
+	Check(device.find("d3d.orthoVB->Create(kMaxOrthoVertices, sizeof(ORTHOVERTEX), USAGE_DYNAMIC);") != std::string::npos
+		&& device.find("d3d.orthoIB->Create(kMaxOrthoIndices, USAGE_DYNAMIC);") != std::string::npos, "and makes the screen list's two buffers with them");
+	Check(device.find("d3d.mainVB->Create(kMaxVertices*5, sizeof(D3DLVERTEX), USAGE_DYNAMIC);") != std::string::npos
+		&& device.find("d3d.particleVB->Create(kMaxVertices*6, sizeof(PARTICLEVERTEX), USAGE_DYNAMIC);") != std::string::npos, "while the game's other lists keep their sizes");
+
+	uint32_t const corners = 65536;
+	uint32_t const indexRoom = (corners / 4) * 6;
+	TestList t("orthoList", 50, corners, indexRoom, sizeof(ORTHOVERTEX));
+	t.Open();
+
+	uint32_t accepted = 0;
+
+	for (uint32_t i = 0; i < corners / 4 + 3; i++)
+	{
+		accepted += WriteScreenQuad(t, 1) ? 1 : 0;
+	}
+
+	uint32_t highest = 0;
+
+	for (uint32_t i = 0; i < t.indexBuffer.GetSize(); i++)
+	{
+		highest = t.indices[i] > highest ? t.indices[i] : highest;
+	}
+
+	Check(accepted == corners / 4, "a list of that size takes 16384 quads, " + std::to_string(accepted));
+	Check(t.list.GetLeftOutBecauseFull() == 3, "and refuses the 3 past them as full, " + std::to_string(t.list.GetLeftOutBecauseFull()));
+	Check(t.indexBuffer.GetSize() == indexRoom && highest == corners - 1, "its index numbers fill their room and the last corner is number 65535: none wrapped past 16 bits, " + std::to_string(highest));
+	Check(t.NothingPastTheEnd(), "and nothing was written past the end of its buffers");
+	t.Close();
+}
+
 int main()
 {
 	CheckTheCountsAgree();
@@ -1951,6 +2024,8 @@ int main()
 	CheckTheLog();
 	CheckNewBuffersStartEmpty();
 	CheckTheRealWriters();
+	CheckLinesStayApart();
+	CheckTheScreenListsRoom();
 
 	if (checksFailed)
 	{

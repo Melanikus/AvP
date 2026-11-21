@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port:
+//   the LAMPSTRENGTH, LAMPHALFDISTANCE, LAMPCONE, LAMPSPILL, LAMPSHOULDER and LAMPSPOTHALFDISTANCE commands (R-LAMP-1)
 // Modified 2026-11-11 by Melanikus (Third) for the AvP port:
 //   the LAMPLOOK command
 // Modified 2026-11-07 by Melanikus for the AvP port:
@@ -55,6 +57,7 @@ extern void NewOnScreenMessage(char *messagePtr);
 #include "menus.h"
 #include "detaillevels.h"
 #include "savegame.h"
+#include "hudson_saymarks.h"   // SAY marks: what he said, with -dev -saymarks only (Frost 2026-11-21)
 
 int DebuggingCommandsActive=0;
 extern void GimmeCharge(void);
@@ -231,6 +234,8 @@ extern void AddNetMsg_ChatBroadcast(char *string,BOOL same_species_only);
 
 static void DoMultiplayerSay(char* string)
 {
+	// SAY marks (-dev -saymarks only; hudson_saymarks.h): a MARK of his words in the probe's log. It only reads them; they go on as always.
+	HudsonSayMarks_Said(string);
 	AddNetMsg_ChatBroadcast(string,FALSE);
 }
 
@@ -448,6 +453,49 @@ void CreateGameSpecificConsoleCommands(void)
 		"LAMPLOOK",
 		"HOW THE SHOULDER LAMP LOOKS AS A REAL LIGHT: 0 THE REAL LIGHT, 1 THE REAL LIGHT AND THE PAINTED SPOT (AS BUILT), 2 PAINTED ONLY, 3 THE REAL LIGHT AND THE PAINTED LAMP AT FULL. NOT IN A NETWORK GAME",
 		LampLookCommand
+	);
+
+	// The lamp's look (R-LAMP-1, shoulder_lamp.h): player settings, like the two above, for this run of the game, playing alone. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+	ConsoleCommand::Make
+	(
+		"LAMPSTRENGTH",
+		"HOW STRONG THE SHOULDER LAMP IS AS A REAL LIGHT, FROM 0.1 TO 4. 2.2 IS AS BUILT. OTHER MARINES' LAMPS FOLLOW IT. NOT IN A NETWORK GAME",
+		LampStrengthCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"LAMPHALFDISTANCE",
+		"HOW FAR AWAY THE SHOULDER LAMP'S LIGHT HAS FALLEN TO HALF, IN MILLIMETRES, FROM 1000 TO 20000. 9000 IS AS BUILT. OTHER MARINES' LAMPS FOLLOW IT. NOT IN A NETWORK GAME",
+		LampHalfDistanceCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"LAMPCONE",
+		"HOW WIDE THE SHOULDER LAMP'S LIGHT IS: INSIDE THEN OUTSIDE, AS COSINES. 0.90 0.86 IS AS BUILT. SMALLER IS WIDER. OTHER MARINES' LAMPS FOLLOW IT, BUT NOT THE BEAMS DRAWN IN THE AIR. NOT IN A NETWORK GAME",
+		LampConeCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"LAMPSPILL",
+		"HOW STRONG THE FAINT SPILL AROUND THE SHOULDER LAMP'S BEAM IS, FROM 0 TO 0.5. 0, NO SPILL, IS AS BUILT. NOT IN A NETWORK GAME",
+		LampSpillCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"LAMPSHOULDER",
+		"WHERE THE PAINTED LAMP'S CONE STARTS ON THE SCREEN: ACROSS THEN DOWN, EACH FROM -0.5 TO 1.5. 1 -0.1 IS AS BUILT. NOT IN A NETWORK GAME",
+		LampShoulderCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"LAMPSPOTHALFDISTANCE",
+		"HOW FAR AWAY THE PAINTED SPOT'S LIGHT HAS FALLEN TO HALF, IN MILLIMETRES, FROM 1000 TO 20000, OR 0 FOR NO FALL, AS BUILT. NOT IN A NETWORK GAME",
+		LampSpotHalfDistanceCommand
 	);
 
 	ConsoleCommand::Make

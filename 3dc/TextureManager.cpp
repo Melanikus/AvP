@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
+//   Tex_CreateFromBMP: a .BMP picture read and checked by bmp_picture.h, for the level editor's Prefer .BMP over .RIM (the game never asks for one)
 // Modified 2026-11-11 by Melanikus for the AvP port:
 //   on a sheet of small pictures, a see-through texel takes colour only from its own small picture, so the light flare's glow has no
 //   white line along its bottom
@@ -47,6 +49,8 @@
 #include <assert.h>
 #include "RimLoader.h"
 #include "rim_edges.h"
+#include "bmp_picture.h"
+#include "FileStream.h"
 #include "texture_relief.h"
 
 std::vector<Texture> textureList;
@@ -416,6 +420,88 @@ texID_t Tex_Create(const std::string &textureName, uint32_t width, uint32_t heig
 	}
 
 	Tex_CheckMemoryUsage();
+
+	return textureID;
+}
+
+// A .BMP picture (TextureManager.h): the file read whole, at most what bmp_picture.h takes, and decoded there, so nothing of it reaches D3DX
+texID_t Tex_CreateFromBMP(const std::string &fileName)
+{
+	texID_t const kept = Tex_CheckExists(fileName);
+
+	if (kept != MISSING_TEXTURE)
+	{
+		return kept;
+	}
+
+	FileStream file;
+
+	if (!file.Open(fileName, FileStream::FileRead) || !file.IsGood())
+	{
+		return MISSING_TEXTURE;
+	}
+
+	uint32_t const size = file.GetFileSize();
+
+	if (size == INVALID_FILE_SIZE || size > kBmpPictureMostBytes + 2048)
+	{
+		Con_PrintError("The picture " + fileName + " isn't used, because its size can't be a picture's");
+		return MISSING_TEXTURE;
+	}
+
+	std::vector<uint8_t> bytes(size);
+
+	if (size == 0 || file.ReadBytes(&bytes[0], size) != size || file.RanOutOfData())
+	{
+		Con_PrintError("The picture " + fileName + " isn't used, because it couldn't be read");
+		return MISSING_TEXTURE;
+	}
+
+	uint32_t width = 0, height = 0;
+	std::vector<uint8_t> texels;
+	char const *why = 0;
+
+	if (!BmpPicture_Decode(&bytes[0], bytes.size(), &width, &height, &texels, &why))
+	{
+		Con_PrintError("The picture " + fileName + " isn't used, because " + (why ? why : "it isn't a picture"));
+		return MISSING_TEXTURE;
+	}
+
+	Texture newTexture;
+	newTexture.name = fileName;
+
+	if (!R_CreateTexture(width, height, 32, TextureUsage_Normal, newTexture))
+	{
+		return MISSING_TEXTURE;
+	}
+
+	uint8_t *dest = 0;
+	uint32_t pitch = 0;
+
+	if (!R_LockTexture(newTexture, &dest, &pitch, TextureLock_Normal) || !dest || pitch < width * 4)
+	{
+		R_ReleaseTexture(newTexture);
+		return MISSING_TEXTURE;
+	}
+
+	for (uint32_t y = 0; y < height; y++)
+	{
+		memcpy(dest + (size_t)y * pitch, &texels[(size_t)y * width * 4], (size_t)width * 4);
+	}
+
+	R_UnlockTexture(newTexture);
+
+	texID_t const textureID = Tex_GetFreeID();
+	newTexture.isValid = true;
+
+	if (textureID < textureList.size())
+	{
+		textureList[textureID] = newTexture;
+	}
+	else
+	{
+		textureList.push_back(newTexture);
+	}
 
 	return textureID;
 }

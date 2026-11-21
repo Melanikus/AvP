@@ -5,6 +5,7 @@
 //   a name is only read as far as the end of its chunk
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   where a shape's pieces go has to be inside the level, as CheckPlace in chunk.hpp says
 
 #include "chunk_fragments.hpp"
 
@@ -106,6 +107,7 @@ Fragment_Type_Shape_Chunk::Fragment_Type_Shape_Chunk(Chunk_With_Children* const 
 
 	num_fragments = ReadFromChunk<int>(start, chunk_bytes, data);
 	location = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);
+	CheckPlace(location);
 
 	pad1 = ReadFromChunk<int>(start, chunk_bytes, data);
 	pad2 = ReadFromChunk<int>(start, chunk_bytes, data);

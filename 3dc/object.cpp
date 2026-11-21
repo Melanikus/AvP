@@ -10,7 +10,15 @@
 /* globals for export */
 
 int NumActiveBlocks;
-DISPLAYBLOCK *ActiveBlockList[maxobjects];
+DISPLAYBLOCK *ActiveBlockList[maxdisplayblocks];
+
+// How many display blocks are handed out: the game's maxobjects, unless the level editor asked for more (before a level is loaded)
+int DisplayBlocksMost = maxobjects;
+
+void Objects_AllowManyDisplayBlocks(bool on)
+{
+	DisplayBlocksMost = on ? maxdisplayblocks : maxobjects;
+}
 
 
 
@@ -20,9 +28,9 @@ DISPLAYBLOCK *ActiveBlockList[maxobjects];
 */
 
 static int NumFreeBlocks;
-static DISPLAYBLOCK *FreeBlockList[maxobjects];
+static DISPLAYBLOCK *FreeBlockList[maxdisplayblocks];
 static DISPLAYBLOCK **FreeBlockListPtr = &FreeBlockList[maxobjects-1];
-static DISPLAYBLOCK FreeBlockData[maxobjects];
+static DISPLAYBLOCK FreeBlockData[maxdisplayblocks];
 static DISPLAYBLOCK **ActiveBlockListPtr = &ActiveBlockList[0];
 
 
@@ -65,10 +73,10 @@ void InitialiseObjectBlocks(void)
 
 	NumActiveBlocks = 0;
 
-	FreeBlockListPtr   = &FreeBlockList[maxobjects-1];
+	FreeBlockListPtr   = &FreeBlockList[DisplayBlocksMost-1];
 	ActiveBlockListPtr = &ActiveBlockList[0];
 
-	for (NumFreeBlocks = 0; NumFreeBlocks < maxobjects; NumFreeBlocks++) 
+	for (NumFreeBlocks = 0; NumFreeBlocks < DisplayBlocksMost; NumFreeBlocks++) 
 	{
 		FreeBlockList[NumFreeBlocks] = FreeBlkPtr;
 

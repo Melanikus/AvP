@@ -24,6 +24,8 @@
 //   friendlyfire=off has the host of a network test turn friendly fire off
 // Modified 2026-11-11 by Melanikus (Third) for the AvP port:
 //   floorislava=off has the run play 1999's aliens, as the console's FLOORISLAVA OFF does, for the other side of a film (#109's flip)
+// Modified 2026-11-18 by Melanikus (Drake) for the AvP port:
+//   meetsagain= has a meets=yes run say where he is a second time, that many seconds in
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port. See hudson_plan.h.
 
 #include "hudson_plan.h"
@@ -113,7 +115,19 @@ const char *const kHudsonRefusedBotFightUnknown = "botfight= is alien, marine, f
 const char *const kHudsonRefusedBotFightWithoutCoop = "botfight= is for a net= run with coop=yes";
 const char *const kHudsonRefusedFriendlyFireNotOff = "friendlyfire= can only be off";
 const char *const kHudsonRefusedFriendlyFireWithoutCoop = "friendlyfire= is for a net= run with coop=yes";
+const char *const kHudsonRefusedStockNotYes = "stock= can only be yes: without it, every flag is on, as for every player";
 const char *const kHudsonRefusedFloorIsLavaNotOff = "floorislava= can only be off: without it, the alien ways are on, as for every player";
+// lanes=yes, the lane probe (hudson_lanes.h). Added 2026-11-19 by Melanikus (Frost) for the AvP port
+const char *const kHudsonRefusedLanesNotYes = "lanes= is yes (one alien made for the player standing still) or watch (the level as he plays it)";
+const char *const kHudsonRefusedLanesNeedsPlaces = "lanes=yes needs one alienat= place for its alien and a standat= place for the player";
+const char *const kHudsonRefusedAlienOnNotFloorOrCeiling = "alienon= is floor or ceiling";
+const char *const kHudsonRefusedAlienOnWithoutLanes = "alienon= says where the lane probe's alien is made, so it needs lanes=yes";
+// lanes=watch (added 2026-11-20 by Melanikus (Frost) for the AvP port)
+const char *const kHudsonRefusedLanesWatchNeedsStand = "lanes=watch needs a standat= place for the player, or play=yes (he plays from the level's own start)";
+// lanes=watch with play=yes, probe v3 (added 2026-11-20 by Melanikus (Frost) for the AvP port)
+const char *const kHudsonRefusedLanesPlayNoStand = "lanes=watch with play=yes has him play from the level's own start, so it can't go with standat=";
+const char *const kHudsonRefusedLanesWatchNoAlien = "lanes=watch is the level as he plays it: it makes no alien of its own, so it can't go with alienat= or alienon=";
+const char *const kHudsonRefusedLanesNotAlone = "a lane probe (lanes=yes or watch) is the player standing still while aliens come for him: it can't go with rooms=, combat=, watch=, holdfire=, watchfrom=, together=, play= (lanes=yes; lanes=watch takes it: he plays from the level's start), net=, gun=, a walk, a nav, a route or a strategy";
 const char *const kHudsonRefusedLightingUnknown = "lighting= isn't gouraud, perpixel, normals or relief";
 const char *const kHudsonRefusedShadowsUnknown = "shadows= isn't on or off";
 const char *const kHudsonRefusedRecordUnknown = "record= isn't numbers, pictures or video";
@@ -168,6 +182,8 @@ const char *const kHudsonRefusedPlayWithSomethingElse = "play= is him playing th
 const char *const kHudsonRefusedPlayNetWithoutCoop = "play= with net= is two Hudsons playing a level of a campaign together, so it needs coop=yes";
 const char *const kHudsonRefusedGunAlienWithoutGun = "gunalien= makes something for a gun to hit, so it needs gun=";
 const char *const kHudsonRefusedMeetsNotYes = "meets= can only be yes";
+const char *const kHudsonRefusedMeetsAgainNotANumber = "meetsagain= isn't a number of seconds from 1 to 3600";
+const char *const kHudsonRefusedMeetsAgainWithoutMeets = "meetsagain= needs meets=yes, whose first reading it is the second of";
 const char *const kHudsonRefusedDieAtNotANumber = "dieat= isn't a number of seconds from 1 to 3600";
 const char *const kHudsonRefusedLevelFilmsNotYes = "levelfilms= can only be yes";
 const char *const kHudsonRefusedScreenWord = "screen= is second or main";
@@ -213,6 +229,48 @@ const char *const kHudsonRefusedGunWithAMarine = "gun= tries a gun in the player
 const char *const kHudsonRefusedFlareNotYes = "flare= can only be yes";
 const char *const kHudsonRefusedFlareSpoilsComparing = "a flare changes what's on the screen, so a run that compares it, with vision= or compare=, can't have flare=";
 const char *const kHudsonRefusedFlareWithoutHolds = "flare= throws one as each hold starts, so it needs a run that stands in rooms and looks round";
+// flares=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "throwing flares when aliens approach him")
+const char *const kHudsonRefusedFlaresNotYes = "flares= can only be yes";
+const char *const kHudsonRefusedFlaresWithoutPlay = "flares= has him throw flares at aliens as he plays, so it needs play=yes";
+// aimnearest=yes, holdground=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "I want hudson to run backwards pointing (but not firing) always at
+// the nearest alien"; Bishop, the snowplow)
+const char *const kHudsonRefusedAimNearestNotYes = "aimnearest= can only be yes";
+const char *const kHudsonRefusedAimNearestWithoutPlay = "aimnearest= has his view on the nearest alien as he plays, so it needs play=yes";
+const char *const kHudsonRefusedHoldGroundNotYes = "holdground= can only be yes";
+const char *const kHudsonRefusedHoldGroundWithoutPlay = "holdground= has him stand or back off from an alien close ahead as he plays, so it needs play=yes";
+// crouchanywhere=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: shft21's crouch-only walkway, and no duct marked with Airduct off)
+const char *const kHudsonRefusedCrouchAnywhereNotYes = "crouchanywhere= can only be yes";
+const char *const kHudsonRefusedCrouchAnywhereWithoutPlay = "crouchanywhere= lets his way go wherever he fits crouched as he plays, so it needs play=yes";
+// watchmost=S (added 2026-11-20 by Melanikus (Frost) for the AvP port: the full Genshd1 run, as long as the level takes)
+// shootwithin= shootdelay= (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "start shooting only if he's less than 4m away with a delay of 500ms")
+const char *const kHudsonRefusedShootWithinOutOfRange = "shootwithin= is how near an alien has to be for him to fire, from 1000 to 20000 mm";
+const char *const kHudsonRefusedShootDelayOutOfRange = "shootdelay= is how long it has to be that near first, from 0 to 5000 ms";
+const char *const kHudsonRefusedShootDelayWithoutWithin = "shootdelay= is the wait before he fires at a close alien, so it needs shootwithin=";
+const char *const kHudsonRefusedShootWithinWithoutPlay = "shootwithin= has him fire at close aliens as he plays, so it needs play=yes";
+// doorwalls=yes, ribbon=off (added 2026-11-20 by Melanikus (Frost) for the AvP port: the full Genshd1 run, and the films for the public)
+const char *const kHudsonRefusedDoorWallsNotYes = "doorwalls= can only be yes";
+const char *const kHudsonRefusedDoorWallsWithoutPlay = "doorwalls= keeps his way to open doors as he plays, so it needs play=yes";
+const char *const kHudsonRefusedRibbonNotOff = "ribbon= can only be off";
+const char *const kHudsonRefusedFilmClockNotOff = "filmclock= can only be off";
+const char *const kHudsonRefusedRearGuardOutOfRange = "rearguard= is how near an alien has to be for him to turn to it, from 1000 to 20000 mm";   // Frost 2026-11-20
+const char *const kHudsonRefusedRearGuardWithoutPlay = "rearguard= has him look back at close aliens as he plays, so it needs play=yes";
+const char *const kHudsonRefusedStatusNotOn = "status= can only be on";   // status=on (Frost 2026-11-20, the owner: "I have no feedback why")
+// supplygate=ceiling (added 2026-11-20 by Melanikus (Frost) for the AvP port: the owner, "if we don't have 1 alien crawling ceiling let's not spawn a second")
+const char *const kHudsonRefusedSupplyGateNotCeiling = "supplygate= can only be ceiling";
+const char *const kHudsonRefusedSupplyGateWithoutSupply = "supplygate= waits for the supply's last alien to reach a ceiling, so it needs supply=";
+// dieroll=N (added 2026-11-20 by Melanikus (Frost) for the AvP port: Bishop, the same layout on every A/B and full run)
+const char *const kHudsonRefusedDieRollOutOfRange = "dieroll= is the game's QUANTUM_ROLL, a whole number from 0 to 65535";
+const char *const kHudsonRefusedWatchMostOutOfRange = "watchmost= is the most seconds of game time the watch plays, from 60 to 7200";
+const char *const kHudsonRefusedWatchMostWithoutWatch = "watchmost= is how long the lane probe's watch plays, so it needs lanes=watch";
+const char *const kHudsonRefusedNormalsNotYes = "normals= can only be yes";
+const char *const kHudsonRefusedWireframeNotYes = "wireframe= can only be yes";
+const char *const kHudsonRefusedNormalColoursNotYes = "normalcolours= can only be yes";
+// supply= (added 2026-11-20 by Melanikus (Frost) for the AvP port, Bishop: a fixed alien supply for the lane probe)
+const char *const kHudsonRefusedSupplyWithoutPlay = "supply= is the lane probe's own aliens while he plays, so it needs lanes=watch and play=yes";
+const char *const kHudsonRefusedSupplyNeedsPlace = "supply= and supplyat= go together: how many aliens, and the place they're made at";
+const char *const kHudsonRefusedSupplyOutOfRange = "supply= is 1 to 8 aliens, supplyevery= 1 to 120 seconds";
+const char *const kHudsonRefusedSupplyInAndAt = "supplyin= and supplyat= both say where the supply's aliens are made: one of them";
+const char *const kHudsonRefusedSupplyInName = "supplyin= is room names (letters, digits, _ - ?) with commas between them";
 const char *const kHudsonRefusedBreakUnknown = "break= isn't prisms or video";
 const char *const kHudsonRefusedBreakWithoutVision = "break= is for seeing that vision= notices, so it needs vision=";
 const char *const kHudsonRefusedVisionUnknown = "vision= isn't check";
@@ -449,6 +507,181 @@ bool HudsonPlan_NameMatches(const char *levelName, const char *word)
 	}
 }
 
+// The lane probe's later words (supplygate=, dieroll=, watchmost=, crouchanywhere=), read here and not in HudsonPlan_Read's chain of words, which is as deep
+// as the compiler takes (C1061, blocks nested too deeply). Moved 2026-11-20 by Melanikus (Frost). 0, or why it was refused
+static const char *ReadALaneProbeWord(const char *place, size_t nameLength, const char *value, size_t valueLength, HudsonPlan *plan, bool *seenWatchMost)
+{
+	if (WordIs(place, nameLength, "supplyopensky"))
+	{
+		// supplyopensky=room,room,...: the open-sky rooms, where the supply gate times out at 30 s (hudson_supply.h; added 2026-11-21 by Melanikus (Frost), Bishop)
+		if (plan->supplyOpenSky[0])
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (valueLength == 0 || valueLength >= sizeof(plan->supplyOpenSky))
+		{
+			return kHudsonRefusedSupplyInName;
+		}
+
+		for (size_t i = 0; i < valueLength; i++)
+		{
+			char const c = value[i];
+
+			if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '?' || c == ','))
+			{
+				return kHudsonRefusedSupplyInName;
+			}
+		}
+
+		memcpy(plan->supplyOpenSky, value, valueLength);
+		plan->supplyOpenSky[valueLength] = 0;
+	}
+	else if (WordIs(place, nameLength, "rearguard"))
+	{
+		// rearguard=MM: he sprints his way and looks back at the close ones, a ceiling's first (hudson_play.h; added 2026-11-20 by Melanikus (Frost), the owner)
+		if (plan->rearGuard != 0)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!ReadNumber(value, valueLength, &plan->rearGuard) || plan->rearGuard < 1000 || plan->rearGuard > 20000)
+		{
+			plan->rearGuard = -1;
+			return kHudsonRefusedRearGuardOutOfRange;
+		}
+	}
+	else if (WordIs(place, nameLength, "status"))
+	{
+		// status=on: his one line on the screen (hudson_play.h; added 2026-11-20 by Melanikus (Frost), the owner: "He got stuck now and I have no feedback why")
+		if (plan->playStatus)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!WordIs(value, valueLength, "on"))
+		{
+			return kHudsonRefusedStatusNotOn;
+		}
+
+		plan->playStatus = true;
+	}
+	else if (WordIs(place, nameLength, "filmclock"))
+	{
+		// filmclock=off: no machine clock in the film's corner (hudson.cpp's film writer; added 2026-11-20 by Melanikus (Frost), the public films)
+		if (plan->filmClockOff)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!WordIs(value, valueLength, "off"))
+		{
+			return kHudsonRefusedFilmClockNotOff;
+		}
+
+		plan->filmClockOff = true;
+	}
+	else if (WordIs(place, nameLength, "doorwalls") || WordIs(place, nameLength, "ribbon"))
+	{
+		// doorwalls=yes: shut doors are walls on his grid; ribbon=off: no ribbon drawn (hudson_play.h; added 2026-11-20 by Melanikus (Frost))
+		bool const doors = WordIs(place, nameLength, "doorwalls");
+		bool &asked = doors ? plan->playDoorWalls : plan->playRibbonOff;
+
+		if (asked)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!WordIs(value, valueLength, doors ? "yes" : "off"))
+		{
+			return doors ? kHudsonRefusedDoorWallsNotYes : kHudsonRefusedRibbonNotOff;
+		}
+
+		asked = true;
+	}
+	else if (WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay"))
+	{
+		// shootwithin=MM, shootdelay=MS: he fires at the nearest alien once one has been that near that long (hudson_play.h; added 2026-11-20 by Melanikus (Frost))
+		bool const within = WordIs(place, nameLength, "shootwithin");
+
+		if (within ? plan->shootWithin != 0 : plan->shootDelayAsked)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		plan->shootDelayAsked = plan->shootDelayAsked || !within;
+
+		int *const into = within ? &plan->shootWithin : &plan->shootDelay;
+
+		if (!ReadNumber(value, valueLength, into) || (within ? (*into < 1000 || *into > 20000) : (*into < 0 || *into > 5000)))
+		{
+			return within ? kHudsonRefusedShootWithinOutOfRange : kHudsonRefusedShootDelayOutOfRange;
+		}
+	}
+	else if (WordIs(place, nameLength, "supplygate"))
+	{
+		// supplygate=ceiling: the next alien only once the last one made has been on a ceiling (hudson_lanes.h; added 2026-11-20 by Melanikus (Frost))
+		if (plan->supplyGate)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!WordIs(value, valueLength, "ceiling"))
+		{
+			return kHudsonRefusedSupplyGateNotCeiling;
+		}
+
+		plan->supplyGate = true;
+	}
+	else if (WordIs(place, nameLength, "dieroll"))
+	{
+		// dieroll=N: the game's own QUANTUM_ROLL console variable, set before the level loads (hudson.cpp; added 2026-11-20 by Melanikus (Frost))
+		if (plan->dieRollAsked)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		plan->dieRollAsked = true;
+
+		if (!ReadNumber(value, valueLength, &plan->dieRoll) || plan->dieRoll < 0 || plan->dieRoll > 65535)
+		{
+			return kHudsonRefusedDieRollOutOfRange;
+		}
+	}
+	else if (WordIs(place, nameLength, "watchmost"))
+	{
+		// watchmost=S: the watch plays for at most S s of game time (hudson_lanes.h; added 2026-11-20 by Melanikus (Frost), the full Genshd1 run)
+		if (*seenWatchMost)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		*seenWatchMost = true;
+
+		if (!ReadNumber(value, valueLength, &plan->watchMost) || plan->watchMost < 60 || plan->watchMost > 7200)
+		{
+			return kHudsonRefusedWatchMostOutOfRange;
+		}
+	}
+	else if (WordIs(place, nameLength, "crouchanywhere"))
+	{
+		// crouchanywhere=yes: his grid has a place wherever a crouched marine fits, whatever the floor's mark (hudson_grid.h; added 2026-11-20 by Melanikus (Frost))
+		if (plan->playCrouchAnywhere)
+		{
+			return kHudsonRefusedAskedTwice;
+		}
+
+		if (!WordIs(value, valueLength, "yes"))
+		{
+			return kHudsonRefusedCrouchAnywhereNotYes;
+		}
+
+		plan->playCrouchAnywhere = true;
+	}
+
+	return 0;
+}
+
 const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 {
 	memset(plan, 0, sizeof(*plan));
@@ -476,6 +709,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenPageHold = false;
 	bool seenHold = false;
 	bool seenNav = false, seenRoute = false, seenPace = false, seenFrameHold = false;
+	bool seenSupply = false, seenSupplyAt = false, seenSupplyEvery = false, seenSupplyIn = false, seenWatchMost = false;
 	bool seenGun = false;
 	bool seenStepSeconds = false;
 	bool seenPlayGun = false;
@@ -503,6 +737,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 	bool seenWall = false, seenWallRank = false, seenWallRoom = false, seenCompare = false, seenCombat = false, seenAliens = false;
 	bool seenWatch = false, seenHoldFire = false, seenAlienAt = false, seenStandAt = false, seenWatchFrom = false;
+	bool seenAlienOn = false;
 	bool seenLampSize = false, seenFollow = false, seenWalkFrom = false, seenWalkTo = false, seenLookAt = false, seenTogether = false, seenEvery = false;
 	bool seenLevel = false, seenFrames = false, seenSeconds = false, seenIdle = false, seenRooms = false, seenViews = false, seenLighting = false, seenShadows = false, seenRecord = false;
 	const char *place = commandLine ? FindHudsonWord(commandLine) : 0;
@@ -1400,6 +1635,47 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->noFriendlyFire = true;
 		}
+		else if (WordIs(place, nameLength, "alienon"))
+		{
+			// alienon=ceiling: the lane probe's alien is made hanging from the ceiling, for a run of the lane alone (Drake 11-19); floor is the default.
+			// Added 2026-11-19 by Melanikus (Frost) for the AvP port.
+			if (seenAlienOn)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenAlienOn = true;
+
+			if (WordIs(value, valueLength, "ceiling"))
+			{
+				plan->alienOnCeiling = true;
+			}
+			else if (!WordIs(value, valueLength, "floor"))
+			{
+				return kHudsonRefusedAlienOnNotFloorOrCeiling;
+			}
+		}
+		else if (WordIs(place, nameLength, "lanes"))
+		{
+			// The lane probe (hudson_lanes.h): one alien made at alienat=, the player put at standat=, 1999's aliens, and a line a frame of what the alien's
+			// route is, for whether it stays on the ceiling. Added 2026-11-19 by Melanikus (Frost) for the AvP port (the owner's ceiling lanes).
+			if (plan->lanes)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			// lanes=watch: the level as he plays it, every near alien a line a frame (Bishop 11-20; added 2026-11-20 by Melanikus (Frost))
+			if (WordIs(value, valueLength, "watch"))
+			{
+				plan->lanesWatch = true;
+			}
+			else if (!WordIs(value, valueLength, "yes"))
+			{
+				return kHudsonRefusedLanesNotYes;
+			}
+
+			plan->lanes = true;
+		}
 		else if (WordIs(place, nameLength, "floorislava"))
 		{
 			// 1999's aliens, for the other side of a film, as the console's FLOORISLAVA OFF gives a player. Only off: the ways are on in every
@@ -1415,6 +1691,22 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->floorIsLavaOff = true;
+		}
+		else if (WordIs(place, nameLength, "stock"))
+		{
+			// 1999's aliens for the lane probe: every flag of stock_flags.h off before any level (the owner 2026-11-20, through Bishop: "we need any new
+			// behavior we added behind a flag in AVPX or these tests mean nothing"). Only yes. Added 2026-11-20 by Melanikus (Vasquez) for the AvP port.
+			if (plan->stock)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return kHudsonRefusedStockNotYes;
+			}
+
+			plan->stock = true;
 		}
 		else if (WordIs(place, nameLength, "fps"))
 		{
@@ -2330,6 +2622,18 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedFilmSkipNotANumber;
 			}
 		}
+		else if (WordIs(place, nameLength, "meetsagain"))
+		{
+			if (plan->meetsAgainSeconds != 0)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!ReadNumber(value, valueLength, &plan->meetsAgainSeconds) || plan->meetsAgainSeconds < 1 || plan->meetsAgainSeconds > 3600)
+			{
+				return kHudsonRefusedMeetsAgainNotANumber;
+			}
+		}
 		else if (WordIs(place, nameLength, "dieat"))
 		{
 			if (plan->dieAtSeconds != 0)
@@ -2472,6 +2776,143 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->flareEachHold = true;
+		}
+		else if (WordIs(place, nameLength, "flares"))
+		{
+			// flares=yes: as he plays, a flare at an alien he sees coming within 8 m (hudson_play.h; added 2026-11-20 by Melanikus (Frost), the owner: "throwing flares
+			// when aliens approach him")
+			if (plan->playFlares)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return kHudsonRefusedFlaresNotYes;
+			}
+
+			plan->playFlares = true;
+		}
+		else if (WordIs(place, nameLength, "supplygate") || WordIs(place, nameLength, "dieroll") || WordIs(place, nameLength, "watchmost") || WordIs(place, nameLength, "crouchanywhere") ||
+			WordIs(place, nameLength, "shootwithin") || WordIs(place, nameLength, "shootdelay") || WordIs(place, nameLength, "doorwalls") || WordIs(place, nameLength, "ribbon") ||
+			WordIs(place, nameLength, "filmclock") || WordIs(place, nameLength, "status") || WordIs(place, nameLength, "rearguard") || WordIs(place, nameLength, "supplyopensky"))
+		{
+			// the lane probe's later words, read in ReadALaneProbeWord (this chain is as deep as the compiler takes)
+			const char *const refused = ReadALaneProbeWord(place, nameLength, value, valueLength, plan, &seenWatchMost);
+
+			if (refused)
+			{
+				return refused;
+			}
+		}
+		else if (WordIs(place, nameLength, "aimnearest") || WordIs(place, nameLength, "holdground"))
+		{
+			// aimnearest=yes: as he plays, his view and gun on the nearest alien, never firing; holdground=yes: an alien close ahead on his way, and he stands or backs
+			// off (hudson_play.h; added 2026-11-20 by Melanikus (Frost), the owner and Bishop)
+			bool const aim = WordIs(place, nameLength, "aimnearest");
+			bool &asked = aim ? plan->playAimNearest : plan->playHoldGround;
+
+			if (asked)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return aim ? kHudsonRefusedAimNearestNotYes : kHudsonRefusedHoldGroundNotYes;
+			}
+
+			asked = true;
+		}
+		else if (WordIs(place, nameLength, "normals") || WordIs(place, nameLength, "normalcolours") || WordIs(place, nameLength, "wireframe"))
+		{
+			// normals=yes, normalcolours=yes, wireframe=yes: the debug views, render only (3dc/debug_view.h; added 2026-11-20 by Melanikus (Drake), the owner: "see the
+			// aliens in the dark", "Showing normals would be enough/look cool", then "display normals like we did on debugging shaders": normals= is the NORMAL LINES view)
+			bool const normals = WordIs(place, nameLength, "normals"), colours = WordIs(place, nameLength, "normalcolours");
+			bool &asked = normals ? plan->viewNormals : colours ? plan->viewNormalColours : plan->viewWireframe;
+
+			if (asked)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return normals ? kHudsonRefusedNormalsNotYes : colours ? kHudsonRefusedNormalColoursNotYes : kHudsonRefusedWireframeNotYes;
+			}
+
+			asked = true;
+		}
+		else if (WordIs(place, nameLength, "supply") || WordIs(place, nameLength, "supplyevery"))
+		{
+			// supply=N, supplyevery=S: the lane probe's own aliens, N of them, one every S seconds (hudson_lanes.h; added 2026-11-20 by Melanikus (Frost))
+			bool const every = WordIs(place, nameLength, "supplyevery");
+			bool &seen = every ? seenSupplyEvery : seenSupply;
+			int *const into = every ? &plan->supplyEvery : &plan->supply;
+
+			if (seen)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seen = true;
+
+			if (!ReadNumber(value, valueLength, into) || *into < 1 || *into > (every ? 120 : 8))
+			{
+				return kHudsonRefusedSupplyOutOfRange;
+			}
+		}
+		else if (WordIs(place, nameLength, "supplyin"))
+		{
+			// supplyin=room,room,...: the supply's aliens made only in these rooms (the corridors of his route; hudson_supply.h; added 2026-11-20 by Melanikus (Frost))
+			if (seenSupplyIn)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenSupplyIn = true;
+
+			if (valueLength == 0 || valueLength >= sizeof(plan->supplyIn))
+			{
+				return kHudsonRefusedSupplyInName;
+			}
+
+			for (size_t i = 0; i < valueLength; i++)
+			{
+				char const c = value[i];
+
+				if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '?' || c == ','))
+				{
+					return kHudsonRefusedSupplyInName;
+				}
+			}
+
+			memcpy(plan->supplyIn, value, valueLength);
+			plan->supplyIn[valueLength] = 0;
+		}
+		else if (WordIs(place, nameLength, "supplyat"))
+		{
+			if (seenSupplyAt)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenSupplyAt = true;
+
+			// supplyat=around: made around him as he moves (hudson_lanes.h), not at a place
+			if (WordIs(value, valueLength, "around"))
+			{
+				plan->supplyAround = true;
+			}
+			// supplyat=ahead: in rooms by his way 15 to 40 m along it (the moving full-run supply, hudson_supply.h; Frost 2026-11-21)
+			else if (WordIs(value, valueLength, "ahead"))
+			{
+				plan->supplyAhead = true;
+			}
+			else if (!ReadPlace(value, valueLength, &plan->supplyAtX, &plan->supplyAtY, &plan->supplyAtZ))
+			{
+				return kHudsonRefusedPlaceNotThreeNumbers;
+			}
 		}
 		else if (WordIs(place, nameLength, "break"))
 		{
@@ -2899,10 +3340,55 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedOneJobAtATime;
 	}
 
-	// Watching an alien is a fight he doesn't take part in, so each of these only means something in a fight
-	if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt || seenWatchFrom || seenTogether) && !plan->combatAlien)
+	// Watching an alien is a fight he doesn't take part in, so each of these only means something in a fight. alienat= and standat= also place the lane probe's alien and player
+	if ((seenWatch || seenHoldFire || ((seenAlienAt || seenStandAt) && !plan->lanes) || seenWatchFrom || seenTogether) && !plan->combatAlien)
 	{
 		return kHudsonRefusedWatchWordsWithoutCombat;
+	}
+
+	if (seenAlienOn && !plan->lanes)
+	{
+		return kHudsonRefusedAlienOnWithoutLanes;
+	}
+
+	// lanes=yes: the player stands still at standat= while one alien made at alienat= comes for him, as in 1999's game. Nothing else may move
+	// or be asked for. (Added 2026-11-19 by Melanikus (Frost) for the AvP port.)
+	if (plan->lanes)
+	{
+		if (plan->lanesWatch)
+		{
+			// lanes=watch: the level's own aliens only, the player at standat= (added 2026-11-20 by Melanikus (Frost))
+			if (seenAlienAt || seenAlienOn)
+			{
+				return kHudsonRefusedLanesWatchNoAlien;
+			}
+
+			// with play=yes (probe v3, added 2026-11-20 by Melanikus (Frost)): he plays from the level's own start, on foot, by his grid's ways (hudson_play.cpp)
+			if (plan->play && plan->standAtSaid)
+			{
+				return kHudsonRefusedLanesPlayNoStand;
+			}
+
+			if (!plan->play && !plan->standAtSaid)
+			{
+				return kHudsonRefusedLanesWatchNeedsStand;
+			}
+		}
+		else if (!plan->alienAtSaid || plan->alienAtPlaces != 1 || !plan->standAtSaid)
+		{
+			return kHudsonRefusedLanesNeedsPlaces;
+		}
+
+		if (plan->rooms > 0 || plan->combatAlien || seenWatch || seenHoldFire || seenWatchFrom || seenTogether || (plan->play && !plan->lanesWatch) || plan->netMode != kHudsonNetNone ||
+			plan->gunSlot != 0 || seenWalkFrom || seenWalkTo || seenNav || seenRoute || seenStrategy)
+		{
+			return kHudsonRefusedLanesNotAlone;
+		}
+
+		// 1999's aliens: the console's FLOORISLAVA OFF before any level, as floorislava=off asks; and every lane probe stock (stock=yes, stock_flags.h: the five AvPx
+		// changes that touch aliens off before any level; the owner 11-20: "we need any new behavior we added behind a flag in AVPX or these tests mean nothing")
+		plan->floorIsLavaOff = true;
+		plan->stock = true;
 	}
 
 	if (plan->holdFire && !plan->watchAlien)
@@ -3144,6 +3630,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedFilmSkipWithoutFilms;
 	}
 
+	if (plan->meetsAgainSeconds != 0 && !plan->meets)
+	{
+		return kHudsonRefusedMeetsAgainWithoutMeets;
+	}
+
 	if (((plan->playAsPredator || plan->playAsAlien) && plan->gunSlot == 0 && !plan->meets) && !plan->play)
 	{
 		return kHudsonRefusedSpeciesWithoutGun;
@@ -3202,6 +3693,77 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->flareEachHold && (plan->rooms == 0 || plan->combatAlien || plan->navModules || plan->strategy[0] || plan->listStrategies))
 	{
 		return kHudsonRefusedFlareWithoutHolds;
+	}
+
+	// supply=: the lane probe's own aliens as he plays (lanes=watch, play=yes), at supplyat=, one every supplyevery= seconds, 10 without it
+	if (seenSupplyIn && seenSupplyAt)
+	{
+		return kHudsonRefusedSupplyInAndAt;
+	}
+
+	if ((seenSupply || seenSupplyAt || seenSupplyEvery || seenSupplyIn) && !(plan->lanes && plan->lanesWatch && plan->play))
+	{
+		return kHudsonRefusedSupplyWithoutPlay;
+	}
+
+	if ((seenSupply || seenSupplyEvery) != (seenSupplyAt || seenSupplyIn) || (seenSupplyEvery && !seenSupply))
+	{
+		return kHudsonRefusedSupplyNeedsPlace;
+	}
+
+	if (plan->supply > 0 && plan->supplyEvery == 0)
+	{
+		plan->supplyEvery = 10;
+	}
+
+	if (plan->playFlares && !plan->play)
+	{
+		return kHudsonRefusedFlaresWithoutPlay;
+	}
+
+	if (plan->playAimNearest && !plan->play)
+	{
+		return kHudsonRefusedAimNearestWithoutPlay;
+	}
+
+	if (plan->playHoldGround && !plan->play)
+	{
+		return kHudsonRefusedHoldGroundWithoutPlay;
+	}
+
+	if (plan->playCrouchAnywhere && !plan->play)
+	{
+		return kHudsonRefusedCrouchAnywhereWithoutPlay;
+	}
+
+	if (plan->rearGuard > 0 && !plan->play)
+	{
+		return kHudsonRefusedRearGuardWithoutPlay;
+	}
+
+	if (plan->playDoorWalls && !plan->play)
+	{
+		return kHudsonRefusedDoorWallsWithoutPlay;
+	}
+
+	if (plan->shootDelayAsked && plan->shootWithin == 0)
+	{
+		return kHudsonRefusedShootDelayWithoutWithin;
+	}
+
+	if (plan->shootWithin > 0 && !plan->play)
+	{
+		return kHudsonRefusedShootWithinWithoutPlay;
+	}
+
+	if (plan->supplyGate && plan->supply <= 0)
+	{
+		return kHudsonRefusedSupplyGateWithoutSupply;
+	}
+
+	if (plan->watchMost > 0 && !plan->lanesWatch)
+	{
+		return kHudsonRefusedWatchMostWithoutWatch;
 	}
 
 	if (plan->breakPrisms && !plan->vision)

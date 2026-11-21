@@ -1,4 +1,8 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
+//   load_rif_bitmap: the level editor's Prefer .BMP over .RIM (R_SetEditorPreferBmp) tries the picture as a .bmp first; the game never sets it
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   avp_try_load_rif: a level file the loader refuses comes back as INVALID_RIFFHANDLE, with nothing shown (chunk_load.cpp)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a handle can be asked for the size and MD5 sum of the file it was loaded from (level_file_sum.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
@@ -28,6 +32,10 @@
 //   debug decal save writes it, and a decal whose offset isn't one of its kind's pictures is left out (decal_offset.h).
 //   The fix follows Bobblen's avp-forever (282ebb1, 8a0e408), rewritten
 //   a model's name is copied with the 0 that ends it written on a line of its own
+//   a set of random textures with no name is passed over (2026-11-14)
+//   a sound's name and the level's name from the level file go to the log only as safe copies (2026-11-14)
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   no number from the AI module setup is used as a place in its arrays unless it's a real place (IsARealAIModule)
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -79,6 +87,7 @@
 #include "inventory.h"
 #include <vector>
 #include "TextureManager.h"
+#include "renderer.h"   // R_SetEditorPreferBmp
 #include "utilities.h"
 #include "logString.h"
 #include "surface_normals.h"
@@ -123,6 +132,16 @@ static char *light_set_name = "NORMALLT";
 
 static Object_Chunk **o_chunk_array;
 static int *aimodule_indeces; //array parallel to o_chunk_array
+
+// Is this number a real place in AIModuleArray? Place 0 is kept empty, so real places go from 1 up to the array's size. A module the
+// setup below gives no place keeps -1, so every number taken from aimodule_indeces is asked about here before it's used as a place in
+// AIModuleArray or in the list of ways in beside it. The reader already refuses a level that would leave a module at -1 (a slave whose
+// master isn't a master: AI_Module_Slave_Chunk, chunk_waypoint.cpp). This is so that no other way to -1 can ever reach those arrays.
+// Added 2026-11-14 by Melanikus for the AvP port.
+static bool IsARealAIModule(int index)
+{
+	return index >= 1 && index < AIModuleArraySize;
+}
 
 
 void setup_preplaced_decals(File_Chunk *fc, Environment_Data_Chunk *edc);
@@ -225,7 +244,9 @@ void setup_paths(RIFFHANDLE h)
 			Object_Chunk* path_object=h->fc->get_object_by_index(apc->Path[i].module_index);
 			if(!path_object)continue;
 			if(path_object->program_object_index==-1) continue;
-			AIMODULE* path_module=&AIModuleArray[aimodule_indeces[path_object->program_object_index]];				
+			int const path_ai_module=aimodule_indeces[path_object->program_object_index];
+			if(!IsARealAIModule(path_ai_module)) continue;
+			AIMODULE* path_module=&AIModuleArray[path_ai_module];
 			
 			//if this ai module is the same as the previous one in the path , ignore it
 			if(path->path_length)
@@ -304,6 +325,10 @@ int ConvertObjectIndexToPathIndex(int path_index,int object_index)
 		return -1; //object isn't a module
 	}
 	int aimodule_index=aimodule_indeces[module_index];
+	if(!IsARealAIModule(aimodule_index))
+	{
+		return -1; //module isn't in any AI module, so it isn't in the path
+	}
 
 	PATHHEADER* path=&PathArray[path_index];
 	
@@ -533,7 +558,10 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 				// here, as it does when a sound is missing.
 				if (_snprintf(wavname, sizeof(wavname) - 1, "%s/%s", dir_chunk->directory, isc->wav_name) < 0)
 				{
-					LogErrorString(std::string("sound file path too long: ") + isc->wav_name);
+					// The name comes from the level file, so the log gets a safe copy of it (level_file_name.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+					char safeName[64];
+					LevelFileName_ForTheLog(isc->wav_name, safeName, sizeof(safeName));
+					LogErrorString(std::string("sound file path too long: ") + safeName);
 					continue;
 				}
 				wavname[sizeof(wavname) - 1] = '\0';
@@ -858,7 +886,10 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 					}
 					else
 					{
-						LogErrorString(std::string("level file gives a shape set collection too many sets or shapes: ") + riffname);
+						// The level's name comes from the level file, so the log gets a safe copy of it (level_file_name.h). (Added 2026-11-14 by Melanikus for the AvP port.)
+						char safeName[64];
+						LevelFileName_ForTheLog(riffname, safeName, sizeof(safeName));
+						LogErrorString(std::string("level file gives a shape set collection too many sets or shapes: ") + safeName);
 					}
 					break;
 				}
@@ -2468,6 +2499,7 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 			}
 
 			int this_ai_module_index=aimodule_indeces[i];
+			if(!IsARealAIModule(this_ai_module_index))continue;
 			AIMODULE* aim=&AIModuleArray[this_ai_module_index];
 
 			//build list of adjacent ai_modules
@@ -2483,7 +2515,7 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 					if (adjacent_module && adjacent_module->program_object_index!=-1)
 					{
 						int adj_ai_module=aimodule_indeces[adjacent_module->program_object_index];
-						if(adj_ai_module!=this_ai_module_index)
+						if(IsARealAIModule(adj_ai_module) && adj_ai_module!=this_ai_module_index)
 						{
 							//make sure not already in list
 							LIF<int> adjlif(&adjacent_aimodule_list);
@@ -2530,7 +2562,7 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 							if (adjacent_module && adjacent_module->program_object_index!=-1)
 							{
 								int adj_ai_module=aimodule_indeces[adjacent_module->program_object_index];
-								if(adj_ai_module!=this_ai_module_index)
+								if(IsARealAIModule(adj_ai_module) && adj_ai_module!=this_ai_module_index)
 								{
 									//make sure not already in list
 									LIF<int> adjlif(&adjacent_aimodule_list);
@@ -2805,6 +2837,10 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 		for(LIF<Chunk*> rlif(&rlist);!rlif.done();rlif.next())
 		{
 			Random_Texture_ID_Chunk* ran_chunk=(Random_Texture_ID_Chunk*)rlif();
+
+			// A set of random textures with no name names neither kind of NPC, so it's passed over. (Added 2026-11-14 by Melanikus for the AvP port.)
+			if(!ran_chunk->name) continue;
+
 			if(!_stricmp(ran_chunk->name,"hnpcmarine"))
 			{
 				random_marine_texturings=ran_chunk->random_types;
@@ -2829,6 +2865,14 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 	return TRUE;
 }
 
+// The level editor's Prefer .BMP over .RIM (R_SetEditorPreferBmp, renderer.h): never set in the game. Added 2026-11-18 by Melanikus (Frost) for the AvP port.
+static bool editorPreferBmp = false;
+
+void R_SetEditorPreferBmp(bool on)
+{
+	editorPreferBmp = on;
+}
+
 // hook to load a bitmap - so you can load them from test directories, etc. should return tex index
 texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 {
@@ -2847,7 +2891,24 @@ texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 
 	Util::ChangeSlashes(fileName);
 
-	texID_t textureID = whyRefused ? MISSING_TEXTURE : Tex_CreateFromRIM("graphics/" + fileName);
+	texID_t textureID = MISSING_TEXTURE;
+
+	// The level editor's Prefer .BMP over .RIM (inteng's FUN_0046df30): the name with its ending after the last '.' made ".bmp" is tried first, and the .RIM is
+	// taken when there's no such picture or bmp_picture.h refuses it. Only a name the check above took is ever changed, and only its ending.
+	if (!whyRefused && editorPreferBmp)
+	{
+		std::string::size_type const dot = fileName.rfind('.');
+
+		if (dot != std::string::npos)
+		{
+			textureID = Tex_CreateFromBMP("graphics/" + fileName.substr(0, dot) + ".bmp");
+		}
+	}
+
+	if (textureID == MISSING_TEXTURE)
+	{
+		textureID = whyRefused ? MISSING_TEXTURE : Tex_CreateFromRIM("graphics/" + fileName);
+	}
 /*
 		CL_LoadImageOnce
 		(
@@ -3141,6 +3202,11 @@ void avp_undo_rif_load(RIFFHANDLE h)
 RIFFHANDLE avp_load_rif(const char * fname)
 {
 	return load_rif(fname);
+}
+
+RIFFHANDLE avp_try_load_rif(const char * fname)
+{
+	return try_load_rif(fname);
 }
 
 LevelFileSum avp_rif_file_sum(RIFFHANDLE h)

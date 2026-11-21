@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-19 by Melanikus (Frost) for the AvP port:
+//   a Hudson lane probe (lanes=yes) keeps the level's own NPCs still, as a Hudson run with a marine does (hudson_lanes.h)
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a lift station with a bad controller or floor number from the level file is left out of its lift
 //   a switch door is only linked to another switch door, and nothing that doesn't exist has a state
@@ -1490,7 +1492,7 @@ void ExecuteBehaviour(STRATEGYBLOCK* sbptr)
 {
 	GLOBALASSERT(sbptr);
 
-	if (HudsonMarineIsOn && Hudson_KeepsStill(sbptr))
+	if ((HudsonMarineIsOn || HudsonLanesAreOn) && Hudson_KeepsStill(sbptr))
 	{
 		return;
 	}
@@ -2776,7 +2778,7 @@ DISPLAYBLOCK *MakeObject(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
   MODULE m_temp;
   //TXACTRLBLK *taPtr;
 
-  if (NumActiveBlocks >= maxobjects) return (DISPLAYBLOCK *)NULL;
+  if (NumActiveBlocks >= DisplayBlocksMost) return (DISPLAYBLOCK *)NULL;
   if (NumActiveStBlocks >= maxstblocks) return (DISPLAYBLOCK *)NULL;
 
   // 1. Set up shape data BEFORE making the displayblock,

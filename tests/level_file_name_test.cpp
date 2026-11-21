@@ -254,6 +254,30 @@ static void TestTheRealGame()
 
 	Check(!Has(npc, "RIF_Child_Chunk") && !Has(npc, "rcc->"), "a name in a level's RIFCHILD chunk has no way to a file");
 	Check(Has(ReadSourceFile("3dc/avp/win95/projload.cpp"), "if(phdc->hierarchy_index<0 || phdc->hierarchy_index>=NumPlacedHierarchy) continue;"), "and a placed hierarchy is only a number, into the game's own short list");
+
+	// Added 2026-11-14 by Melanikus for the AvP port: a name a level can leave out has to be there before the loader compares it. A set of
+	// random textures keeps its name as one a chunk can do without (environment_chunk.cpp, CHUNK_EXTRACT_STRING), so it can have none.
+	std::string const randomTextures = Between(levelLoad, "h->envd->lookup_child(\"RANTEXID\",rlist);", "double env_scale=local_scale;");
+	Check(ComesBefore(randomTextures, "if(!ran_chunk->name) continue;", "_stricmp(ran_chunk->name"),
+		"a set of random textures with no name is passed over before its name is compared");
+
+	// An outside shape and a skin can have no name chunk, and then their names are none (chunk_shape.cpp, get_shape_name), so the list of
+	// named shapes only takes one that has a name
+	std::string const shapes = ReadSourceFile("3dc/win95/chunk_load.cpp");
+	Check(Has(shapes, "\t\tif (shape_name)\n\t\t{\n\t\t\trif_name = shape_name;\n\t\t\tmsl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], rif_name, list_pos));")
+		&& !Has(shapes, "rif_name = seflc->get_shape_name();"), "an outside shape with no name isn't put on the list of named shapes");
+	Check(Has(shapes, "\t\t\t\tif (shpname)\n\t\t\t\t{\n\t\t\t\t\tmsl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));")
+		&& !Has(shapes, "GLOBALASSERT(shpname);"), "and neither is a skin with no name");
+
+	// Added 2026-11-14 by Melanikus for the AvP port: a name from the level file goes to the log only as a safe copy, as a refused one does
+	// (LevelFileName_ForTheLog), as it can hold anything
+	std::string const setup = ReadSourceFile("3dc/avp/win95/object_setup.cpp");
+	Check(Has(setup, "LevelFileName_ForTheLog(wav_name, safeName, sizeof(safeName));\n\t\t\tLogErrorString(std::string(\"sound file path too long: \") + safeName);")
+		&& !Has(setup, "+ wav_name);"), "a placed sound's path that's too long goes to the log as a safe copy of its name");
+	Check(Has(levelLoad, "LevelFileName_ForTheLog(isc->wav_name, safeName, sizeof(safeName));\n\t\t\t\t\tLogErrorString(std::string(\"sound file path too long: \") + safeName);")
+		&& !Has(levelLoad, "+ isc->wav_name);"), "and so does a listed sound's");
+	Check(Has(levelLoad, "LevelFileName_ForTheLog(riffname, safeName, sizeof(safeName));\n\t\t\t\t\t\tLogErrorString(std::string(\"level file gives a shape set collection too many sets or shapes: \") + safeName);")
+		&& !Has(levelLoad, "too many sets or shapes: \") + riffname);"), "and the level's own name, when it gives too many shape sets");
 }
 
 int main()

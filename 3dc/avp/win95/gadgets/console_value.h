@@ -7,10 +7,14 @@
 // numbers big enough to hold it.
 //
 // Nothing here touches the game, so tests/debug_commands_test.cpp can try any number.
+//
+// Modified 2026-11-14 by Melanikus for the AvP port: "not a number" is told from its bits, so it's caught under the game's fast rules for
+// fractions too (tests/real_numbers_test.cpp tries it built that way), and so is an endless number, before it's compared or made whole.
 #ifndef CONSOLE_VALUE_H
 #define CONSOLE_VALUE_H
 
 #include <limits.h>
+#include "real_numbers.h"
 
 // A typed whole number, as an int. strtoll gives back the largest or smallest it can hold for digits that go on too long, so this only
 // has to bring that into an int's range.
@@ -57,7 +61,9 @@ inline int ConsoleValue_WholeAsFixed(int typed, int minVal, int maxVal)
 // decimal, and only then made whole, so a huge or endless one becomes the largest value and not something undefined.
 inline bool ConsoleValue_FromDecimal(double typed, double scale, int minVal, int maxVal, int *value)
 {
-	if (typed != typed)
+	// "Not a number" is told from its bits (real_numbers.h): the game is built with the compiler's fast rules for fractions, under which
+	// comparing a number with itself isn't promised to show one. (Changed 2026-11-14 by Melanikus for the AvP port; it was "typed != typed".)
+	if (IsNaN(typed))
 	{
 		return false;
 	}
@@ -65,6 +71,19 @@ inline bool ConsoleValue_FromDecimal(double typed, double scale, int minVal, int
 	// scale is 1 or 65536, so an ordinary or endless number times it is never "not a number"
 	double scaled = typed * scale;
 
+	// An endless number, typed as one or so big that it's endless once it's times scale, is told from its bits too, before anything
+	// compares it or makes a whole number of it: under the fast rules a comparison isn't promised to work on one. It's the largest value
+	// if it's above 0 and the smallest if it's below, which its sign bit, the double's top bit, says. (Added 2026-11-14 by Melanikus for
+	// the AvP port.)
+	if (IsNaNOrEndless(scaled))
+	{
+		uint64_t bits;
+		memcpy(&bits, &scaled, sizeof(bits));
+		*value = (bits >> 63) ? minVal : maxVal;
+		return true;
+	}
+
+	// Now scaled is a real number, so comparing it is safe
 	if (scaled > (double)maxVal)
 	{
 		scaled = (double)maxVal;

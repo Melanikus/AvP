@@ -28,6 +28,7 @@ x86/
 !/win32/
 !/dependencies/libbinkdec/win32/
 !/dependencies/libsmackerdec/win32/
+!/dependencies/libsmackerenc/win32/
 [Aa][Rr][Mm]/
 [Aa][Rr][Mm]64/
 bld/

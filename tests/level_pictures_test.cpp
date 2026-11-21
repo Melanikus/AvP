@@ -2,6 +2,9 @@
 //   a stand-in for what the memory code now tells the game's sounds
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a place on an animation's picture too far out keeps the shape still (#97)
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   5: a level with no list of pictures
+//   6: the level editor's count of missing pictures
 // What happens to the pictures a level file names, going through the game's real level loader. No game files are needed: each test builds
 // the bytes of a small level file itself.
 //
@@ -18,6 +21,15 @@
 //
 //  3. A frame's places on its picture are worked out in 16.16 (texture_animation.h), so one too far out would run over. A shape with one
 //     stays still, the same way as for a refused picture. Every one in the game's own levels is 0 to 127 texels.
+//
+//  4. Not about pictures: this is the one test that runs chunk_load.cpp, so an animated shape's reach is checked here too. Its box and
+//     radius have to come out right even at the farthest a place can be. (Added 2026-11-14 by Melanikus for the AvP port.)
+//
+//  5. A level with no list of pictures at all (no BMPNAMES) has no list of picture numbers, so a textured polygon's picture is looked up in
+//     nothing: it has to become a line, as a polygon whose picture can't be had does. (Added 2026-11-17 by Melanikus (Frost) for the AvP port.)
+//
+//  6. The level editor's count of missing pictures: only the level's own (the load with CCF_ENVIRONMENT) are counted and named in the log,
+//     with the polygons made lines for them, and in the game, which never turns it on, nothing is. (Added 2026-11-17 by Melanikus (Frost).)
 
 #include <memory>
 #include <stdio.h>
@@ -38,6 +50,7 @@
 // These are in chunk_load.cpp, which doesn't list them in a header
 void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int local_max_index, int *local_tex_index_nos);
 void setup_tex_conv_array(int &max_indices, int *&conv_array, RIFFHANDLE h, Chunk_With_Children *tmpshp);
+void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chunk *smdc);
 
 // ---- stand-ins for the parts of the game the loader calls ----
 
@@ -225,7 +238,7 @@ struct LevelFile
 	}
 
 	// The level's own list of pictures, which is what load_rif_bitmaps goes through
-	void LoadLevelNames(int howMany)
+	void LoadLevelNames(int howMany, int flags = 0)
 	{
 		Bytes bytes;
 		AddNames(bytes, "BMPNAMES", howMany);
@@ -233,7 +246,7 @@ struct LevelFile
 		std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&file, bytes.data(), bytes.size()));
 		handle.envd = environment.get();
 		chunks.push_back(std::move(environment));
-		load_rif_bitmaps(&handle, 0);
+		load_rif_bitmaps(&handle, flags);
 	}
 
 	// An outside shape's own list of pictures, which is the other way a picture gets asked for. This hands back a copy of that shape's list of picture numbers.
@@ -536,11 +549,382 @@ static void TestPlacesTooFarOut()
 	}
 }
 
+// ---- 4. an animated shape's reach ----
+
+// A shape of 4 points and one triangle, with one animation of one frame, whose 4 points are these, around this centre. If leftOut, the
+// triangle is left out of the animation's box, so no point is counted in it. The shape's own points and every normal are zeros, as allowed.
+static Bytes AnimatedShape(int const framePoints[4][3], int const centre[3], bool leftOut)
+{
+	Bytes shape;
+
+	Bytes header(68, 0);
+	int const points = 4;
+	int const polygons = 1;
+	memcpy(&header[24], &points, sizeof(points));
+	memcpy(&header[28], &polygons, sizeof(polygons));
+	AddPart(shape, "SHPHEAD1", header);
+	AddPart(shape, "SHPRAWVT", Bytes(12 * points, 0));
+
+	// A polygon keeps its corners after 16 bytes of other numbers, and -1 ends them
+	Bytes triangle(36, 0);
+	int const corners[5] = { 0, 1, 2, -1, -1 };
+	memcpy(&triangle[16], corners, sizeof(corners));
+	AddPart(shape, "SHPPOLYS", triangle);
+	AddPart(shape, "SHPVNORM", Bytes(12 * points, 0));
+	AddPart(shape, "SHPPNORM", Bytes(12 * polygons, 0));
+
+	// The animation's centre, then its flags and a spare number
+	Bytes middle;
+	for (int axis = 0; axis < 3; axis++)
+	{
+		AddNumber(middle, centre[axis]);
+	}
+	AddNumber(middle, 0);
+	AddNumber(middle, 0);
+	AddPart(shape, "ANSHCEN2", middle);
+
+	// The polygons left out of the box, then two spare numbers
+	if (leftOut)
+	{
+		Bytes outOfTheBox;
+		AddNumber(outOfTheBox, 0);
+		AddNumber(outOfTheBox, 0);
+		AddNumber(outOfTheBox, 0);
+		AddPart(shape, "PNOTINBB", outOfTheBox);
+	}
+
+	// The frame: its numbers (the first is its place, the second its flags) and an empty name, its points, and its polygon's normal
+	Bytes frame;
+	AddPart(frame, "ANIFRADT", Bytes(24, 0));
+	Bytes framePointBytes;
+	for (int point = 0; point < 4; point++)
+	{
+		for (int axis = 0; axis < 3; axis++)
+		{
+			AddNumber(framePointBytes, framePoints[point][axis]);
+		}
+	}
+	AddPart(frame, "SHPRAWVT", framePointBytes);
+	AddPart(frame, "SHPPNORM", Bytes(12 * polygons, 0));
+
+	// The sequence: its numbers (the first is its place) and an empty name, then its frame
+	Bytes sequence;
+	AddPart(sequence, "ANISEQDT", Bytes(24, 0));
+	AddPart(sequence, "ANIMFRAM", frame);
+	AddPart(shape, "ANIMSEQU", sequence);
+
+	return shape;
+}
+
+struct Reach { bool accepted; int radius; int maxX; int minX; };
+
+// Loads that shape as the level reader does, then sets up its animation as the game does, and gives back the sequence's radius and
+// the two ends of its box along x, both measured from the centre.
+static Reach AnimatedShapeReach(int const framePoints[4][3], int const centre[3], bool leftOut)
+{
+	LevelFile level;
+	Bytes const bytes = AnimatedShape(framePoints, centre, leftOut);
+
+	Shape_Chunk *const shape = new Shape_Chunk(&level.file, bytes.data(), bytes.size());
+	level.chunks.push_back(std::unique_ptr<Chunk>(shape));
+	shape->post_input_processing();
+
+	Reach reach = { level.file.error_code == 0, 0, 0, 0 };
+
+	if (reach.accepted)
+	{
+		// A shape's header keeps a list of lists of its points and normals, and setting up its animation points the first of each at the
+		// animation's first frame, so the header needs those lists, as a loaded shape has
+		int *points[1] = { 0 };
+		int *normals[1] = { 0 };
+		int *pointNormals[1] = { 0 };
+
+		SHAPEHEADER header;
+		memset(&header, 0, sizeof(header));
+		header.numitems = 1;
+		header.points = points;
+		header.sh_normals = normals;
+		header.sh_vnormals = pointNormals;
+		local_scale = 1;
+		SetupAnimatingShape(shape, &header, 0);
+
+		shapeanimationsequence const &made = header.animation_header->anim_sequences[0];
+		reach.radius = made.radius;
+		reach.maxX = made.max_x;
+		reach.minX = made.min_x;
+	}
+
+	return reach;
+}
+
+static void TestAnimatedShapeReach()
+{
+	puts("4. an animated shape's reach");
+
+	int const farthest = 1 << 24;   // the farthest a place can be from the level's middle (CheckPlace, in chunk.hpp)
+
+	{
+		int const points[4][3] = { { 100, 50, 25 }, { -100, -50, -25 }, { 0, 0, 0 }, { 0, 0, 0 } };
+		int const centre[3] = { 0, 0, 0 };
+		Reach const reach = AnimatedShapeReach(points, centre, false);
+		Check(reach.accepted && reach.radius == 114 && reach.maxX == 100 && reach.minX == -100, "an ordinary animated shape's box and radius are what they always were");
+	}
+
+	// Each side of the box is 2^25 from the centre, the most it can be, so the radius is the square root of 3 times 2^25
+	{
+		int const points[4][3] = { { farthest, farthest, farthest }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
+		int const centre[3] = { -farthest, -farthest, -farthest };
+		Reach const reach = AnimatedShapeReach(points, centre, false);
+		Check(reach.accepted && reach.maxX == 2 * farthest && reach.minX == farthest, "a shape at the farthest corner, round a centre at the opposite one, has its box 2^25 from the centre");
+		Check(reach.radius == 58117981, "and its radius is the square root of 3 times 2^25, 58,117,981, worked out without running over");
+	}
+
+	// With its one polygon left out of the box, no point is counted, so the box is a single place at the level's middle
+	{
+		int const points[4][3] = { { farthest, farthest, farthest }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
+		int const centre[3] = { farthest, farthest, farthest };
+		Reach const reach = AnimatedShapeReach(points, centre, true);
+		Check(reach.accepted && reach.maxX == -farthest && reach.minX == -farthest, "a sequence with no point counted in its box has a box of a single place, at the level's middle");
+		Check(reach.radius == 29058990, "and its radius is how far that is from the centre, the square root of 3 times 2^24, 29,058,990");
+	}
+}
+
+// ---- 5. a level with no list of pictures ----
+
+// One triangle with a texture, whose picture number and list of texture coordinates are in its colour, as a level file gives it, made into
+// the game's shape (copy_to_shapeheader). Gives back the polygon's kind and colour as the game has them.
+static void ConvertOneTexturedTriangle(LevelFile &level, unsigned int colour, int *kind, unsigned int *convertedColour)
+{
+	ChunkShape triangle;
+
+	triangle.num_verts = 3;
+	triangle.v_list = new ChunkVectorInt[3];
+	triangle.v_normal_list = new ChunkVectorFloat[3];
+
+	for (int i = 0; i < 3; i++)
+	{
+		triangle.v_list[i].x = i == 1 ? 100 : 0;
+		triangle.v_list[i].y = i == 2 ? 100 : 0;
+		triangle.v_list[i].z = 0;
+		triangle.v_normal_list[i].x = 0;
+		triangle.v_normal_list[i].y = 0;
+		triangle.v_normal_list[i].z = 1;
+	}
+
+	triangle.num_polys = 1;
+	triangle.poly_list = new ChunkPoly[1];
+	triangle.p_normal_list = new ChunkVectorFloat[1];
+	triangle.p_normal_list[0].x = 0;
+	triangle.p_normal_list[0].y = 0;
+	triangle.p_normal_list[0].z = 1;
+
+	ChunkPoly &polygon = triangle.poly_list[0];
+
+	polygon.engine_type = I_ZB_Gouraud3dTexturedPolygon;
+	polygon.normal_index = 0;
+	polygon.flags = 0;
+	polygon.colour = colour;
+	polygon.num_verts = 3;
+
+	for (int i = 0; i < 4; i++)
+	{
+		polygon.vert_ind[i] = i < 3 ? i : -1;
+	}
+
+	triangle.num_uvs = 1;
+	triangle.uv_list = new ChunkUV_List[1];
+	triangle.uv_list[0].num_verts = 3;
+
+	for (int i = 0; i < 4; i++)
+	{
+		triangle.uv_list[0].vert[i].u = 0;
+		triangle.uv_list[0].vert[i].v = 0;
+	}
+
+	SHAPEHEADER *made = 0;
+
+	local_scale = 1;
+	copy_to_shapeheader(&level.handle, triangle, made, &level.file, 0, level.handle.max_index, level.handle.tex_index_nos);
+
+	*kind = made ? made->items[0][0] : -1;
+	*convertedColour = made ? (unsigned int)made->items[0][3] : 0;
+}
+
+static void TestNoListOfPictures()
+{
+	puts("5. a level with no list of pictures");
+
+	{
+		// A level file without BMPNAMES: the level has no list of picture numbers at all, so picture 0 (and every other) isn't one it has
+		LevelFile level;
+
+		load_rif_bitmaps(&level.handle, 0);
+		Check(level.handle.tex_index_nos == 0, "a level with no BMPNAMES has no list of picture numbers");
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 0, &kind, &colour);
+		Check(kind == I_Polyline && colour == 0xffffffffu, "its polygon of picture 0 becomes a line, as one whose picture isn't there, and no list is read");
+	}
+
+	{
+		// The same polygon in a level whose list has picture 0 keeps its texture
+		LevelFile level;
+
+		level.LoadLevelNames(1);
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 0, &kind, &colour);
+		Check(kind == I_ZB_Gouraud3dTexturedPolygon && colour == (unsigned int)level.handle.tex_index_nos[0], "with picture 0 in the list, the polygon keeps its texture");
+	}
+}
+
+// ---- 6. the level editor's count of missing pictures ----
+
+// R_SetEditorCountMissingPictures (renderer.h); the editor tells the user how many of a level's pictures couldn't be loaded, and how many polygons are lines for it
+void R_SetEditorCountMissingPictures(bool on);
+void R_EditorMissingPictures(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList, int *picturesPastLimit);
+
+static void TestTheEditorsCount()
+{
+	puts("6. the level editor's count of missing pictures");
+
+	{
+		// The level's own pictures load with CCF_ENVIRONMENT: picture 2 of its three is refused, and one polygon shows it
+		LevelFile level;
+
+		pictureToRefuse = "picture2.RIM";
+		R_SetEditorCountMissingPictures(true);
+
+		Bytes bytes;
+		AddNames(bytes, "BMPNAMES", 3);
+
+		std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&level.file, bytes.data(), bytes.size()));
+		level.handle.envd = environment.get();
+		level.chunks.push_back(std::move(environment));
+		load_rif_bitmaps(&level.handle, CCF_ENVIRONMENT);
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 2, &kind, &colour);
+		ConvertOneTexturedTriangle(level, 1, &kind, &colour);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 1 && lines == 1 && !noList, "the level's one refused picture is counted, with its one polygon drawn as a line, and the level has a list");
+		Check(linesInTheLog == 1, "and the log names it");
+
+		// Another RIF's pictures after the level's (a character's, the HUD's) aren't the level's
+		LevelFile another;
+
+		pictureToRefuse = "picture0.RIM";
+		another.LoadLevelNames(1);
+		ConvertOneTexturedTriangle(another, 0, &kind, &colour);
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 1 && lines == 1, "a later RIF's refused picture and its polygon aren't counted as the level's");
+		R_SetEditorCountMissingPictures(false);
+	}
+
+	{
+		// A level with no list of pictures at all
+		LevelFile level;
+
+		R_SetEditorCountMissingPictures(true);
+		load_rif_bitmaps(&level.handle, CCF_ENVIRONMENT);
+
+		int kind = 0;
+		unsigned int colour = 0;
+
+		ConvertOneTexturedTriangle(level, 0, &kind, &colour);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = false;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(noList && missing == 0 && lines == 1, "a level with no list of pictures is said to have none, with its textured polygon counted as a line");
+		R_SetEditorCountMissingPictures(false);
+	}
+
+	{
+		// The game never sets the count: nothing is counted or said
+		LevelFile level;
+
+		pictureToRefuse = "picture0.RIM";
+		R_SetEditorCountMissingPictures(true);
+		R_SetEditorCountMissingPictures(false);
+
+		Bytes bytes;
+		AddNames(bytes, "BMPNAMES", 1);
+
+		std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&level.file, bytes.data(), bytes.size()));
+		level.handle.envd = environment.get();
+		level.chunks.push_back(std::move(environment));
+		load_rif_bitmaps(&level.handle, CCF_ENVIRONMENT);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 0 && lines == 0 && !noList && linesInTheLog == 0, "in the game nothing is counted, and the log says nothing");
+	}
+
+	{
+		// A missing picture two outside shapes of the level name (each shape's BMPLSTST; their names are asked for as "<its RIF>/<name>", so with no RIF name as
+		// "/picture2.RIM", the same for both): counted and named once (the review, 2026-11-18)
+		LevelFile level;
+
+		R_SetEditorCountMissingPictures(true);
+		level.LoadLevelNames(3, CCF_ENVIRONMENT);
+		pictureToRefuse = "/picture2.RIM";
+		level.LoadShapeNames(3);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 1 && linesInTheLog == 1, "the first outside shape's missing picture is counted and named");
+
+		LevelFile secondShape;   // still the level's load (no other RIF's pictures since): only the list is another shape's
+
+		pictureToRefuse = "/picture2.RIM";
+		secondShape.LoadShapeNames(3);
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(picturesAskedFor == 3 && missing == 1 && linesInTheLog == 0, (std::string("a second shape naming the same missing picture asks for it again, but it is not counted or named again (") +
+			std::to_string(missing) + " counted, " + std::to_string(linesInTheLog) + " more lines in the log)").c_str());
+		R_SetEditorCountMissingPictures(false);
+	}
+
+	{
+		// Past the limit of 4096 a file may ask for: those are counted apart, not as missing pictures the log names (the review, 2026-11-18)
+		LevelFile level;
+
+		R_SetEditorCountMissingPictures(true);
+		level.LoadLevelNames(4098, CCF_ENVIRONMENT);
+
+		int missing = -1, lines = -1, pastLimit = -1;
+		bool noList = true;
+
+		R_EditorMissingPictures(&missing, &lines, &noList, &pastLimit);
+		Check(missing == 0 && pastLimit == 2 && linesInTheLog == 1, (std::string("4098 names that all load: none missing, 2 past the limit, and the log says once that there are too many (") +
+			std::to_string(missing) + " / " + std::to_string(pastLimit) + " / " + std::to_string(linesInTheLog) + ")").c_str());
+		R_SetEditorCountMissingPictures(false);
+	}
+}
+
 int main()
 {
 	TestTheLimit();
 	TestARefusedPicture();
 	TestPlacesTooFarOut();
+	TestAnimatedShapeReach();
+	TestNoListOfPictures();
+	TestTheEditorsCount();
 
 	printf("level_pictures_test: %d passed, %d failed\n", passed, failed);
 	return failed ? 1 : 0;

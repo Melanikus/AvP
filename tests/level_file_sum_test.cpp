@@ -5,15 +5,21 @@
 //
 // - level_file_sum.h on its own: which sizes a level file may be, the words of the line, with the sum the MD5 standard gives for
 //   its own example, and the words for a file refused for its size.
+// - sha256_stream.h on its own: the SHA-256 standard's answers, its input given in pieces of any size (added 2026-11-17 by Melanikus
+//   for the AvP port); and the loader's SHA-256 of each file it loads is Windows' own SHA-256 of that file.
 // - The game's real level loader (File_Chunk, in mishchnk.cpp), on real files this test writes in a folder of its own, which it makes
 //   inside the folder it runs in and names by its own process number:
 //   - a plain level and a packed level both load, and the size and sum each one gives are those of the file as it is on disk;
 //   - a copy with one byte changed gives another sum;
 //   - a file too short to hold a level's heading is refused, and so is a file larger than any level the game can use, even though
-//     everything in it adds up; neither gives a size or a sum, and the log says why each was refused.
+//     everything in it adds up; neither gives a size or a sum, and the log says why each was refused;
+//   - a file with no level environment (REBENVDT) is refused, a level or a model alike, and the same model with one loads (added
+//     2026-11-14 by Melanikus for the AvP port).
 // - By reading the game's source: loading a level writes the line, once, after the level is in and before it's copied into the game,
 //   naming the path it was loaded from; the loader reads the size as a 64-bit number, and every read it makes has to get all it asked
 //   for and adds what it got to the sum; the custom maps list uses the loader's own largest size.
+// - A model's name: a file that holds a hierarchy has to give its own name in its level environment, and one with none is refused; a
+//   file with no hierarchy needs no name (added 2026-11-14 by Melanikus for the AvP port).
 //
 // WHAT IT CAN'T SHOW: a file of 4 GB or more, whose size's lower 32 bits look small. Making one would fill the disk of the computer
 // running the tests. The rule's own check below covers that size, and the source check shows the loader reads all 64 bits.
@@ -38,7 +44,11 @@
 #include "mishchnk.hpp"
 #include "huffman.hpp"
 #include "md5.h"
+#include "sha256_stream.h"
 #include "level_file_sum.h"
+
+#include <bcrypt.h>
+#pragma comment(lib, "bcrypt.lib")   // Windows' own SHA-256, to hold sha256_stream.h to
 
 static int checksFailed = 0;
 
@@ -122,6 +132,42 @@ static Bytes MakeChunk(const char *name, const Bytes &body)
 	return out;
 }
 
+// Two parts of a file, one after the other
+static Bytes Joined(const Bytes &first, const Bytes &second)
+{
+	Bytes out(first);
+
+	out.insert(out.end(), second.begin(), second.end());
+
+	return out;
+}
+
+// A level environment (REBENVDT) with nothing in it. Every file the game loads has to hold one.
+static Bytes Environment()
+{
+	return MakeChunk("REBENVDT", Bytes());
+}
+
+// A model's level environment, which gives the file's own name (RIFFNAME: 5 letters and three 0s), as a model's has to
+static Bytes ModelEnvironment()
+{
+	return MakeChunk("REBENVDT", MakeChunk("RIFFNAME", BytesOf("model\0\0", 8)));
+}
+
+// A model's one hierarchy, the smallest a model file can hold: its outermost chunk, with one section inside, whose only chunk is
+// its name (a count of 0 extra numbers, then the 7 letters and their 0). A section with no animations is left out when the model is
+// built, so it needs nothing more to load.
+static Bytes OneHierarchy()
+{
+	Bytes name;
+
+	PutNumber(name, 0);
+	Bytes const letters = BytesOf("section", 8);
+	name.insert(name.end(), letters.begin(), letters.end());
+
+	return MakeChunk("OBJCHIER", MakeChunk("OBJCHIER", MakeChunk("OBJHIERD", name)));
+}
+
 // The level, packed the way the game packs its levels, as one file: the package and what follows it
 static Bytes Packed(const Bytes &level)
 {
@@ -195,6 +241,72 @@ static bool Same(const unsigned char a[16], const Sum &b)
 	return memcmp(a, b.md5, 16) == 0;
 }
 
+// SHA-256 of some bytes by Windows' own CNG, a second implementation the loader's (sha256_stream.h) is held to. All zeros if CNG failed,
+// which no loaded file's sum equals.
+struct Sha256
+{
+	unsigned char sum[32];
+};
+
+static Sha256 Sha256ByWindows(const Bytes &bytes)
+{
+	Sha256 out = {};
+	BCRYPT_ALG_HANDLE algorithm = NULL;
+
+	if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, NULL, 0) == 0)
+	{
+		BCRYPT_HASH_HANDLE hash = NULL;
+		bool made = false;
+
+		if (BCryptCreateHash(algorithm, &hash, NULL, 0, NULL, 0, 0) == 0)
+		{
+			made = BCryptHashData(hash, (PUCHAR)bytes.data(), (ULONG)bytes.size(), 0) == 0 && BCryptFinishHash(hash, out.sum, sizeof(out.sum), 0) == 0;
+			BCryptDestroyHash(hash);
+		}
+
+		if (!made)
+		{
+			memset(out.sum, 0, sizeof(out.sum));
+		}
+
+		BCryptCloseAlgorithmProvider(algorithm, 0);
+	}
+
+	return out;
+}
+
+static bool SameSha256(const unsigned char a[32], const Sha256 &b)
+{
+	static const unsigned char none[32] = {};
+	return memcmp(b.sum, none, 32) != 0 && memcmp(a, b.sum, 32) == 0;
+}
+
+// sha256_stream.h on some text, fed in pieces of the given size, written as hex
+static std::string StreamSha256(const std::string &text, size_t piece)
+{
+	static const char kHex[] = "0123456789abcdef";
+	Sha256Stream stream;
+	unsigned char sum[32];
+	std::string hex;
+
+	Sha256_Start(&stream);
+
+	for (size_t at = 0; at < text.size(); at += piece)
+	{
+		Sha256_Add(&stream, text.data() + at, text.size() - at < piece ? text.size() - at : piece);
+	}
+
+	Sha256_Finish(&stream, sum);
+
+	for (int i = 0; i < 32; i++)
+	{
+		hex += kHex[sum[i] >> 4];
+		hex += kHex[sum[i] & 15];
+	}
+
+	return hex;
+}
+
 // Loads a file through the game's loader, as load_rif does, and gives back whether it loaded, and the size and sum it worked out
 static bool Loads(const std::string &path, LevelFileSum *sum)
 {
@@ -252,6 +364,18 @@ static std::string Between(const std::string &text, const char *start, const cha
 
 // ---- The tests
 
+// sha256_stream.h gives the SHA-256 standard's own answers (FIPS 180-2 appendix B and its examples), however its input is cut into pieces
+static void TestTheSha256()
+{
+	Check(StreamSha256("abc", 1) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 of \"abc\" is the standard's");
+	Check(StreamSha256("", 1) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "and of nothing");
+	Check(StreamSha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq", 7) ==
+		"248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1", "and of the standard's 56 letters, given 7 at a time");
+	Check(StreamSha256(std::string(1000000, 'a'), 997) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+		"and of a million a's, given 997 at a time");
+	Check(StreamSha256(std::string(1000000, 'a'), 1000000) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0", "or all at once");
+}
+
 static void TestTheRule()
 {
 	printf("The sizes a level file may be, and the line:\n");
@@ -289,36 +413,49 @@ static void TestTheLoader(const std::string &folder)
 {
 	printf("The game's level loader, on real files:\n");
 
-	Bytes const level = MakeChunk("REBINFF2", MakeChunk("SUMTESTS", Bytes(40, 'x')));
+	// The last chunk is the one the test's own bytes are in, so that changing the file's last byte changes one of them
+	Bytes const level = MakeChunk("REBINFF2", Joined(Environment(), MakeChunk("SUMTESTS", Bytes(40, 'x'))));
 	Bytes changed = level;
 	changed.back() = 'y';
 	Bytes const packed = Packed(level);
 	printf("  (the level is packed: %u bytes)\n", (unsigned int)packed.size());
 	Bytes const tooShort = BytesOf("REBINFF2abc", 11);
+	Bytes const noEnvironment = MakeChunk("REBINFF2", MakeChunk("SUMTESTS", Bytes(40, 'x')));
+	Bytes const model = MakeChunk("REBINFF2", Joined(ModelEnvironment(), OneHierarchy()));
+	Bytes const modelNoEnvironment = MakeChunk("REBINFF2", OneHierarchy());
 
 	std::string const plainFile = folder + "Plain.rif";
 	std::string const changedFile = folder + "Changed.rif";
 	std::string const packedFile = folder + "Packed.rif";
 	std::string const shortFile = folder + "Short.rif";
 	std::string const longFile = folder + "Long.rif";
+	std::string const noEnvironmentFile = folder + "NoEnvironment.rif";
+	std::string const modelFile = folder + "Model.rif";
+	std::string const modelNoEnvironmentFile = folder + "ModelNoEnvironment.rif";
 
 	Write(plainFile, level);
 	Write(changedFile, changed);
 	Write(packedFile, packed);
 	Write(shortFile, tooShort);
 	WriteLongLevel(longFile, (unsigned int)kLevelFileMostBytes + 1);
+	Write(noEnvironmentFile, noEnvironment);
+	Write(modelFile, model);
+	Write(modelNoEnvironmentFile, modelNoEnvironment);
 	printf("  (the test's files are written, in %s)\n", folder.c_str());
 
 	LevelFileSum got;
 
 	Check(Loads(plainFile, &got), "a plain level loads");
 	Check(got.bytes == level.size() && Same(got.md5, SumOf(level)), "and its size and sum are those of the file");
+	Check(SameSha256(got.sha256, Sha256ByWindows(level)), "and its SHA-256 is the file's, as Windows' own SHA-256 gives it");
 
 	Check(Loads(changedFile, &got), "a copy with its last byte changed loads");
 	Check(got.bytes == changed.size() && Same(got.md5, SumOf(changed)) && !Same(got.md5, SumOf(level)), "and its sum is its own, not the first file's");
+	Check(SameSha256(got.sha256, Sha256ByWindows(changed)) && !SameSha256(got.sha256, Sha256ByWindows(level)), "and so is its SHA-256");
 
 	Check(Loads(packedFile, &got), "a packed level loads");
 	Check(got.bytes == packed.size() && Same(got.md5, SumOf(packed)), "and its size and sum are those of the file as it is on disk, still packed");
+	Check(SameSha256(got.sha256, Sha256ByWindows(packed)), "and its SHA-256 too, of the file still packed");
 
 	Check(errorLines.empty(), "none of those writes an error in the log");
 
@@ -334,11 +471,66 @@ static void TestTheLoader(const std::string &folder)
 	got.bytes = 1;
 	Check(!Loads(folder + "Missing.rif", &got) && got.bytes == 0, "a file that isn't there is refused, and has no size or sum");
 
+	// Every file the game loads has to hold a level environment. A level and a model go through this same loader (load_rif and
+	// load_rif_non_env), so the rule is the same for both. The model that loads shows the refusal is for the missing environment alone.
+	Check(!Loads(noEnvironmentFile, &got), "a level file with no level environment is refused");
+	Check(Loads(modelFile, &got), "a model file with a hierarchy and a level environment loads");
+	Check(!Loads(modelNoEnvironmentFile, &got), "and the same model with no level environment is refused, as a level would be");
+
 	remove(plainFile.c_str());
 	remove(changedFile.c_str());
 	remove(packedFile.c_str());
 	remove(shortFile.c_str());
 	remove(longFile.c_str());
+	remove(noEnvironmentFile.c_str());
+	remove(modelFile.c_str());
+	remove(modelNoEnvironmentFile.c_str());
+}
+
+// A file that holds a hierarchy is a model, and has to give its own name in its level environment (RIFFNAME), as all 18 of the game's
+// own models do. A file with no hierarchy needs none. Added 2026-11-14 by Melanikus for the AvP port.
+static void TestAModelGivesItsName(const std::string &folder)
+{
+	printf("A model's name:\n");
+
+	// A model's one hierarchy, the smallest a model file can hold: its outermost chunk, with one section inside, whose only chunk is
+	// its name (a count of 0 extra numbers, then the 7 letters and their 0). A section with no animations is left out when the model is
+	// built, so it needs nothing more to load.
+	Bytes sectionName;
+	PutNumber(sectionName, 0);
+	Bytes const letters = BytesOf("section", 8);
+	sectionName.insert(sectionName.end(), letters.begin(), letters.end());
+	Bytes const hierarchy = MakeChunk("OBJCHIER", MakeChunk("OBJCHIER", MakeChunk("OBJHIERD", sectionName)));
+
+	// A level environment that gives the file's name (5 letters and three 0s), and one that gives none
+	Bytes const named = MakeChunk("REBENVDT", MakeChunk("RIFFNAME", BytesOf("model\0\0", 8)));
+	Bytes const unnamed = MakeChunk("REBENVDT", Bytes());
+
+	// A whole file: its heading, then these two parts, one after the other
+	auto const wholeFile = [](const Bytes &first, const Bytes &second)
+	{
+		Bytes inside(first);
+		inside.insert(inside.end(), second.begin(), second.end());
+		return MakeChunk("REBINFF2", inside);
+	};
+
+	std::string const namedFile = folder + "NamedModel.rif";
+	std::string const unnamedFile = folder + "UnnamedModel.rif";
+	std::string const levelFile = folder + "UnnamedLevel.rif";
+
+	Write(namedFile, wholeFile(named, hierarchy));
+	Write(unnamedFile, wholeFile(unnamed, hierarchy));
+	Write(levelFile, wholeFile(unnamed, MakeChunk("SUMTESTS", Bytes(40, 'x'))));
+
+	LevelFileSum got;
+
+	Check(Loads(namedFile, &got), "a model that gives its name loads");
+	Check(!Loads(unnamedFile, &got), "the same model with no name is refused");
+	Check(Loads(levelFile, &got), "and a file with no hierarchy loads with no name");
+
+	remove(namedFile.c_str());
+	remove(unnamedFile.c_str());
+	remove(levelFile.c_str());
 }
 
 static void TestTheGameUsesIt()
@@ -346,11 +538,12 @@ static void TestTheGameUsesIt()
 	printf("Where the game uses it, by reading:\n");
 
 	std::string const system = ReadWholeFile("3dc/avp/win95/system.cpp");
-	std::string const loading = Between(system, "void LoadRifFile()", "textureRelief.LogWhatIsHeld();");
+	// every level comes through LoadTheLevel with the loader it is given: the game's LoadRifFile with avp_load_rif, the editor's TryLoadRifFile with avp_try_load_rif
+	std::string const loading = Between(system, "static bool LoadTheLevel(RIFFHANDLE (*load)(const char *))", "textureRelief.LogWhatIsHeld();");
 	char const *const line = "LogString(LevelFileSum_Line(file_and_path, avp_rif_file_sum(env_rif)));";
 
-	Check(ComesBefore(loading, "env_rif = avp_load_rif((const char*)&file_and_path[0]);", "exit(0x3421);") && ComesBefore(loading, "exit(0x3421);", line) &&
-		ComesBefore(loading, line, "copy_rif_data(env_rif, CCF_ENVIRONMENT"),
+	Check(ComesBefore(loading, "env_rif = load((const char*)&file_and_path[0]);", "return false;") && ComesBefore(loading, "return false;", line) &&
+		ComesBefore(loading, line, "copy_rif_data(env_rif, CCF_ENVIRONMENT") && Has(system, "if (!LoadTheLevel(avp_load_rif))"),
 		"a level that loads says which file it was, by the path it was loaded from, before it's copied into the game");
 	Check(Count(system, "LevelFileSum_Line(") == 1, "once for each level");
 
@@ -365,6 +558,17 @@ static void TestTheGameUsesIt()
 	Check(Count(loader, "ReadFile(") == 4 && Count(loader, ", &bytes_read, 0) || bytes_read != ") == 4,
 		"each of the loader's four reads has to get every byte it asked for");
 	Check(Count(loader, "MD5Update(&sum_so_far, ") == 4, "and each one adds what it read to the sum");
+	Check(Count(loader, "Sha256_Add(&sha256_so_far, ") == 4 && Has(loader, "Sha256_Finish(&sha256_so_far, file_sum.sha256);"),
+		"and to the SHA-256, which is finished with the MD5");
+
+	std::string const loaders = ReadWholeFile("3dc/win95/chunk_load.cpp");
+	// the level's: load_rif reads through try_load_rif (the editor's, which shows nothing on a refusal), and only that one makes the file's chunk
+	std::string const levelLoad = Between(loaders, "RIFFHANDLE load_rif(const char *fname)", "RIFFHANDLE load_rif_non_env(");
+
+	Check(Count(Between(loaders, "RIFFHANDLE try_load_rif(const char *fname)", "RIFFHANDLE load_rif(const char *fname)"), "new File_Chunk(fname);") == 1 &&
+		Has(levelLoad, "RIFFHANDLE const h = try_load_rif(fname);") && Count(levelLoad, "File_Chunk") == 0 &&
+		Count(Between(loaders, "RIFFHANDLE load_rif_non_env(const char *fname)", "void undo_rif_load("), "new File_Chunk(fname);") == 1,
+		"a level's loader and a model's both read their file through that loader, so a model with no level environment is refused too");
 
 	std::string const customMaps = ReadWholeFile("3dc/avp/win95/frontend/custom_maps.cpp");
 	Check(Has(customMaps, "static const long long kCustomMapMostFileBytes = kLevelFileMostBytes;"),
@@ -432,7 +636,9 @@ int main()
 	}
 
 	TestTheRule();
+	TestTheSha256();
 	TestTheLoader(folder);
+	TestAModelGivesItsName(folder);
 	TestTheGameUsesIt();
 
 	RemoveDirectoryA(folder.c_str());

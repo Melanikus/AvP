@@ -1,4 +1,6 @@
 // Modified 2026-11-07 by Melanikus for the AvP port: another marine's lamp can be aimed its own way, by the 1 in LampAim.w.
+// Modified 2026-11-14 by Melanikus (Dietrich) for the AvP port: the lamp's strength, half-distance, cone and spill come from the game, in
+// LampCone and LampFall, so the console can change them playing alone (R-LAMP-1, 3dc/shoulder_lamp.h, THE LAMP'S LOOK).
 // What the three light shaders share: lightTotal.psh, lightShare.psh and lightOne.psh. Each light has to be worked out in exactly the
 // same way everywhere, because lightShare and lightOne divide one light by the total that lightTotal added up. So the sums live here, once.
 
@@ -23,24 +25,23 @@ static const float kShineStrength = 0.8f;
 // How tight it is. A higher number is a smaller, harder glint, like wet skin, and a lower one is a wide sheen.
 static const float kShininess = 40.0f;
 
-// ---- HOW THE MARINE'S SHOULDER LAMP LOOKS. The game reads this file as it starts, so changing one of these needs no rebuild, only a restart. Where the lamp sits and its colour are in 3dc/shoulder_lamp.h.
+// ---- HOW THE MARINE'S SHOULDER LAMP LOOKS. Where the lamp sits and its colour are in 3dc/shoulder_lamp.h, and so are the numbers in LampCone and LampFall below.
 
 // How far ahead of his eyes the lamp is aimed, in millimetres. The lamp is off to the side, so it's angled in to meet the middle of the screen at this distance.
 static const float kLampAimsAt = 6000.0f;
 
-// How wide the cone is, as the cosine of the angle from its middle. It's strongest inside the first, nothing outside the second, and it falls away softly all the way between. Smaller numbers are wider. 0.99 is 8 degrees, 0.93 is 22, and 0.77 is 40.
-static const float kLampFullInside = 0.99f;
-static const float kLampNothingOutside = 0.93f;
-
-// A real small lamp also throws a faint wide spill around its beam. How far that reaches, the same way, and how strong it is where the beam is 1.
+// A real small lamp also throws a faint wide spill around its beam. This is how far that reaches, as the cosine of the angle from the cone's middle: 0.77 is 40 degrees.
+// It has to be kShoulderLampSpillEdge in 3dc/shoulder_lamp.h, whose limits keep the cone's inside well above it.
 static const float kLampSpillOutside = 0.77f;
-static const float kLampSpillStrength = 0.12f;
 
-// How strong it is. At 1 a wall right in front of it shows its own colour.
-static const float kLampStrength = 1.2f;
-
-// How far away, in millimetres, it has fallen to half. This is a big part of what makes it look like light in a room, rather than a shape on the screen: a near wall is bright and a far one dim.
-static const float kLampHalfDistance = 7000.0f;
+// The lamp's look, from the game: see ShoulderLamp_LightNumbers in 3dc/shoulder_lamp.h, which keeps every number inside its limits. Each has a console command, playing alone.
+// LampCone: .x the cone's inside and .y its outside, as cosines of the angle from its middle (strongest inside the first, nothing outside the second, a soft fall between;
+// smaller numbers are wider: 0.90 is 26 degrees and 0.86 is 31); .z how strong the spill is where the beam is 1 (0 is none); .w how strong the lamp is (at 1 a wall right
+// in front of it shows its own colour).
+// LampFall: .x one over the half-distance squared. The half-distance is how far away, in millimetres, its light has fallen to half: a big part of what makes it look like
+// light in a room, rather than a shape on the screen, as a near wall is bright and a far one dim.
+float4 LampCone : register(c26);
+float4 LampFall : register(c27);
 
 // The lamp's aim. For the player's own lamp, .w is 0, and .xy is how far its aim is from where he's looking, across and down, for each unit ahead: it's on a little robot arm
 // that follows him (see ShoulderLamp_FollowTheView in 3dc/shoulder_lamp.h). For any other marine's lamp, .w is 1, and .xyz is the way it points, in the same numbers as the light list.
@@ -127,10 +128,10 @@ float LightShape(float4 light, float shape, float3 position, float3 normal)
     {
         // The middle of the cone goes from the lamp to the place it's aimed at, and this says how close to that this spot is. A surface with no direction of its own gets the same eighth as above.
         float along = dot(normalize(lerp(float3(LampAim.x * kLampAimsAt, -LampAim.y * kLampAimsAt, kLampAimsAt) - light.xyz, LampAim.xyz, LampAim.w)), -toLight / max(howFar, 1.0f));
-        float inCone = smoothstep(kLampSpillOutside, kLampFullInside, along) * kLampSpillStrength + smoothstep(kLampNothingOutside, kLampFullInside, along);
+        float inCone = smoothstep(kLampSpillOutside, LampCone.x, along) * LampCone.z + smoothstep(LampCone.y, LampCone.x, along);
         float facing = (turned == 0.0f) ? 0.125f : saturate(turned);
 
-        return kLampStrength * inCone * facing * (1.0f - reach * reach) / (1.0f + howFar * howFar / (kLampHalfDistance * kLampHalfDistance));
+        return LampCone.w * inCone * facing * (1.0f - reach * reach) / (1.0f + howFar * howFar * LampFall.x);
     }
 
     return (1.0f - reach * reach) * ((turned > 0.0f) ? slant : pastTheEdge);

@@ -1,9 +1,11 @@
 // How much of a light reaches what's on screen. Written 2026-11-06 by Melanikus for the AvP port. See light_choice.h for what this is for.
+// Modified 2026-11-14 by Melanikus for the AvP port: a polygon's length is asked to be a real number, by its bits, before it's divided by.
 
 #include "light_choice.h"
 
 #include <math.h>
 #include <algorithm>
+#include "real_numbers.h"
 
 namespace
 {
@@ -153,7 +155,10 @@ void LightChoice_AddPolygon(LightChoiceSamples *samples, const float *pts, int c
 
 	float const length = sqrtf(nx * nx + ny * ny + nz * nz);
 
-	if (!(length > 0.0f))
+	// It's divided by next, so it has to be a real number above 0. Whether it's real is told by its bits (real_numbers.h) before it's
+	// compared: the game is built with the compiler's fast rules for fractions, under which a comparison isn't promised to catch "not a
+	// number" or infinity. (Changed 2026-11-14 by Melanikus for the AvP port; it was a comparison alone.)
+	if (!IsRealNumber(length) || !(length > 0.0f))
 	{
 		return;
 	}

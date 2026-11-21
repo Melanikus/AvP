@@ -1,0 +1,128 @@
+{
+	"copy": [
+		"tests",
+		"3dc"
+	],
+	"rows": [
+		{
+			"name": "it draws with one of the game's frames open",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "|| !orthoList || frameIsOpen\n", "to": "|| !orthoList\n" }
+			]
+		},
+		{
+			"name": "it draws with the game's quads already on the screen list",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\t|| orthoList->GetSize() != 0 || width < 1", "to": "\t\t|| width < 1" }
+			]
+		},
+		{
+			"name": "it takes any width or height",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "uint32_t const mostSide = 16384;", "to": "uint32_t const mostSide = 0xFFFFFFFFu;" }
+			]
+		},
+		{
+			"name": "it gives back early, before putting back",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\t\t// The list is the game's again, empty, as its next frame expects\n", "to": "\t\t\treturn false;\n\t\t\t// The list is the game's again, empty, as its next frame expects\n" }
+			]
+		},
+		{
+			"name": "the screen block isn't put back",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\tScreenDescriptorBlock = gameScreen;\n", "to": "" }
+			]
+		},
+		{
+			"name": "the orthographic matrix isn't put back",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\td3d.matOrtho = gameOrtho;\n", "to": "" }
+			]
+		},
+		{
+			"name": "the render target isn't put back",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\td3d.lpD3DDevice->SetRenderTarget(0, gameTarget);\n", "to": "" }
+			]
+		},
+		{
+			"name": "the depth buffer isn't put back",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\td3d.lpD3DDevice->SetDepthStencilSurface(gameDepth);\n", "to": "" }
+			]
+		},
+		{
+			"name": "the viewport isn't put back",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\td3d.lpD3DDevice->SetViewport(&gameViewport);\n", "to": "" }
+			]
+		},
+		{
+			"name": "the render target it asked for is kept",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\tgameTarget->Release();\n", "to": "" }
+			]
+		},
+		{
+			"name": "the depth buffer it asked for is kept",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\n\tif (gameDepth)\n\t{\n\t\tgameDepth->Release();\n\t}\n", "to": "\n\tif (gameDepth)\n\t{\n\t}\n" }
+			]
+		},
+		{
+			"name": "the chain's back buffer it asked for is kept",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\tchainBuffer->Release();\n", "to": "" }
+			]
+		},
+		{
+			"name": "the screen list is given back to the game with the panels still on it",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\t\t// The list is the game's again, empty, as its next frame expects\n\t\t\torthoList->Reset();\n", "to": "\t\t\t// The list is the game's again, empty, as its next frame expects\n" }
+			]
+		},
+		{
+			"name": "the screen list's vertex buffer is left open",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\t\t\td3d.orthoVB->Unlock();\n", "to": "" }
+			]
+		},
+		{
+			"name": "the chain's-pixels switch starts on",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "static bool drawingToChain = false;", "to": "static bool drawingToChain = true;" }
+			]
+		},
+		{
+			"name": "WPos2DC uses the menus' grid while the chain is filled",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\tif (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn ((float(pos / (float)640)", "to": "\tif ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn ((float(pos / (float)640)" }
+			]
+		},
+		{
+			"name": "HPos2DC uses the menus' grid while the chain is filled",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\tif (!drawingToChain && (GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn (float(pos / (float)480)", "to": "\tif ((GetAvPMenuState() != MENUSSTATE_STARTGAME)) {\n\t\treturn (float(pos / (float)480)" }
+			]
+		},
+		{
+			"name": "the switch is never turned on around fill()",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\t\t\tdrawingToChain = true;\n", "to": "" }
+			]
+		},
+		{
+			"name": "the switch stays on after fill()",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "\t\t\t\tdrawingToChain = false;\n", "to": "" }
+			]
+		},
+		{
+			"name": "something else in the file turns the switch on",
+			"changes": [
+				{ "file": "3dc/d3d_render.cpp", "from": "static bool drawingToChain = false;\n", "to": "static bool drawingToChain = false;\nstatic void AlsoOn() { drawingToChain = true; }\n" }
+			]
+		}
+	]
+}

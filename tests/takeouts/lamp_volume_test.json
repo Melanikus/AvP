@@ -230,8 +230,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "\tif (toyFinalFlush)\n\t{\n\t\tDrawLampBeams();\n\t}\n\n\t// draw player weapon",
-					"to": "\t// draw player weapon"
+					"from": "\tif (toyFinalFlush)\n\t{\n\t\tDrawLampBeams();\n",
+					"to": "\tif (toyFinalFlush)\n\t{\n"
 				}
 			]
 		},
@@ -310,7 +310,7 @@
 			"changes": [
 				{
 					"file": "3dc/lamp_volume.h",
-					"from": "static const float kLampVolumeConeCos = 0.93f;",
+					"from": "static const float kLampVolumeConeCos = 0.86f;",
 					"to": "static const float kLampVolumeConeCos = -0.1f;"
 				}
 			]
@@ -506,12 +506,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: the pool's rim isn't the real light's",
+			"name": "the pool's rim isn't the real light's as built",
 			"changes": [
 				{
 					"file": "3dc/lamp_volume.h",
-					"from": "static const float kLampVolumeFullInside = 0.99f;",
-					"to": "static const float kLampVolumeFullInside = 0.98f;"
+					"from": "static const float kLampVolumeFullInside = 0.90f;",
+					"to": "static const float kLampVolumeFullInside = 0.89f;"
 				}
 			]
 		},

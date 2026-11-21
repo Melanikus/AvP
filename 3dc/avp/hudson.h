@@ -36,6 +36,7 @@ extern int HudsonWayOfDying;
 
 // True only in a run that asked for a fight, with combat=. Then nothing in the world is kept still, and a marine can have a target like any other.
 extern bool HudsonWorldIsLive;
+extern bool HudsonLanesAreOn;   // lanes=yes: the lane probe keeps the level's own NPCs, generators and hive still, all but its one alien (hudson_lanes.h)
 
 // True only in a watched fight with holdfire=yes. Then a marine takes nothing as a target, so the alien being watched gets to him. False in a real game.
 extern bool HudsonMarineHoldsFire;
@@ -106,6 +107,10 @@ void Hudson_SayWhichShaderWasCompiled(const char *path);
 
 // A run's window stays out of the way, unless it was asked to show itself: then this is false, and the window opens as a normal game's does.
 bool Hudson_StaysOutOfTheWay();
+
+// Puts the player at place as a fight run moves him: his world place, the rooms he is in, and the view's place (the lane probe's standat=, hudson_lanes.cpp). Nothing outside a run.
+// Added 2026-11-19 by Melanikus (Frost)
+void Hudson_MoveThePlayerTo(const VECTORCH &place);
 
 // A run's window goes on the second screen, where it covers nothing anyone's using, if there is one and the run didn't say screen=main. If so, this changes where it goes and how big it is, and says true. Outside a run it does nothing and says false.
 bool Hudson_PlaceTheWindow(int *left, int *top, int *width, int *height);

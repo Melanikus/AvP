@@ -581,6 +581,89 @@ foreach ($case in $hudsonCases)
     }
 }
 
+# --- SAY MARKS (Bishop for the owner, 2026-11-21: "if I say 'stuck' in SAY log do you see it"). While he plays, -dev -saymarks lets the lane
+# probe WATCH his game with no run of Hudson's: SayMarksAreOn, a second switch, turned on only by its own reader from both words. It extends a
+# security rule, so the check holds it to the same rules as HudsonRunIsOn, and more: it may be read only as the first check of the few
+# functions the check lists as watch-only (they only read the game and write the log), never by anything that acts (Hudson's play, its
+# supply, immortality, stock forcing, standat, a time end, a menu, window or video call), which stays asleep on HudsonRunIsOn alone. Added
+# 2026-11-21 by Melanikus (Frost) for the AvP port.
+$sayGood = (@(
+    'bool SayMarksAreOn = false;',
+    '',
+    'bool HudsonSayMarks_IsAskedFor(const char *commandLine)',
+    '{',
+    "`treturn CommandLineHasWord(commandLine, `"-dev`") && CommandLineHasWord(commandLine, `"-saymarks`");",
+    '}',
+    '',
+    'void HudsonSayMarks_ReadCommandLine(const char *commandLine)',
+    '{',
+    "`tif (!HudsonSayMarks_IsAskedFor(commandLine))",
+    "`t{",
+    "`t`treturn;",
+    "`t}",
+    '',
+    "`tSayMarksAreOn = true;",
+    '}',
+    '',
+    'void HudsonSayMarks_Said(const char *words)',
+    '{',
+    "`tif (!SayMarksAreOn)",
+    "`t{",
+    "`t`treturn;",
+    "`t}",
+    '',
+    "`tWrite(words);",
+    '}',
+    '',
+    'void HudsonLanes_AlienAfter(int a)',
+    '{',
+    "`tif (!HudsonRunIsOn && !SayMarksAreOn)",
+    "`t{",
+    "`t`treturn;",
+    "`t}",
+    '',
+    "`tLook(a);",
+    '}',
+    '') -join "`n")
+$sayGame = $gameMore + "`nvoid Say(const char *w)`n{`n`tHudsonSayMarks_ReadCommandLine(w);`n`tHudsonSayMarks_Said(w);`n`tHudsonLanes_AlienAfter(1);`n}`n"
+$sayRead = "reads SayMarksAreOn: only the first check of one of the watch-only functions this check lists may"
+
+function With-SayMarks([hashtable]$more)
+{
+    $files = @{ '3dc/avp/hudson_saymarks.cpp' = $sayGood; '3dc/avp/game.cpp' = $sayGame }
+    foreach ($name in $more.Keys) { $files[$name] = $more[$name] }
+    return $files
+}
+
+$sayCases = @(
+    @{ What = 'SAY marks that start asleep, watching only through a listed function, are let through'; Files = (With-SayMarks @{}); Passes = "A player's game can't run Hudson: 5 of its names are used by the game, each one checked." },
+    @{ What = 'SayMarksAreOn starting true is refused'; Files = (With-SayMarks @{ '3dc/avp/hudson_saymarks.cpp' = $sayGood.Replace('bool SayMarksAreOn = false;', 'bool SayMarksAreOn = true;') }); Reason = 'SayMarksAreOn must be defined once, as bool SayMarksAreOn = false; it is: 3dc/avp/hudson_saymarks.cpp line 1: bool SayMarksAreOn = true;' },
+    @{ What = 'the game turning SayMarksAreOn on is refused'; Files = (With-SayMarks @{ '3dc/avp/game.cpp' = $sayGame + "`nvoid Cheat()`n{`n`tSayMarksAreOn = true;`n}`n" }); Reason = "3dc/avp/game.cpp line 20 names SayMarksAreOn: only Hudson's files may name it" },
+    @{ What = 'and the game only reading it'; Files = (With-SayMarks @{ '3dc/avp/game.cpp' = $sayGame + "`nvoid Look()`n{`n`tif (SayMarksAreOn) { }`n}`n" }); Reason = "3dc/avp/game.cpp line 20 names SayMarksAreOn: only Hudson's files may name it" },
+    @{ What = 'SayMarksAreOn turned on outside its reader is refused'; Files = (With-SayMarks @{ '3dc/avp/hudson_saymarks.cpp' = $sayGood + "`nvoid HudsonSayMarks_Other()`n{`n`tSayMarksAreOn = true;`n}`n" }); Reason = '3dc/avp/hudson_saymarks.cpp line 40 changes SayMarksAreOn: only HudsonSayMarks_ReadCommandLine may, once, to true' },
+    @{ What = 'SAY marks turned on without the first check are refused'; Files = (With-SayMarks @{ '3dc/avp/hudson_saymarks.cpp' = $sayGood.Replace("`tif (!HudsonSayMarks_IsAskedFor(commandLine))`n`t{`n`t`treturn;`n`t}`n`n", '') }); Reason = 'HudsonSayMarks_ReadCommandLine (3dc/avp/hudson_saymarks.cpp line 8) must start by giving up unless HudsonSayMarks_IsAskedFor(commandLine)' },
+    @{ What = 'SAY marks asked for with -dev alone are refused'; Files = (With-SayMarks @{ '3dc/avp/hudson_saymarks.cpp' = $sayGood.Replace(' && CommandLineHasWord(commandLine, "-saymarks")', '') }); Reason = 'HudsonSayMarks_IsAskedFor must be defined once, as: return CommandLineHasWord(commandLine, "-dev") && CommandLineHasWord(commandLine, "-saymarks");' },
+    @{ What = 'and with -saymarks alone'; Files = (With-SayMarks @{ '3dc/avp/hudson_saymarks.cpp' = $sayGood.Replace('CommandLineHasWord(commandLine, "-dev") && ', '') }); Reason = 'HudsonSayMarks_IsAskedFor must be defined once, as: return CommandLineHasWord(commandLine, "-dev") && CommandLineHasWord(commandLine, "-saymarks");' },
+    @{ What = 'a way in that is not on the watch-only list starting "if (!HudsonRunIsOn && !SayMarksAreOn)" is refused'; Files = (With-SayMarks @{ '3dc/avp/hudson.cpp' = $hudsonMore + "`nvoid Hudson_Go()`n{`n`tif (!HudsonRunIsOn && !SayMarksAreOn)`n`t{`n`t`treturn;`n`t}`n`n`tIsImmortal = 1;`n}`n"; '3dc/avp/game.cpp' = $sayGame + "`nvoid More()`n{`n`tHudson_Go();`n}`n" }); Reason = "3dc/avp/hudson.cpp line 30 $sayRead" },
+    @{ What = 'Hudson acting on SayMarksAreOn is refused'; Files = (With-SayMarks @{ '3dc/avp/hudson.cpp' = $hudsonMore.Replace("`tDoIt();", "`tif (SayMarksAreOn)`n`t{`n`t`tIsImmortal = 1;`n`t}") }); Reason = "3dc/avp/hudson.cpp line 25 $sayRead" },
+    @{ What = 'a watch-only function whose check gives up only with something else too is refused'; Files = (With-SayMarks @{ '3dc/avp/hudson_saymarks.cpp' = $sayGood.Replace("`tif (!HudsonRunIsOn && !SayMarksAreOn)`n", "`tif (!HudsonRunIsOn && !SayMarksAreOn && plan.x)`n") }); Reason = "3dc/avp/hudson_saymarks.cpp line 30 $sayRead" }
+)
+
+foreach ($case in $sayCases)
+{
+    Make-HudsonRepository $case.Files
+
+    if ($case.ContainsKey('Passes'))
+    {
+        $result = Run-Script 'check-hudson-asleep.ps1' @('-Repository', $work)
+        Check ($result.Code -eq 0 -and $result.Text.Contains($case.Passes)) "$($case.What). It said: $($result.Text)"
+    }
+    else
+    {
+        Expect-Refused 'check-hudson-asleep.ps1' @('-Repository', $work) $case.Reason $case.What
+    }
+}
+
 # No Hudson at all, as in a commit from before it came in, is let through
 Make-GoodRepository
 $result = Run-Script 'check-hudson-asleep.ps1' @('-Repository', $work)

@@ -85,6 +85,9 @@ texID_t Tex_CreateWithCopies (const std::string &textureName, uint32_t side, uin
 bool Tex_LockCopy   (texID_t textureID, uint32_t level, uint8_t **data, uint32_t *pitch);
 bool Tex_UnlockCopy (texID_t textureID, uint32_t level);
 texID_t Tex_CreateFromFile (const std::string &filePath);
+// A .BMP picture read by bmp_picture.h (never handed to D3DX: it comes from anyone), opaque; MISSING_TEXTURE when there's no such file or it isn't one
+// bmp_picture.h takes. For the level editor's Prefer .BMP over .RIM (projload.cpp). Added 2026-11-18 by Melanikus (Frost) for the AvP port.
+texID_t Tex_CreateFromBMP  (const std::string &fileName);
 texID_t Tex_CheckExists    (const std::string &textureName);
 
 texID_t Tex_AddExistingTexture(Texture &texture);

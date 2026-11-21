@@ -102,6 +102,12 @@ enum HudsonGridKind
 	kHudsonGridDrop          // he can drop from here. link says where he lands
 };
 
+// A box in the world's numbers (mm, y down), for SetShut: a shut door's module, say
+struct HudsonGridBox
+{
+	int minX, minY, minZ, maxX, maxY, maxZ;
+};
+
 struct HudsonGridCell
 {
 	int x, y, z;             // the middle of its column, on the floor
@@ -145,6 +151,22 @@ public:
 	// Is a point one of the places marked? The point is taken the way a search takes where it's going, so a spot in the air counts as the floor under it.
 	bool IsMarked(const std::vector<uint8_t> &marks, int x, int y, int z) const;
 
+	// Is the floor at a point one where only a crouched marine fits: something in his square between a step up and his height, and nothing below his crouched height?
+	// Measured from the level's polygons, whatever the floor is marked as. This is where Hudson crouches when he plays (hudson_play.cpp; the owner 11-20, watching him
+	// on test levels whose rooms are marked as ducts: "hudson doesn't need to follow that flag"). False with no map, or for a point on no floor the map knows.
+	// Added 2026-11-20 by Melanikus (Frost) for the AvP port.
+	bool OnlyCrouchedFits(int x, int y, int z) const;
+
+	// crouchanywhere=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port: shft21's crouch-only walkway, and with Airduct off no duct is marked at all): the next
+	// Build makes a place wherever a crouched marine fits, as it does in a marked duct, whatever the floor's mark. Off unless asked; kept across builds until asked off.
+	void SetCrouchAnywhere(bool on) { crouchAnywhere = on; }
+	bool CrouchesAnywhere() const { return crouchAnywhere; }
+
+	// doorwalls=yes (added 2026-11-20 by Melanikus (Frost) for the AvP port, the full Genshd1 run: his way ran through doors that were shut): the places inside
+	// these boxes are left out of every search and every reach, until it's asked again without them. A Build forgets them, as its places are new.
+	void SetShut(const std::vector<HudsonGridBox> &boxes);
+	size_t ShutPlaces() const { return shutPlaces; }
+
 	// The places near a point, up to most of them. It gives back how many it wrote. This is what a drawing of the map reads, and it never looks further than radius, so it can't take long.
 	int CellsNear(int x, int y, int z, int radius, HudsonGridCell *cells, int most) const;
 
@@ -167,6 +189,13 @@ private:
 	{
 		int low, high;
 		uint8_t flags;
+	};
+
+	// A floor where only a crouched marine fits: its column and its height (going up)
+	struct LowFloor
+	{
+		uint16_t ix, iz;
+		int height;
 	};
 
 
@@ -208,6 +237,10 @@ private:
 	std::vector<uint32_t> moves;          // each is a place's number times 2, plus 1 if it's a drop
 	std::vector<uint8_t> fromWall;        // how many moves he is from a place with a way blocked, up to 255
 	std::vector<uint8_t> smallPatch;      // the floor this place is on is too small to count as anywhere: the top of a lamp, say
+	std::vector<LowFloor> lowFloors;      // the floors where only a crouched marine fits (OnlyCrouchedFits), in row, column and height order
+	bool crouchAnywhere = false;          // SetCrouchAnywhere: places wherever crouched fits (crouchanywhere=yes)
+	std::vector<uint8_t> placeShut;       // SetShut: 1 for a place inside a shut door's box (doorwalls=yes); empty while nothing is shut
+	size_t shutPlaces = 0;
 	size_t drops, polygonsLeftOut, polygonsUsed, bitsBeforeJoining;
 
 	// One search

@@ -26,6 +26,14 @@
 //   a square picture with all its smaller copies
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed the line that pulled in the Xbox header, because the Xbox port's folder was deleted
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   the level editor's missing pictures: R_SetEditorDrawPolylines, R_SetEditorCountMissingPictures, R_EditorMissingPictures
+// Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
+//   the level editor's polygon view distance: R_SetEditorFarPlane; Prefer .BMP over .RIM: R_SetEditorPreferBmp
+// Modified 2026-11-19 by Melanikus (Frost) for the AvP port:
+//   the level editor's world lines: up to kEditorWorldLinesMost, 524288 (it was 4096)
+// Modified 2026-11-21 by Melanikus (Frost) for the AvP port:
+//   the level editor's views for the live plot: R_SetEditorWorldLinesSlot, R_EditorFlushWorldWithLines, R_SetEditorFinalLinesSlot, R_EditorClearBox
 
 #ifndef _renderer_h_
 #define _renderer_h_
@@ -103,6 +111,12 @@ bool R_UnsetVertexShader();
 
 // pixel shader functions
 bool R_CreatePixelShader  (const std::string &fileName, r_PixelShader &pixelShader);
+
+// Where a shader's text comes from (AVP_OpenInteng, its shaders baked in, 2026-11-19). Unset, as the game leaves it: the file shaders/<name>, as always. Set, only by the
+// level editor's own code (never by a setting): it gives the text of <name>, a .vsh, a .psh or an .fxh one of them includes, and its length in bytes, or false when it has
+// none, which fails that shader as a missing file does. No file is read then; the compile is the same call in its in-memory form, with the same entry, profile and flags.
+typedef bool (*R_ShaderTextSource)(const char *name, const char **text, size_t *length);
+void R_SetShaderTextSource(R_ShaderTextSource source);
 bool R_SetPixelShader     (r_PixelShader &pixelShader);
 void R_ReleasePixelShader (r_PixelShader &pixelShader);
 bool R_SetPixelShaderConstant (r_PixelShader &pixelShader, uint32_t registerIndex, enum SHADER_CONSTANT type, const void *constantData);
@@ -128,8 +142,154 @@ void DrawCloudTable			(uint32_t topX, uint32_t topY, uint32_t wordLength, uint32
 void DrawFadeQuad			(uint32_t topX, uint32_t topY, uint32_t alpha);
 void DrawSmallMenuCharacter (uint32_t topX, uint32_t topY, uint32_t texU, uint32_t texV, uint32_t red, uint32_t green, uint32_t blue, uint32_t alpha);
 void DrawQuad				(uint32_t x, uint32_t y, uint32_t width, uint32_t height, texID_t textureID, uint32_t colour, enum TRANSLUCENCY_TYPE translucencyType);
+// DrawQuad with no filtering: every texel of the texture lands on one pixel when the quad is the texture's size. The game never calls it; the editor draws inteng's
+// own menu font with it, one letter a texture (white where a bit is set, see-through elsewhere), in the letter's colour. (Added 2026-11-16 by Melanikus for the AvP port.)
+void DrawQuadSharp			(uint32_t x, uint32_t y, uint32_t width, uint32_t height, texID_t textureID, uint32_t colour, enum TRANSLUCENCY_TYPE translucencyType);
 void DrawFmvFrame			(uint32_t frameWidth, uint32_t frameHeight, const std::vector<texID_t> &textureIDs);
 void DrawFontQuad			(uint32_t x, uint32_t y, uint32_t charWidth, uint32_t charHeight, texID_t textureID, float *uvArray, uint32_t colour, enum TRANSLUCENCY_TYPE translucencyType);
+
+// A screen of text and menu pictures drawn into another swap chain, between the game's own frames: the chain's back buffer cleared to
+// background (an ARGB colour), then everything fill(context) draws with Font_DrawText and the other screen-list calls, at width by height
+// pixels, then the chain presented. The game never calls it; AVP_OpenInteng's panels do (R-DRAW-CHAIN-1, d3d_render.cpp says the rules).
+// Gives back true when the chain was presented. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port.
+struct IDirect3DSwapChain9;
+bool R_DrawScreenToChain	(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t height, uint32_t background, void (*fill)(void *context), void *context);
+// The next R_DrawScreenToChain also saves its chain's picture as drawn, before it's shown, as a PNG at path, for a proof run, which has
+// nothing on the screen to capture. A path of 260 letters or more, or none, asks for nothing, and so cancels one asked for. Afterwards
+// R_ChainPictureSaved says whether the last picture asked for was saved. Added 2026-11-14 by Melanikus (Dietrich) for the AvP port
+// (R-DRAW-CHAIN-1 D3).
+void R_SaveNextChainPicture	(const char *path);
+bool R_ChainPictureSaved		();
+// While the level editor adds its panels to the game's own frame (after the level, before the frame is shown), its text and menu calls ask for
+// places in pixels, as they are while a level runs, and not on the menus' 640 by 480 grid, which is what they read outside a running level.
+// Off again when it's done. R_DrawScreenToChain sets the same switch for its own list. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port
+// (R-DRAW-CHAIN-1 D4).
+void R_SetScreenPlacesInPixels	(bool inPixels);
+// The object the level editor has selected, as the game's display block, or 0 for none: it is drawn again in green over the level, a pass of
+// its own (a see-through green over the solid modes, green lines in the wire modes), and nothing else changes. Only the editor sets it. Added
+// 2026-11-15 by Melanikus (Dietrich) for the AvP port (R-DRAW-CHAIN-1 D5).
+// The level editor's switch for the draw mode's fill: each drawing of the world lists sets the card's fill (lines or solid) from WireFrameMode itself, and
+// the screen lists after it are solid. Without it the last drawing of a frame took the fill the HUD's adds had left, so the nearest polygons were solid
+// in a wire mode. Only the editor sets it; the game never does. (d3d_render.cpp)
+void R_SetEditorFillFollowsWire	(bool on);
+
+// THE LEVEL EDITOR'S THREE ORTHOGRAPHIC VIEWS (inteng's track and point screens: top left the x/y view, top right the z/y view, bottom left the x/z view;
+// bottom right is left to the 3D view). A drawing of its own over the level, in inteng's 640 by 480 screen laid over the box of the window the editor gives:
+// every polygon edge of every module and object in play, as lines, with a black ground behind each quarter, a crosshair at the 3D cursor, and the
+// selected objects in green. Only the editor turns it on; the game never does. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
+// A view's numbers are inteng's own view record (FUN_004f3e30): a place on the 640 by 480 screen (origin), world units a pixel stands for (scale), and the
+// world place that origin shows (world); a world place maps to the screen as (world - worldOffset) / scale + origin, x across for the x/y and x/z views, z
+// across and FLIPPED for the z/y view, y down, and z down FLIPPED for the x/z view.
+struct EditorOrthoView
+{
+	int originX, originY;
+	int scaleX, scaleY;
+	int worldX, worldY, worldZ;
+};
+struct EditorOrtho
+{
+	bool on;
+	bool showLevel;                      // true: the level's own polygons are drawn in the views too (a stand-in; inteng's screen shows only the track)
+	EditorOrthoView views[3];            // 0: x across, y down; 1: z across (flipped), y down; 2: x across, z down (flipped)
+	int boxLeft, boxTop, boxWidth, boxHeight;   // the window's pixels the 640 by 480 screen is laid over
+	bool crossShown[3];                  // a crosshair in each view, at the screen place given (FUN_00553ab0's own drawing is not read: a small cross, ours)
+	int crossX[3], crossY[3];
+};
+void R_SetEditorOrtho			(const EditorOrtho *settings);
+// Lines drawn in the three views in the world places given (the track's own space on the track screens), each in its own ARGB colour: up to 4096; count 0 none
+struct EditorOrthoLine
+{
+	int x0, y0, z0, x1, y1, z1;
+	unsigned int colour;
+};
+void R_SetEditorOrthoLines		(const EditorOrthoLine *lines, int count);
+// The most lines R_SetEditorWorldLines takes; more are left out. The waypoint display draws every AI module's boxes and links at once (genshd1 v2d: about 235,000 lines);
+// the editor's side (level_view.cpp) keeps to the same number. It was 4096. (Frost 2026-11-19, the owner's waypoint display.)
+static const int kEditorWorldLinesMost = 524288;
+// Lines drawn in the level editor's 3D view, in the level's own world places (millimetres, the places the view's objects have), each in its own ARGB colour: up to kEditorWorldLinesMost; count 0 none. They are
+// drawn in the last drawing of a frame, after the whole level is in the depth buffer, so a wall hides a line behind it, about three pixels wide, and everything the drawing changes on the card is
+// put back. EDITOR ONLY: the game never calls this, and with no lines set no game draw path does anything different. Added 2026-11-15 by Melanikus (Drake) for the AvP port (the waypoint boxes and the
+// entry-point markers of the level editor's Waypoint mode).
+struct EditorWorldLine
+{
+	int x0, y0, z0, x1, y1, z1;
+	unsigned int colour;
+};
+void R_SetEditorWorldLines		(const EditorWorldLine *lines, int count);
+// Flat filled triangles drawn in the level editor's 3D view, in the level's own world places (millimetres), each in its own ARGB colour (the alpha is ignored: opaque): up to 4096; count 0 none. Drawn
+// in the same last drawing of a frame as the lines (R_SetEditorWorldLines), a little before them, compared with the level's depth (a wall hides one behind it) and not written into it, with the same
+// small pull toward the camera so a triangle lying in a wall's own plane shows over it. EDITOR ONLY: the game never calls this, and with no triangles set no game draw path does anything different.
+// Added 2026-11-16 by Melanikus (Drake) for the AvP port (the level editor's light markers and Stability faces, which inteng draws as filled flat polygons).
+struct EditorWorldTriangle
+{
+	int x0, y0, z0, x1, y1, z1, x2, y2, z2;
+	unsigned int colour;
+	int group = -1;   // -1: none (the default, so a builder that forgets it never makes a group). A group of triangles that follow one another with the same number (0 or more) is drawn inside an occlusion query (R_EditorTriangleGroupPixels says how many of its pixels were seen)
+};
+void R_SetEditorWorldTriangles	(const EditorWorldTriangle *triangles, int count);
+// How many pixels of the triangle group with this number were drawn (passed the depth test) in the last frame whose answer has come back: 0 is "hidden" (by the level, or off the screen), -1 is "not known (yet)".
+// One frame late. Editor only: the game never sets a group, so it never asks.
+int R_EditorTriangleGroupPixels(int group);
+// The level editor's 3D view in a box of the window, not the whole of it (the bottom right quarter of the three-view layout): the world's drawings go into
+// that box of the window (x, y, width, height in pixels), with the projection's aspect made the box's own; the screen lists (HUD, panels) still go over the whole
+// window. Off (on false) puts the game's own projection back. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
+void R_SetEditorMainViewport	(bool on, int x, int y, int width, int height);
+// Editor-only: draws everything waiting in the lists NOW, into the box set by R_SetEditorMainViewport, and starts them again (the frame stays open). The editor's split screen draws each extra
+// camera's world this way inside one frame, then the main view as usual. Does nothing when no frame is open.
+void R_EditorFlushWorld			(void);
+// THE LIVE PLOT'S VIEWS, editor only (Frost 2026-11-21, the owner: "I want to see the modules updating on the map as they are build and the little image should show
+// progress as volumes are being placed on it"). The editor's lines are kept in two slots: 0 is R_SetEditorWorldLines' own list (R_SetEditorWorldLines(l, n) is
+// R_SetEditorWorldLinesSlot(0, l, n)), 1 a second list for a view drawn after the main view. Each slot keeps its own copy on the card, sent again only when its lines
+// change. A slot outside 0..1 is refused. With none of these called, every drawing is as before: the frame's last drawing draws slot 0, an early drawing draws none.
+void R_SetEditorWorldLinesSlot	(int slot, const EditorWorldLine *lines, int count);
+// As R_EditorFlushWorld (everything waiting drawn now, into the box set by R_SetEditorMainViewport, with the view drawn last), and with this slot's lines, so the main view
+// keeps its lines when another view is drawn after it in the same frame. Does nothing when no frame is open.
+void R_EditorFlushWorldWithLines	(int slot);
+// Which slot the frame's last drawing draws: 0 at the start (as before), 1, or -1 for none. Anything else changes nothing.
+void R_SetEditorFinalLinesSlot	(int slot);
+// Clears this box of the window now (x, y, width, height in pixels), colour (ARGB) AND depth, so a view drawn after the main view isn't hidden by the main view's walls.
+// Only in an open frame, only inside the window. For the live plot: the main view flushed with its lines, then this box cleared, then the inset drawn into it.
+void R_EditorClearBox			(int x, int y, int width, int height, unsigned int colour);
+// The level editor's Untextured: every polygon of the level is drawn with one plain texel of the colour given (ARGB), so it is as the level's light makes it,
+// whatever the draw mode. Off (false) draws the textures as the game does. Only the editor sets it. Added 2026-11-15 by Melanikus (Dietrich) for the AvP port.
+void R_SetEditorUntextured		(bool on, unsigned int colour);
+// The level editor's No Textures (inteng's Strategy Data entered with load flag 0x80: FUN_00522ab0 -> FUN_0046e700(0x93)): while the card draws lines, the level's UNTEXTURED polygons (the
+// game's items with no texture of their own; inteng leaves its kinds 2 / 3 as they are) are drawn FILLED, as the level's light makes them, and every other polygon of the level is drawn
+// again as a line in lineColour (ARGB), unlit, over its lit line (inteng makes each textured polygon a line, kind 0xe, with flag 2: its colour as it is). An untextured polygon of a block
+// the editor tints is filled in its tint, in the light (inteng paints the block's shape that colour). Off (false): as the game draws. Only the editor sets it. Added 2026-11-17 by
+// Melanikus (Frost) for the AvP port.
+void R_SetEditorFillUntextured	(bool on, unsigned int lineColour);
+// The level editor's Use Polygon View Distance (inteng's Construction > Options 0x1f6, DAT_00636f84: FUN_00474ee0, every frame, gives the view the hazing bit 0x100
+// and makes its haze start and end, VDB_H1 / VDB_H2, the view distance, so the polygons past it are cut there one by one, not each object as a whole): the camera's
+// farthest is this many millimetres, in place of the game's 1000 metres. 0, or anything not between the camera's nearest and the game's farthest, gives the game's
+// own back. Only the editor sets it. Added 2026-11-18 by Melanikus (Frost) for the AvP port.
+void R_SetEditorFarPlane		(float millimetres);
+// The level editor's Prefer .BMP over .RIM (inteng's Construction > Options 0x1f5, DAT_00636f88, read by its picture loader FUN_0046df30): while on, a level's
+// pictures loaded from then on are tried first as "<name>.bmp" (the ending after the name's last '.' made .bmp) and read by bmp_picture.h, opaque; the .RIM
+// when there's none. Only the editor sets it. Added 2026-11-18 by Melanikus (Frost) for the AvP port.
+void R_SetEditorPreferBmp		(bool on);
+// The level editor's MISSING PICTURES (Added 2026-11-17 by Melanikus (Frost) for the AvP port; the owner: "if someone gives you a map it is very likely it won't have a texture"):
+// the level loader makes a textured polygon whose picture can't be had (no file, a refused name, no list of pictures at all) a white unlit line, I_Polyline, which the game leaves out.
+// R_SetEditorDrawPolylines(true) draws those polygons as lines, as inteng does (its kind 0xe). R_SetEditorCountMissingPictures(true) says each picture that couldn't be loaded in the
+// log, once however many lists name it, and counts them; R_EditorMissingPictures gives the count for the last level loaded, the polygons made lines, whether it had no list of
+// pictures at all, and how many names were past the 4096 one file may ask for (not loaded, not named: the log says once that there are too many).
+// Only the editor sets them: the game draws and logs as it always did.
+void R_SetEditorDrawPolylines	(bool on);
+void R_SetEditorCountMissingPictures	(bool on);
+void R_EditorMissingPictures	(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList, int *picturesPastLimit);
+// The extent in the world of everything the three views draw, from the polygons of the display blocks in play: false when there is none yet
+bool R_EditorOrthoBounds		(int mins[3], int maxs[3]);
+struct displayblock;
+void R_SetEditorSelectedBlocks	(const struct displayblock *const *blocks, int count);
+// The same with a colour for each (ARGB; null colours: green): the editor's link colours of Module Linking, a module drawn in one, its linked modules in another
+void R_SetEditorMixed				(bool on);   // the editor's tinted blocks are drawn SOLID even in a wire draw mode (inteng's Mixed: wire modules, painted linked ones; editor only)
+void R_SetEditorDrawObjectsOutsideModules	(bool on);   // objects that no module holds are drawn after the modules (a file of models has no module: the game draws an object with the module that holds it and leaves the rest out) (editor only; the game never calls it)
+void R_SetEditorHiddenBlocks		(const struct displayblock *const *blocks, int count, bool everyPlacedObject, bool everyModule);   // these blocks (and, when asked, every placed object, every module) are not drawn at all (editor only)
+void R_SetEditorHighlightedPolygons	(const struct displayblock *const *blocks, const int *items, int count, unsigned int argb);   // polygon items[i] of blocks[i], each drawn in argb over the level (editor only)
+void R_SetEditorTintedBlocks	(const struct displayblock *const *blocks, const unsigned int *colours, int count);   // up to 256 objects, all drawn in green
+void R_SetEditorSelectedSection	(const struct section_data *section);   // this hierarchy section (of the model the editor shows) is drawn again in yellow (editor only; null: none)
+void R_SetEditorTurret	(struct section_data *turret, int type, int sub, int timer, int elevation);   // inteng's turret sequence in the Hierarchy view: the sections under `turret` play sequence type.sub at `timer`, `turret` itself is turned by `elevation` degrees (editor only; turret null: none)
+int R_EditorSelectedItemsDrawn	();   // how many list items the last green pass drew, for the editor's report
 void CreateScreenShotImage  ();
 void DeRedTexture           (Texture &texture);
 void SetTransforms();

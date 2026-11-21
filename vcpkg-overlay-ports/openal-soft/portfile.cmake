@@ -15,6 +15,8 @@ vcpkg_from_github(
         # Our own fixes.
         006-config-file-hardening.patch
         008-excommon-only-with-examples.patch
+        # MSVC 14.52 refuses the address of a standard library member function (2026-11-18).
+        010-msvc-member-function-address.patch
         # A dated notice at the top of each file the patches above change, saying what was changed, by whom
         # and when, as the Library GPL asks (2(b)). Last, so the others apply to the files as upstream has them.
         009-change-notices.patch

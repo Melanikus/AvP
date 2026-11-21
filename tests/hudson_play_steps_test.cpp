@@ -75,6 +75,27 @@ static void TestAGoodList()
 		Check(steps[4].kind == kHudsonPlayKill, "kill");
 	}
 
+	// goto: a place and nothing else, no object of that name (the lane probe v3's list, Frost 2026-11-20: a "walk" step with no switch of its name was gone past unwalked)
+	std::vector<HudsonPlayStep> const places = Read("goto 52902 595 15587 | gold 1 of 10: gencor05\n", "a goto line is read");
+
+	Check(places.size() == 1 && places[0].kind == kHudsonPlayGoTo && places[0].x == 52902 && places[0].y == 595 && places[0].z == 15587 && places[0].name == "gold 1 of 10: gencor05",
+		"goto, a place with a name for the log");
+
+	// teleport: a logged cheat to a place, for a lift he can't board (the full Genshd1 run, Frost 2026-11-20: liftcar01's car has no landing at its foot, so he stood
+	// below it; Bishop: "ride it if he can, otherwise teleport to its far stop, and log it")
+	std::vector<HudsonPlayStep> const moves = Read("teleport -105091 -1949 -25315 | liftcar01's top: no landing at its foot\n", "a teleport line is read");
+
+	Check(moves.size() == 1 && moves[0].kind == kHudsonPlayMoveTo && moves[0].x == -105091 && moves[0].y == -1949 && moves[0].z == -25315 &&
+		moves[0].name == "liftcar01's top: no landing at its foot", "teleport, a place and why, for the log");
+
+	// FLARES (flares=yes, the lane probe; the owner 11-20: "throwing flares when aliens approach him"): one at an alien he can see within 8 m, once he faces it, and not
+	// again for a while
+	Check(HudsonPlay_FlareIsDue(7999, true, 0, false), "an alien he sees 8 m away or nearer: a flare, the first");
+	Check(!HudsonPlay_FlareIsDue(8000, true, 0, false) && !HudsonPlay_FlareIsDue(3000, false, 0, false), "not one further off, nor one he can't see");
+	Check(!HudsonPlay_FlareIsDue(3000, true, kHudsonPlayFlareEvery - 1, true) && HudsonPlay_FlareIsDue(3000, true, kHudsonPlayFlareEvery, true), "and not again until the wait is over");
+	Check(HudsonPlay_FacesItToThrow(kHudsonPlayFlareFacing) && HudsonPlay_FacesItToThrow(-kHudsonPlayFlareFacing) && !HudsonPlay_FacesItToThrow(kHudsonPlayFlareFacing + 1),
+		"thrown once he faces it, either side");
+
 	std::vector<HudsonPlayStep> reused;
 	std::string whyNot;
 
@@ -113,7 +134,7 @@ static void TestBadFiles()
 	Refused(std::string("press 1 2 3 | a\x7f" "b\n"), "line 1: that can't be a name");
 	Refused(std::string("press 1 2 3 | a\xc3\xa9\n"), "line 1: that can't be a name");
 	Refused("press 1 2 3 | a | b\n", "line 1: that can't be a name");
-	Refused("jump 1 2 3 | a\n", "line 1: this file doesn't use that word");
+	Refused("leap 1 2 3 | a\n", "line 1: this file doesn't use that word");   // ("jump" is a step now: the bypass dais, Frost 2026-11-20)
 	Refused("Press 1 2 3 | a\n", "line 1: this file doesn't use that word");
 	Refused(" | a\n", "line 1: this file doesn't use that word");
 	Refused(std::string("\xef\xbb\xbfpress 1 2 3 | a\n"), "line 1: this file doesn't use that word");
@@ -199,16 +220,18 @@ static void TestGettingStuck()
 {
 	printf("Getting stuck\n");
 
-	Check(HudsonPlay_NextRescue(0) == kHudsonPlayBackUp, "first he backs up");
-	Check(HudsonPlay_NextRescue(1) == kHudsonPlayStepLeft, "then he steps left");
-	Check(HudsonPlay_NextRescue(2) == kHudsonPlayStepRight, "then right");
-	Check(HudsonPlay_NextRescue(3) == kHudsonPlayFindTheWayAgain, "then he looks for the way again");
-	Check(HudsonPlay_NextRescue(4) == kHudsonPlayCrouch, "then he crouches");
-	Check(HudsonPlay_NextRescue(5) == kHudsonPlayJump, "then he jumps");
-	Check(HudsonPlay_NextRescue(6) == kHudsonPlayBackUp, "then he has a second go, backing up");
-	Check(HudsonPlay_NextRescue(7) == kHudsonPlayStepRight, "stepping the other way first this time");
-	Check(HudsonPlay_NextRescue(8) == kHudsonPlayStepLeft, "then back");
-	Check(HudsonPlay_NextRescue(9) == kHudsonPlayFindTheWayAgain, "and looking again");
+	// THE ORDER (the owner 22:30: "he should just try to nudge himself left and right first before running back or move backward less"; both of the 22:26 run's falls
+	// into liftplt's shaft came from a first back-up): small nudges left and right first, a back-up last, and only with floor behind him (FloorBehindHim)
+	Check(HudsonPlay_NextRescue(0) == kHudsonPlayStepLeft, "first he nudges left");
+	Check(HudsonPlay_NextRescue(1) == kHudsonPlayStepRight, "then right");
+	Check(HudsonPlay_NextRescue(2) == kHudsonPlayFindTheWayAgain, "then he looks for the way again");
+	Check(HudsonPlay_NextRescue(3) == kHudsonPlayCrouch, "then he crouches");
+	Check(HudsonPlay_NextRescue(4) == kHudsonPlayJump, "then he jumps");
+	Check(HudsonPlay_NextRescue(5) == kHudsonPlayBackUp, "and only then backs up a little");
+	Check(HudsonPlay_NextRescue(6) == kHudsonPlayStepRight, "a second go: right first this time");
+	Check(HudsonPlay_NextRescue(7) == kHudsonPlayStepLeft, "then left");
+	Check(HudsonPlay_NextRescue(8) == kHudsonPlayFindTheWayAgain, "looking again");
+	Check(HudsonPlay_NextRescue(9) == kHudsonPlayBackUp, "and backing up");
 	Check(HudsonPlay_NextRescue(10) == kHudsonPlayTeleport, "and only then is he moved on, which is a cheat");
 	Check(kHudsonPlayStuckAfter <= 1000, "pushing and getting nowhere is noticed within a second");
 	Check(HudsonPlay_NextRescue(1000) == kHudsonPlayTeleport, "and that goes on for as long as he's stuck");
@@ -481,8 +504,211 @@ static void TestFightsThatCantStopHim()
 	Check(play.find("if (HudsonPlay_CantHurtIt(now - fightingItSince, healthAtStart, threat->SBDamageBlock.Health))") != std::string::npos, "a threat he can't hurt is judged by its health since the fight began");
 }
 
+// AIM AT THE NEAREST (aimnearest=yes; the owner 11-20: "I want hudson to run backwards pointing (but not firing) always at the nearest alien") and HOLD HIS GROUND
+// (holdground=yes; Bishop 11-20, the snowplow: an alien in Attack is held still by its own state, and he, unkillable, walked it 50 to 100 m down a corridor)
+static void TestAimAndHold()
+{
+	printf("Aiming at the nearest, and holding his ground\n");
+
+	std::vector<HudsonPlayAimCandidate> aliens = { { 0, 9000, true }, { 1, 6000, false }, { 2, 7000, true } };
+
+	Check(HudsonPlay_PickTheNearest(aliens, -1) == 2, "the nearest he can see, before a nearer one he can't");
+	aliens[1].seen = true;
+	Check(HudsonPlay_PickTheNearest(aliens, -1) == 1, "the nearest of those he can see");
+	Check(HudsonPlay_PickTheNearest(aliens, 2) == 2, "but he keeps the one he has unless another is clearly nearer (6 m against 7 m isn't), so his view doesn't flick");
+	aliens[1].distance = 5000;
+	Check(HudsonPlay_PickTheNearest(aliens, 2) == 1, "one under three quarters of the distance of his is clearly nearer");
+	aliens[2].seen = false;
+	aliens[1].distance = 6900;
+	Check(HudsonPlay_PickTheNearest(aliens, 2) == 1, "and one he has lost sight of gives way to one he sees");
+	std::vector<HudsonPlayAimCandidate> far = { { 0, kHudsonPlayAimWithin, true } };
+	Check(HudsonPlay_PickTheNearest(far, -1) == -1 && HudsonPlay_PickTheNearest(std::vector<HudsonPlayAimCandidate>(), -1) == -1,
+		"none near (20 m or more off): none, and he faces along his way as before");
+	Check(HudsonPlay_PickTheNearest(far, 0) == -1, "nor does he keep one that has gone that far");
+
+	Check(HudsonPlay_AlienAheadOnHisWay(1000, 100, 1, 0, 1005), "an alien 1 m ahead on his way blocks it");
+	Check(!HudsonPlay_AlienAheadOnHisWay(-1000, 100, 1, 0, 1005), "one behind him doesn't");
+	Check(!HudsonPlay_AlienAheadOnHisWay(1600, 0, 1, 0, kHudsonPlayHoldWithin + 1), "nor one over 1.5 m off");
+	Check(HudsonPlay_Hold(true, 1200, 0, 1000000) == kHudsonPlayStand, "it ahead, 1.2 m: he stands his ground");
+	Check(HudsonPlay_Hold(true, 900, 500, 1000000) == kHudsonPlayBackOff, "under 1 m: he backs off");
+	Check(HudsonPlay_Hold(false, 900, 500, 1000000) == kHudsonPlayWalkOn, "nothing ahead: he walks on");
+	Check(HudsonPlay_Hold(true, 1200, kHudsonPlayHoldMost, 1000000) == kHudsonPlayWalkOn,
+		"after 4 s he walks on (a clawed player pushes past or dies, and the run mustn't stand still for good)");
+	Check(HudsonPlay_Hold(true, 1200, 0, kHudsonPlayHoldRest - 1) == kHudsonPlayWalkOn && HudsonPlay_Hold(true, 1200, 0, kHudsonPlayHoldRest) == kHudsonPlayStand,
+		"and holds again only after 2 s, under the snowplow check's 3 s");
+
+	// SHOOTING (shootwithin=, shootdelay=; the owner 21:33, which replaces 21:27's 4 m: "his crosshair on top of an alien for more tha 500ms", "attack things tha are
+	// really close ( less than say 2m) and attackihg him", "If they are not attacking hi keeps moving and observing"): he fires only at an alien nearer than shootwithin
+	// that is attacking him (in Attack), once his crosshair has been on it for more than shootdelay
+	Check(HudsonPlay_ShootNow(1900, true, 501, 2000, 500), "one 1.9 m off, attacking him, his crosshair on it for over half a second: he fires");
+	Check(!HudsonPlay_ShootNow(1900, true, 500, 2000, 500), "not at half a second exactly: more than it");
+	Check(!HudsonPlay_ShootNow(1900, false, 5000, 2000, 500), "not at one that isn't attacking him: he keeps moving and observing");
+	Check(!HudsonPlay_ShootNow(2000, true, 5000, 2000, 500) && !HudsonPlay_ShootNow(-1, true, 5000, 2000, 500), "nor at one 2 m off or more, nor with none");
+	Check(HudsonPlay_ShootNow(100, true, 1, 2000, 0), "with no delay asked, as soon as his crosshair is on it");
+
+	std::string play;
+
+	Check(ReadWholeFile("3dc/avp/hudson_play.cpp", &play), "3dc/avp/hudson_play.cpp is there");
+	Check(play.find("if (HoldingHisGround(status, dyn, aim, now))") != std::string::npos, "his walk asks whether he holds before it steers");
+	Check(play.find("AimAtTheNearest(status);") != std::string::npos, "and his view goes to the nearest each frame, before a flare's turn");
+	Check(play.find("if (step.kind == kHudsonPlayMoveTo)") != std::string::npos, "a teleport step moves him, as a logged cheat, and goes on");
+	// The full Genshd1 run, try 2 (Frost 2026-11-20): he stood at genlev04's place for 240 s and never pressed it, because the aim turned his view to an alien each
+	// frame and a press waits until he faces the switch; and he walked off liftplt's moving car into a vent halfway up
+	Check(play.find("!HudsonPlay_StepTakesHisView(") != std::string::npos, "the aim leaves his view to a press or a destroy for every other second, so the press isn't starved");
+	Check(play.find("if (OnACarThatsMoving())") != std::string::npos, "and on a lift's car that's moving he doesn't walk, so he can't walk off it part way");
+	Check(play.find("ShootTheCloseOne(status, now);") != std::string::npos, "each frame he may shoot the close one (shootwithin=), after the aim and before a flare");
+	// The full run's try 5 (Frost 2026-11-20): stepping onto liftplt's car, a frame with no collision report with the car read as "the car went before he was on it",
+	// so he went back to waiting and walked off the rising car into hole02. Over the car and at its top counts as on it
+	Check(play.find("if (!CarIsStoppedAt(lift, rideFrom) && !OnTheCarNow(lift))") != std::string::npos, "getting on, he's on the car when he's over it at its top, touching or not");
+	// The full run's try 5: RAMP-01AB's switch is beside the shut door MNDR01, inside its box, so his grid found no way to it and he was moved 75 m. A door whose box
+	// holds the step's own place isn't shut for that step: he has to get to it
+	Check(play.find("if (stepHere && InTheBox(box, stepPlace))") != std::string::npos, "a door beside the step's switch isn't a wall for that step");
+
+	// THE LIFT RULE (the owner 22:03: "have him not teleport until he fails to get in the lift"; Bishop): he's moved past a lift, to the landing of the stop he needed,
+	// only when he has failed it: 3 failed boardings, or 60 s at it without riding, or one ride without getting off at his stop
+	Check(!HudsonPlay_RideFailed(2, 59999, false, false), "two failed boardings in under a minute: he goes on trying");
+	Check(HudsonPlay_RideFailed(3, 1000, false, false), "the third failed boarding: he's moved");
+	Check(HudsonPlay_RideFailed(0, 60000, false, false), "a minute at the lift without riding: he's moved");
+	Check(HudsonPlay_RideFailed(0, 1000, true, false) && !HudsonPlay_RideFailed(0, 1000, true, true), "a ride without getting off at his stop: he's moved; one he got off: not");
+	// A CAGE CAR (try 7, the owner: "HE had a valid path, probably would make the genshd lift"): liftcar01's car is 4.3 m tall, so its top isn't what he stands on, and
+	// its foot had no landing; he stands on a cage's floor, its shape's bottom
+	Check(HudsonPlay_CarStandOffset(-120, 0) == -120, "a flat car: he stands on its top");
+	Check(HudsonPlay_CarStandOffset(-2337, 1941) == 1941, "a car taller than he is: on its floor");
+	Check(play.find("at.standY = at.carY + HudsonPlay_CarStandOffset(shape->shapeminy, shape->shapemaxy);") != std::string::npos, "his lift finder stands him there");
+	Check(play.find("HudsonPlay_RideFailed(boardFailures, now - atTheLiftSince, rodeOnce, false))") != std::string::npos, "and his rides follow the rule");
+
+	// THE REAR GUARD (rearguard=; the owner 22:24 and 22:27): among the aliens within it, the nearest on a CEILING first, then on a WALL, then on the floor (the probe's
+	// own reading of its down: ceiling under -46000, floor over 46000, the rest wall or slope); his view turns to it 3x as fast as the aim did, he runs his way
+	// backwards as fast as forwards (a marine's backward run isn't halved: pmove.cpp halves a Predator's), and sprints, with no slowing for bends
+	Check(HudsonPlay_SurfaceRank(-60000) == 0 && HudsonPlay_SurfaceRank(0) == 1 && HudsonPlay_SurfaceRank(30000) == 1 && HudsonPlay_SurfaceRank(60000) == 2,
+		"ceiling first, then wall (and slope), then floor");
+	std::vector<HudsonPlayRearCandidate> rear = { { 0, 1000, 2 }, { 1, 4000, 0 }, { 2, 3000, 1 } };
+	Check(HudsonPlay_PickTheRearTarget(rear) == 1, "the one on the ceiling, though it's the furthest");
+	rear[1].rank = 2;
+	Check(HudsonPlay_PickTheRearTarget(rear) == 2, "with none on a ceiling, the one on a wall");
+	rear[2].rank = 2;
+	Check(HudsonPlay_PickTheRearTarget(rear) == 0 && HudsonPlay_PickTheRearTarget(std::vector<HudsonPlayRearCandidate>()) == -1, "all on the floor: the nearest; none: none");
+	Check(HudsonPlay_AimTurnControl(100, true, 2000, 4369) == 3 * HudsonPlay_AimTurnControl(100, false, 2000, 4369) &&
+		HudsonPlay_AimTurnControl(-1800, true, 2000, 4369) == 3 * HudsonPlay_AimTurnControl(-1800, false, 2000, 4369), "the rear guard turns three times as fast as the aim");
+	Check(play.find("rearGuardWithin > 0 ? ONE_FIXED : HudsonPlay_WalkControl(bend)") != std::string::npos, "and sprints his way, no slowing for bends");
+	// CHASERS (the owner 22:36: "run backwards faster always facing aliens chasing him"): an alien within the rear guard is chasing him when it's after him (Approach,
+	// Hunt or Attack with him its target) or nearer than it was half a second ago; only chasers are faced
+	Check(HudsonPlay_IsChasing(true, 9000, 9000) && HudsonPlay_IsChasing(false, 8000, 9000), "after him, or closing in: chasing");
+	Check(!HudsonPlay_IsChasing(false, 9000, 9000) && !HudsonPlay_IsChasing(false, 9500, 9000), "not after him and not closing in: not chasing");
+	Check(play.find("IsChasingHim(block, distance)") != std::string::npos, "the rear guard faces only chasers");
+	// HIS SPEEDS (the owner 22:41: "he should move looking at aliens as fast as he can run forward"): each second he walks is forwards (his move within 45 degrees
+	// of his facing), backwards (over 135) or sideways, and the log has what each came to
+	Check(HudsonPlay_MoveKind(0, 65536, 0, 1000) == kHudsonPlayMovedForwards && HudsonPlay_MoveKind(0, 65536, 0, -1000) == kHudsonPlayMovedBackwards &&
+		HudsonPlay_MoveKind(0, 65536, 1000, 0) == kHudsonPlayMovedSideways && HudsonPlay_MoveKind(65536, 0, 900, -500) == kHudsonPlayMovedForwards,
+		"his move is forwards, backwards or sideways of his facing");
+	Check(play.find("SayHisSpeeds(") != std::string::npos, "and his measured speeds each way go in the log");
+	// (Bishop on 235943: "Backwards 8708 against forwards 11147 mm/s (78%) ... Inertia on turns, or steering?"): his turn in each second goes on the second's line, and the
+	// speeds line has the backward seconds with a turn over 90 degrees apart, where the game's inertia starts a flipped component from nothing again
+	Check(play.find(", turned %d deg") != std::string::npos && play.find(" of them turning over 90 deg") != std::string::npos, "his turns each second, and the backward seconds that turned");
+	// (and 1: "why didn't he get there in 90 s?": the 90 s move put him 15 m from bypass's place in the list): a pickup step's start says where the pickup really is
+	Check(play.find("\" is at \" + PlaceWords(where) + \", \"") != std::string::npos, "a pickup step says where its pickup really is, against the list's place");
+	// THE AIM STAYS ON (Bishop 22:4x, from the 22:36 run: 35 of 46 hits on him came with his AIM "none", all in shft21 while he walked to liftplt's landing; the
+	// aim was off for the whole walk to a lift): he aims while stuck, unsticking, waiting at a door, walking to a lift or waiting for its car. Only getting on, riding
+	// and getting off a lift pause it
+	// and through every step (Bishop 23:4x: the medlab section run 232611's facehugger latch came in the jump step, which had no aim): a jump and a drop walk straight at
+	// their place whichever way he faces (WalkStraightAt), so his aim can be on the chaser; a press or a destroy has his view every other second (it has to face its
+	// switch or its glass: the full run's try 2 stood at genlev04 240 s when the aim never let go), the aim the seconds between
+	Check(play.find("if (rideStage != kGettingOn && rideStage != kRiding && rideStage != kGettingOff && !HudsonPlay_StepTakesHisView(") != std::string::npos,
+		"his aim is on everywhere but on a lift's car, and every other second of a press or a destroy");
+	Check(HudsonPlay_StepTakesHisView(true, 500) && !HudsonPlay_StepTakesHisView(true, 1500) && HudsonPlay_StepTakesHisView(true, 2400) && !HudsonPlay_StepTakesHisView(false, 500),
+		"a press or a destroy has his view in the even seconds, the aim in the odd; any other step never takes it");
+	Check(play.find("WalkStraightAt(status, dyn, toX, toZ, HudsonPlay_JumpWalk(across))") != std::string::npos && play.find("WalkStraightAt(status, dyn, toX, toZ, ONE_FIXED)") != std::string::npos,
+		"a jump and a drop walk straight at their place whichever way he faces");
+	Check(play.find("\"play: unaimed, with a chaser \"") != std::string::npos, "and a frame he's unaimed with a chaser near is logged, with its reason");
+	// and in shooting range the rear guard keeps its own 3x turn: the shot's plain turn put him back to 1x just where it mattered most
+	Check(play.find("bool const turnsHere = rearGuardWithin <= 0;") != std::string::npos, "the rear guard's turn isn't slowed by the shot");
+	// and why there's no shot (Bishop: "Log the crosshair-on time against the 300 ms each frame he's aimed"): how far off his crosshair is, and for how long it's been on
+	Check(play.find("void HudsonPlay_CrosshairFacts(int *offBy, int *onFor, int *delay)") != std::string::npos, "the shot's crosshair facts, for the AIM line");
+	// A BURST THAT HOLDS (the full run 2026-11-20-235943: facer01 had his crosshair 328 ms at 3.2 m, the burst began, and ended the next frame when its leap put the
+	// crosshair past the 5.3 degree window: "5.0 -> 5.0, alive"; the 300 ms began again at every wobble and it latched at 1.1 m): a burst goes on while his crosshair
+	// is within 3 times the window, and he's on a target when the miss across is under its half-width at its distance, not only within the window
+	Check(HudsonPlay_KeepsFiring(true, 170) && HudsonPlay_KeepsFiring(true, -170) && !HudsonPlay_KeepsFiring(true, 200) && !HudsonPlay_KeepsFiring(false, 10),
+		"a burst holds within 3 times the window, and only one that has begun");
+	Check(HudsonPlay_OnTarget(100, 1100, 200) && !HudsonPlay_OnTarget(100, 3200, 200) && HudsonPlay_OnTarget(50, 9000, 200) && !HudsonPlay_OnTarget(-300, 1100, 200),
+		"on target: within the window, or a miss across under its half-width");
+	Check(play.find("HudsonPlay_KeepsFiring(bursting && nearest == burstAt, angleToIt)") != std::string::npos &&
+		play.find("HudsonPlay_OnTarget(angleToIt, nearestDistance, HalfWidthOf(nearest))") != std::string::npos, "and the shot uses both");
+	// FACEHUGGERS (the owner 22:51: "we died to face huggers, we're cheating", "He must kill facehuggers"; the 22:52 run had 15 refills at step 20, seven in newhug02,
+	// about a second apart: one on his face, killing him again each time): a hugger within 10 m comes first, before any alien, and he shoots it from there
+	std::vector<HudsonPlayRearCandidate> withAHugger = { { 0, 3000, 0 }, { 1, 8000, kHudsonPlayHuggerRank } };
+	Check(HudsonPlay_PickTheRearTarget(withAHugger) == 1, "a facehugger comes before any alien, even a nearer one on the ceiling");
+	Check(HudsonPlay_ShootsFrom(true, 5000) == kHudsonPlayHuggerWithin && kHudsonPlayHuggerWithin == 10000 && HudsonPlay_ShootsFrom(false, 5000) == 5000,
+		"he shoots a facehugger from 10 m, an alien from shootwithin=");
+	Check(play.find("HuggerHeCanShoot(block)") != std::string::npos, "the rear guard's targets have the facehuggers in them, but not one already on his face");
+	Check(play.find("bool HudsonPlay_AHuggerIsOnHim()") != std::string::npos, "whether one is on his face, for the lane probe");
+	Check(play.find("\"a facehugger is on his face, and a player would be dead here\"") != std::string::npos, "and a refill says when that's what it's for");
+	// The full run at 22:12 (the owner: "he's using lifts as teleports to advance the map"): the lift rescue moved him 127 m and 74 m to lifts he had never walked to
+	// whenever his grid knew no way; and at liftplt's top, on the car at its stop, he counted "couldn't get onto the car" three times (Bishop's items 1-3)
+	Check(play.find("if (!PutHimWhereALiftGoesFrom(") == std::string::npos, "no way on his grid no longer moves him to a lift he never walked to");
+	Check(play.find("WaitForAWay(now);") != std::string::npos, "he waits at the end of his way and looks again (every 10 s, and at a door's change); the 90 s limit is the one long move");
+	Check(play.find("if (rideStage != kGettingOff && rideStage != kWalkingToTheLift && OnTheCarNow(lift) && CarIsStoppedAt(lift, rideTo))") != std::string::npos,
+		"on the car at the stop he needs, he steps off");
+	Check(play.find("if (!CarIsStoppedAt(lift, rideFrom) && OnTheCarNow(lift))") != std::string::npos, "on the car as it moves, he's riding, wherever on the car he is");
+	Check(play.find("rideStage != kGettingOn && rideStage != kRiding && rideStage != kGettingOff && ") != std::string::npos, "and the aim doesn't turn him while he gets on, rides or gets off");
+	// a DROP step: straight at a point, no grid, till he has fallen 2 m or is there (the glass's drop, cheat 1 of 22:12)
+	std::vector<HudsonPlayStep> const drops = Read("drop 22640 7792 -4500 | SHED06's lever floor, through the glass\n", "a drop line is read");
+
+	Check(drops.size() == 1 && drops[0].kind == kHudsonPlayDrop && drops[0].y == 7792, "drop, a place to walk straight at and fall to");
+	Check(play.find("case kHudsonPlayDrop:") != std::string::npos, "and it's done as a step of its own");
+	// a JUMP step (Frost 2026-11-20; Drake 23:2x: bypass rests on a dais in med02, 780 mm tall with four vertical faces and no ramp, so a player jumps onto it, and every
+	// full run ended that step with the 90 s move): straight at a place higher than a step, jumping when he's near its edge, till he's up there
+	std::vector<HudsonPlayStep> const jumps = Read("jump -62200 -6624 57590 | onto the dais\n", "a jump line is read");
+
+	Check(jumps.size() == 1 && jumps[0].kind == kHudsonPlayJumpUp && jumps[0].y == -6624, "jump, a place to jump up onto");
+	Check(play.find("case kHudsonPlayJumpUp:") != std::string::npos && play.find("static void DoTheJump(") != std::string::npos, "and it's done as a step of its own");
+	// and he doesn't fly over it (the medlab section run 2026-11-20-232611: he jumped at full speed 812 mm from the place, sailed over the 3.9 m dais and off its far side
+	// into newhug03, where a facehugger got him): flat out till 1.5 m from the place, half speed nearer, nothing over it; up once he's on the floor within a step of its
+	// height and 1.5 m across
+	Check(HudsonPlay_JumpWalk(3000) == 65536 && HudsonPlay_JumpWalk(1000) == 32768 && HudsonPlay_JumpWalk(500) == 0, "flat out, then half speed, then nothing over the place");
+	// and a pickup that goes while he's on his way to it is done (the medlab section run 2026-11-20-234549: he jumped up onto the dais, bypass went as he landed, and his
+	// way, with nothing there to walk onto, took him off the dais and away until the 90 s move): checked each frame he walks, not only once he's there
+	Check(play.find("if (PickedUpOnHisWay())") != std::string::npos, "a pickup gone on his way is done");
+	Check(HudsonPlay_JumpedUp(1400, 20, true) && !HudsonPlay_JumpedUp(1400, 20, false) && !HudsonPlay_JumpedUp(1400, 778, true) && !HudsonPlay_JumpedUp(1600, 20, true),
+		"up: on the floor, at its height, within 1.5 m");
+	// A STEP HE CAN'T GET ONTO (shft21, three full runs: his grid joins the floor to the stair's first step across its side, 383 mm up, and the game stops him there:
+	// Drake 23:0x, poly 99 and the step sides): stuck 3 times with the same way point ahead, a step up within 1.5 m, he leaves that step out of his grid (a learned
+	// shut box, like a shut door's) and looks for the way again, round by the stair's foot
+	Check(HudsonPlay_ShutsTheStepAhead(3, 870, 383) && !HudsonPlay_ShutsTheStepAhead(2, 870, 383), "a step up 870 mm ahead, stuck at it 3 times: left out");
+	Check(!HudsonPlay_ShutsTheStepAhead(3, 870, 50) && !HudsonPlay_ShutsTheStepAhead(3, 2500, 383), "but not a point on his level, nor one far off");
+	// and one 2.4 m ahead (the lap run 2026-11-21-004422: after the first step was left out, his way went onto the second from the side, 2142 mm across and 774 up,
+	// and the probe's 15 s no-headway rule ended the run before anything got him out)
+	Check(HudsonPlay_ShutsTheStepAhead(3, 2142, 774), "the second step, 2.1 m ahead and two steps up: left out too");
+	Check(play.find("LearnAShutStep(point, now)") != std::string::npos && play.find("boxes.insert(boxes.end(), learnedShut.begin(), learnedShut.end());") != std::string::npos,
+		"and the learned box goes on his grid with the doors' boxes");
+	// a back-up only with floor behind him, and short; the nudges short too; and the step limit's move puts him by a switch, not on it (the 22:26 run: cheat 23 put
+	// him at opslev01's own point, in its console, and nothing got him out)
+	Check(play.find("if (rescue == kHudsonPlayBackUp && !FloorBehindHim())") != std::string::npos, "no back-up over an edge");
+	Check(play.find("rescueUntil = now + (rescue == kHudsonPlayStepLeft || rescue == kHudsonPlayStepRight || rescue == kHudsonPlayBackUp ? kNudgeLasts : kRescueLasts);") !=
+		std::string::npos, "a nudge or a back-up lasts only long enough for about half a metre");
+	Check(play.find("NearTheSwitchNotOnIt(place, &floor)") != std::string::npos, "the step limit puts him on the floor by a switch, within the use key's reach");
+	// The 22:20 run stopped at step 15 (the owner: "He got stuck now and I have no feedback why"): the lift planner's reach from each landing was worked out once, at
+	// the start (9 doors shut, his first grid), and kept through a door's opening and seven new grids; so liftplt's foot "couldn't" reach topshed01
+	size_t const forgets = play.find("reachedFromALanding.clear();   // the doors changed");
+	Check(forgets != std::string::npos && play.find("reachedFromALanding.clear();   // a new grid", forgets + 1) != std::string::npos,
+		"what each landing reaches is worked out again when a door changes and when a new grid comes in");
+	// THE GLASS (the owner 22:15: "Kill it and fix glass shooting"; the 22:14 run): all seven SHED04 panes read "is gone" at once and were never shot, because a
+	// one-hit Static (integrity 0) has no health to begin with; he touched SHED04A, D and E at the window. Gone is: not there, being taken away, or its health run
+	// out from more than none
+	Check(!HudsonPlay_TargetIsGone(true, false, 0, 0), "a pane with no health from the start, still there: not gone, he shoots it");
+	Check(HudsonPlay_TargetIsGone(true, true, 0, 0) && HudsonPlay_TargetIsGone(false, false, 0, 0), "one being taken away, or not there: gone");
+	Check(HudsonPlay_TargetIsGone(true, false, 100 << 16, 0) && !HudsonPlay_TargetIsGone(true, false, 100 << 16, 30 << 16), "one whose health ran out: gone; still some: not");
+	Check(play.find("if (HudsonPlay_TargetIsGone(target != 0, target && target->SBflags.please_destroy_me, targetHealthAtStart, target ? target->SBDamageBlock.Health : 0))") !=
+		std::string::npos, "the destroy and kill steps go by it");
+	Check(play.find("return n >= 0 && OnTheCarNow(lifts[(size_t)n]) &&") != std::string::npos || play.find("OnTheCarNow(lift) && (CarOf(lift)->state == PLBS_GoingUp") != std::string::npos,
+		"and on a moving car by the same test he doesn't walk");
+	Check(play.find("bool const ahead = nearest && AttackingHim(nearest) && HudsonPlay_AlienAheadOnHisWay(") != std::string::npos,
+		"and he holds his ground only while the one ahead is attacking him (the owner 21:33: else he keeps moving)");
+	Check(play.find("Rqst_FirePrimaryWeapon") == std::string::npos || play.find("AimAtTheNearest never fires") != std::string::npos, "he never fires for it");
+}
+
 int main()
 {
+	TestAimAndHold();
 	TestAGoodList();
 	TestBadFiles();
 	TestSteering();

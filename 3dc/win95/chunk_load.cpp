@@ -1,4 +1,11 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
+//   a level with no list of pictures (no BMPNAMES) has no list of picture numbers to look in: each of its textured polygons is made a line, as one whose picture can't be had
+//   the level editor's count of missing pictures (R_SetEditorCountMissingPictures): each of the level's own pictures that can't be loaded is named in the log and counted, with the
+//   polygons made lines for it. The game never sets it
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   a level file can be loaded on a "try" path (try_load_rif), which gives a refused file back as INVALID_RIFFHANDLE with nothing
+//   shown, for the map editor; load_rif, the game's, still shows its message and stops the game at the same place
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   can give a shape's name from its position, for the NORMAL LINES view's log
 // Modified 2026-11-03 by Melanikus for the AvP port:
@@ -15,8 +22,12 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a shape stays still if a frame of its texture animation has a place on its picture too far out to work out in 16.16 (#97). See
 //   texture_animation.h
+// Modified 2026-11-14 by Melanikus for the AvP port:
+//   an animated shape's radius is worked out from squares that are fractions, as whole numbers can't hold them
+//   an outside shape or a skin with no name isn't put on the list of named shapes
 
 #include <stdlib.h>
+#include <set>
 #include <string>
 #include <avp_string.hpp>
 
@@ -38,6 +49,7 @@
 #include "animation_chunk.hpp"
 #include "chunk_fragments.hpp"
 #include "jsndsup.h"
+#include "level_file_name.h"   // LevelFileName_ForTheLog: a name from the file, safe for the log
 #include "mempool.h"
 #include "logstring.h"
 #include "surface_tangent.h"
@@ -583,8 +595,10 @@ extern unsigned char *TextureLightingTable;
 // Functions which operate on RIFFHANDLEs
 /////////////////////////////////////////
 
-// load a rif file into memory
-RIFFHANDLE load_rif(const char *fname)
+// Loads a rif file into memory. A file the loader refuses is given back as INVALID_RIFFHANDLE, and nothing is shown: this is the
+// "try" path, for the map editor, which tells the mapper why itself. (Added 2026-11-14 by Melanikus for the AvP port: it's what
+// load_rif did, up to its message.)
+RIFFHANDLE try_load_rif(const char *fname)
 {
 	File_Chunk *fc = new File_Chunk(fname);
 
@@ -594,11 +608,6 @@ RIFFHANDLE load_rif(const char *fname)
 #if OUTPUT_LOG
 		CL_LogFile.lprintf("FAILED TO LOAD RIF: %s\n", fname);
 #endif
-		// fname can be a long custom level path: no fixed-size buffer
-		std::string message = std::string("Error loading ") + fname;
-		ChangeWindowsSize(1, 1);
-		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
-		avp_exit(0x111);
 		return INVALID_RIFFHANDLE;
 	}
 
@@ -612,6 +621,24 @@ RIFFHANDLE load_rif(const char *fname)
 	if (pChunk)
 	{
 		h->envd = (Environment_Data_Chunk *)pChunk;
+	}
+
+	return h;
+}
+
+// The game's own way to load a rif file into memory: a file the loader refuses shows its message, and stops the game, as it always has
+RIFFHANDLE load_rif(const char *fname)
+{
+	RIFFHANDLE const h = try_load_rif(fname);
+
+	if (h == INVALID_RIFFHANDLE)
+	{
+		// fname can be a long custom level path: no fixed-size buffer
+		std::string message = std::string("Error loading ") + fname;
+		ChangeWindowsSize(1, 1);
+		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
+		avp_exit(0x111);
+		return INVALID_RIFFHANDLE;
 	}
 
 	return h;
@@ -731,6 +758,49 @@ void close_rif_handle(RIFFHANDLE h)
 // lists count together. The most any of the game's 86 files holds is 439, in all its lists, so this leaves plenty of room for a real level.
 static int const kMostPicturesOneFileCanAskFor = 4096;
 
+// The level editor's MISSING PICTURES (R_SetEditorCountMissingPictures, renderer.h; Frost 2026-11-17, the owner: "if someone gives you a map it is very likely it won't have a
+// texture"): a picture that can't be loaded (no file, a refused name) leaves its number unknown, so its polygons become lines (I_Polyline, the conversion below); with this on,
+// each such name is said in the log once and counted once, however many of the level's lists name it, and the names past the limit are counted apart (the log says once that
+// there are too many), with those polygons and whether the level has no list of pictures at all, for the editor to tell the user. The game never sets it.
+bool EditorCountsMissingPictures = false;
+int EditorPicturesMissing = 0;
+int EditorPicturesPastLimit = 0;
+int EditorPolygonsWithoutPicture = 0;
+bool EditorNoPictureList = false;
+
+// True while the LEVEL's own pictures and shapes load: from its load_rif_bitmaps (the one with CCF_ENVIRONMENT: copy_rif_data's) to the next RIF's. The game loads other RIFs
+// around it (the characters', the HUD's), whose pictures are not the level's.
+static bool editorCountingLevel = false;
+static bool editorLevelCounted = false;
+
+// The missing names said so far, in small letters (Windows' file names don't tell the two apart): at most the limit's 4096
+static std::set<std::string> editorMissingNames;
+
+void R_SetEditorCountMissingPictures(bool on)
+{
+	EditorCountsMissingPictures = on;
+	editorCountingLevel = editorCountingLevel && on;
+
+	if (on)
+	{
+		EditorPicturesMissing = 0;
+		EditorPicturesPastLimit = 0;
+		EditorPolygonsWithoutPicture = 0;
+		EditorNoPictureList = false;
+		editorCountingLevel = false;
+		editorLevelCounted = false;
+		editorMissingNames.clear();
+	}
+}
+
+void R_EditorMissingPictures(int *picturesMissing, int *polygonsWithoutPicture, bool *noPictureList, int *picturesPastLimit)
+{
+	if (picturesMissing) *picturesMissing = EditorPicturesMissing;
+	if (polygonsWithoutPicture) *polygonsWithoutPicture = EditorPolygonsWithoutPicture;
+	if (noPictureList) *noPictureList = EditorNoPictureList;
+	if (picturesPastLimit) *picturesPastLimit = EditorPicturesPastLimit;
+}
+
 // Asks for a picture that a level file names. Past the limit it's treated as a picture that couldn't be loaded, which a level already has to cope with,
 // because any picture can turn out to be missing.
 static texID_t LoadPictureItNames(RIFFHANDLE h, char const * name, BMPN_Flags flags)
@@ -743,11 +813,38 @@ static texID_t LoadPictureItNames(RIFFHANDLE h, char const * name, BMPN_Flags fl
 			h->said_too_many_pictures = true;
 		}
 
+		if (editorCountingLevel)
+		{
+			EditorPicturesPastLimit++;
+		}
+
 		return GEI_NOTLOADED;
 	}
 
 	h->pictures_asked_for++;
-	return load_rif_bitmap(name, flags);
+
+	texID_t const got = load_rif_bitmap(name, flags);
+
+	if (got == GEI_NOTLOADED && editorCountingLevel)
+	{
+		std::string key(name ? name : "");
+
+		for (char &letter : key)
+		{
+			letter = (letter >= 'A' && letter <= 'Z') ? (char)(letter - 'A' + 'a') : letter;
+		}
+
+		if (editorMissingNames.insert(key).second)
+		{
+			char safeName[64];
+
+			EditorPicturesMissing++;
+			LevelFileName_ForTheLog(name, safeName, sizeof(safeName));
+			LogErrorStringC((std::string("the level names a picture that could not be loaded (its polygons are drawn as lines): ") + safeName).c_str());
+		}
+	}
+
+	return got;
 }
 
 // Not static, only so that tests/level_pictures_test.cpp can reach it
@@ -896,8 +993,15 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 	if (pChunk)
 	{
 		seflc = (Shape_External_File_Chunk *)pChunk;
-		rif_name = seflc->get_shape_name();
-		msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], rif_name, list_pos));
+		char const * const shape_name = seflc->get_shape_name();
+
+		// An outside shape keeps its name in an object name chunk or a level name chunk, and one with neither has no name to be found
+		// by, so it isn't put on the list of named shapes. (Added 2026-11-14 by Melanikus for the AvP port.)
+		if (shape_name)
+		{
+			rif_name = shape_name;
+			msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], rif_name, list_pos));
+		}
 	}
 	else
 	{
@@ -950,9 +1054,14 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 					CopyShapeAnimationHeader(mainshapelist[start_shape_no], mainshapelist[list_pos]);
 				}
 
+				// A skin keeps its name in a shape name chunk, and one with none has no name to be found by, so it isn't put on the
+				// list of named shapes. (Added 2026-11-14 by Melanikus for the AvP port.)
 				const char *shpname = sssc->get_shape_name();
-				GLOBALASSERT(shpname);
-				msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));
+
+				if (shpname)
+				{
+					msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));
+				}
 				h->shape_nums.add_entry(list_pos);
 				post_process_shape(mainshapelist[list_pos]);
 			}
@@ -1222,7 +1331,7 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 }
 
 // load textures for environment
-BOOL load_rif_bitmaps(RIFFHANDLE h, int /*flags*/)
+BOOL load_rif_bitmaps(RIFFHANDLE h, int flags)
 {
 	Global_BMP_Name_Chunk *gbnc = 0;
 
@@ -1233,6 +1342,19 @@ BOOL load_rif_bitmaps(RIFFHANDLE h, int /*flags*/)
 		if (pChunk)
 		{
 			gbnc = (Global_BMP_Name_Chunk *) pChunk;
+		}
+	}
+
+	// the level editor's count (R_SetEditorCountMissingPictures): the level's own pictures load here with CCF_ENVIRONMENT (copy_rif_data); its shapes follow. Another RIF's
+	// load (a character's, the HUD's) ends the count
+	if (EditorCountsMissingPictures)
+	{
+		editorCountingLevel = (flags & CCF_ENVIRONMENT) != 0 && !editorLevelCounted;
+
+		if (editorCountingLevel)
+		{
+			editorLevelCounted = true;
+			EditorNoPictureList = gbnc == 0;
 		}
 	}
 
@@ -2442,7 +2564,10 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 		//      double square_root = x*x+y*y+z*z;
 		//      square_root = sqrt(square_root);
 		//      sas->radius = (int)square_root;
-		sas->radius = (int)sqrt((double)(x * x + y * y + z * z));
+		// Each of x, y and z is at most 2^25: an end of the sequence's box and its centre are each within 2^24 of the level's middle
+		// (CheckPlace, in chunk.hpp), and the scale is at most 1. So the squares are worked out as fractions, where they fit, and the
+		// radius, at most the square root of 3 times 2^25, about 58 million, fits a whole number. (Added 2026-11-14 by Melanikus for the AvP port.)
+		sas->radius = (int)sqrt((double)x * x + (double)y * y + (double)z * z);
 		sas->vertex_normals = (int *)PoolAllocateMem(sizeof(VECTORCH) * cas->num_verts);
 
 		for (int i = 0; i < cas->num_verts; i++)
@@ -2734,7 +2859,10 @@ BOOL copy_to_shapeheader(
 			int texno = item_list[i * 9 + 3] & 0x7fff;
 			int UVIndex = item_list[i * 9 + 3] >> 16;
 
-			if (texno <= local_max_index &&
+			// A level with no list of pictures (no BMPNAMES) has no list of picture numbers: each of its textured polygons is one whose picture isn't
+			// known, and goes on as a line below (tests/level_pictures_test.cpp, 5)
+			if (local_tex_index_nos &&
+			    texno <= local_max_index &&
 			    local_tex_index_nos[texno] != -1 &&
 			    cshp_ptr->uv_list[UVIndex].num_verts)
 			{
@@ -2761,6 +2889,11 @@ BOOL copy_to_shapeheader(
 				item_list[i * 9] = I_Polyline;
 				item_list[i * 9 + 2] = (cshp_ptr->poly_list[i].flags&~ChunkInternalItemFlags) | iflag_nolight;
 				item_list[i * 9 + 3] = 0xffffffff;
+
+				if (editorCountingLevel)
+				{
+					EditorPolygonsWithoutPicture++;
+				}
 			}
 		}
 
