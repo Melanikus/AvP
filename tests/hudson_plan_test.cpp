@@ -2784,6 +2784,8 @@ static void CheckLanesWord()
 	// and his view's tilt in degrees (down is plus, as the game's own look-down limit reads it) and whether he's crouched (the owner 11-20: "What's hudson doing dying
 	// looking up?")
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" pitch=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" crouched=\""), "with his view's tilt and his crouch");
+	// and the shot's crosshair: off=degrees off the alien's chest (- with none in shooting range), on=ms on it of the delay (Bishop 22:4x: "Why no shot?")
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" off=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" on=\""), "with his crosshair's miss and its time on");
 	// supplygate=ceiling (the owner 21:13: "if we don't have 1 alien crawling ceiling let's not spawn a second"): the supply's next alien only once the last one made
 	// has been on a ceiling (its on=ceiling frames, the reading the scorecard counts), or is dead; a SUPPLY GATE line each time it holds or opens
 	Check(HudsonPlan_Read("-hudson level=genshd1 frames=90000 lanes=watch play=yes supply=4 supplyat=around supplygate=ceiling", &plan) == 0 && plan.supplyGate, "the supply can wait for a ceiling");

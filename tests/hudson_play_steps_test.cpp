@@ -602,6 +602,15 @@ static void TestAimAndHold()
 		HudsonPlay_MoveKind(0, 65536, 1000, 0) == kHudsonPlayMovedSideways && HudsonPlay_MoveKind(65536, 0, 900, -500) == kHudsonPlayMovedForwards,
 		"his move is forwards, backwards or sideways of his facing");
 	Check(play.find("SayHisSpeeds(") != std::string::npos, "and his measured speeds each way go in the log");
+	// THE AIM STAYS ON (Bishop 22:4x, from the 22:36 run: 35 of 46 hits on him came with his AIM "none", all in shft21 while he walked to liftplt's landing; the
+	// aim was off for the whole walk to a lift): he aims while stuck, unsticking, waiting at a door, walking to a lift or waiting for its car. Only getting on, riding
+	// and getting off a lift pause it
+	Check(play.find("if (phase != kDoingTheStep && rideStage != kGettingOn && rideStage != kRiding && rideStage != kGettingOff)") != std::string::npos,
+		"his aim is on everywhere but on a lift's car");
+	// and in shooting range the rear guard keeps its own 3x turn: the shot's plain turn put him back to 1x just where it mattered most
+	Check(play.find("bool const turnsHere = rearGuardWithin <= 0;") != std::string::npos, "the rear guard's turn isn't slowed by the shot");
+	// and why there's no shot (Bishop: "Log the crosshair-on time against the 300 ms each frame he's aimed"): how far off his crosshair is, and for how long it's been on
+	Check(play.find("void HudsonPlay_CrosshairFacts(int *offBy, int *onFor, int *delay)") != std::string::npos, "the shot's crosshair facts, for the AIM line");
 	// The full run at 22:12 (the owner: "he's using lifts as teleports to advance the map"): the lift rescue moved him 127 m and 74 m to lifts he had never walked to
 	// whenever his grid knew no way; and at liftplt's top, on the car at its stop, he counted "couldn't get onto the car" three times (Bishop's items 1-3)
 	Check(play.find("if (!PutHimWhereALiftGoesFrom(") == std::string::npos, "no way on his grid no longer moves him to a lift he never walked to");
