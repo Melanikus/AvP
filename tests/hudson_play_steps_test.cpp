@@ -639,6 +639,12 @@ static void TestAimAndHold()
 
 	Check(jumps.size() == 1 && jumps[0].kind == kHudsonPlayJumpUp && jumps[0].y == -6624, "jump, a place to jump up onto");
 	Check(play.find("case kHudsonPlayJumpUp:") != std::string::npos && play.find("static void DoTheJump(") != std::string::npos, "and it's done as a step of its own");
+	// and he doesn't fly over it (the medlab section run 2026-11-20-232611: he jumped at full speed 812 mm from the place, sailed over the 3.9 m dais and off its far side
+	// into newhug03, where a facehugger got him): flat out till 1.5 m from the place, half speed nearer, nothing over it; up once he's on the floor within a step of its
+	// height and 1.5 m across
+	Check(HudsonPlay_JumpWalk(3000) == 65536 && HudsonPlay_JumpWalk(1000) == 32768 && HudsonPlay_JumpWalk(500) == 0, "flat out, then half speed, then nothing over the place");
+	Check(HudsonPlay_JumpedUp(1400, 20, true) && !HudsonPlay_JumpedUp(1400, 20, false) && !HudsonPlay_JumpedUp(1400, 778, true) && !HudsonPlay_JumpedUp(1600, 20, true),
+		"up: on the floor, at its height, within 1.5 m");
 	// A STEP HE CAN'T GET ONTO (shft21, three full runs: his grid joins the floor to the stair's first step across its side, 383 mm up, and the game stops him there:
 	// Drake 23:0x, poly 99 and the step sides): stuck 3 times with the same way point ahead, a step up within 1.5 m, he leaves that step out of his grid (a learned
 	// shut box, like a shut door's) and looks for the way again, round by the stair's foot
