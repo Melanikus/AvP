@@ -461,6 +461,26 @@ inline bool HudsonPlay_AlienAheadOnHisWay(int toAlienX, int toAlienZ, int wayX, 
 // tha are really close ( less than say 2m) and attackihg him", "If they are not attacking hi keeps moving and observing"): he fires only at an alien nearer than
 // within that is attacking him (in Attack), once his crosshair has been on it for more than delay; he holds his fire otherwise.
 // distance: -1 for none; crosshairOnFor: how long his aim has been on it (HudsonPlay_AimedWell)
+// A BURST THAT HOLDS (Frost 2026-11-20; the full run 2026-11-20-235943: facer01's burst began at 3.2 m and ended the next frame when its leap put his crosshair past
+// the 5.3 degree window, "5.0 -> 5.0, alive", and it latched): a burst that has begun goes on while his crosshair is within 3 times HudsonPlay_AimedWell's window.
+// And he's on a target when he's within that window, or when the miss across, at its distance, is under its half-width (a facehugger at 1.1 m is 10 degrees wide)
+inline bool HudsonPlay_KeepsFiring(bool begun, int angle)
+{
+	return begun && angle > -180 && angle < 180;
+}
+
+inline bool HudsonPlay_OnTarget(int angle, int distance, int halfWidth)
+{
+	if (angle > -60 && angle < 60)
+	{
+		return true;
+	}
+
+	double const radians = (double)angle * 6.2831853 / 4096.0;
+
+	return angle > -1024 && angle < 1024 && (double)distance * fabs(sin(radians)) <= (double)halfWidth;
+}
+
 inline bool HudsonPlay_ShootNow(int distance, bool attacking, unsigned long crosshairOnFor, int within, unsigned long delay)
 {
 	return distance >= 0 && distance < within && attacking && crosshairOnFor > delay;

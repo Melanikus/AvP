@@ -3907,6 +3907,20 @@ void HudsonPlay_CrosshairFacts(int *offBy, int *onFor, int *delay)
 	*delay = (int)shootingDelay;
 }
 
+// Half a target's width, from its display block's extents (the probe's ext=), for HudsonPlay_OnTarget; 200 mm with none. Frost 2026-11-20
+static int HalfWidthOf(STRATEGYBLOCK const *block)
+{
+	if (!block || !block->SBdptr)
+	{
+		return 200;
+	}
+
+	int const acrossX = block->SBdptr->ObMaxX - block->SBdptr->ObMinX, acrossZ = block->SBdptr->ObMaxZ - block->SBdptr->ObMinZ;
+	int const half = (acrossX < acrossZ ? acrossX : acrossZ) / 2;
+
+	return half < 100 ? 100 : half > 600 ? 600 : half;
+}
+
 static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
 {
 	static DWORD crosshairOnSince = 0;
@@ -3974,7 +3988,7 @@ static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
 
 	int const toX = chest.vx - dyn->Position.vx, toZ = chest.vz - dyn->Position.vz;
 	int const angleToIt = HudsonPlay_AngleToTurn(dyn->OrientMat.mat31, dyn->OrientMat.mat33, toX, toZ);
-	bool const onIt = HudsonPlay_AimedWell(angleToIt);
+	bool const onIt = HudsonPlay_OnTarget(angleToIt, nearestDistance, HalfWidthOf(nearest));   // its width at its distance (235943)
 
 	crosshairOnSince = onIt && crosshairOn == nearest ? (crosshairOnSince ? crosshairOnSince : now) : 0;
 	crosshairOn = nearest;
@@ -3993,7 +4007,9 @@ static void ShootTheCloseOne(PLAYER_STATUS *status, DWORD now)
 
 	LookUpOrDownAt(status, chest);
 
-	if (!HudsonPlay_ShootNow(nearestDistance, true, crosshairOnSince ? now - crosshairOnSince : 0, shootingWithin, shootingDelay))
+	// a burst that has begun holds while he's within 3 times the window (HudsonPlay_KeepsFiring; 235943: facer01's lasted one frame)
+	if (!HudsonPlay_ShootNow(nearestDistance, true, crosshairOnSince ? now - crosshairOnSince : 0, shootingWithin, shootingDelay) &&
+		!HudsonPlay_KeepsFiring(bursting && nearest == burstAt, angleToIt))
 	{
 		if (bursting)
 		{
