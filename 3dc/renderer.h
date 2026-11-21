@@ -30,6 +30,8 @@
 //   the level editor's missing pictures: R_SetEditorDrawPolylines, R_SetEditorCountMissingPictures, R_EditorMissingPictures
 // Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
 //   the level editor's polygon view distance: R_SetEditorFarPlane; Prefer .BMP over .RIM: R_SetEditorPreferBmp
+// Modified 2026-11-19 by Melanikus (Frost) for the AvP port:
+//   the level editor's world lines: up to kEditorWorldLinesMost, 524288 (it was 4096)
 
 #ifndef _renderer_h_
 #define _renderer_h_
@@ -199,7 +201,10 @@ struct EditorOrthoLine
 	unsigned int colour;
 };
 void R_SetEditorOrthoLines		(const EditorOrthoLine *lines, int count);
-// Lines drawn in the level editor's 3D view, in the level's own world places (millimetres, the places the view's objects have), each in its own ARGB colour: up to 4096; count 0 none. They are
+// The most lines R_SetEditorWorldLines takes; more are left out. The waypoint display draws every AI module's boxes and links at once (genshd1 v2d: about 235,000 lines);
+// the editor's side (level_view.cpp) keeps to the same number. It was 4096. (Frost 2026-11-19, the owner's waypoint display.)
+static const int kEditorWorldLinesMost = 524288;
+// Lines drawn in the level editor's 3D view, in the level's own world places (millimetres, the places the view's objects have), each in its own ARGB colour: up to kEditorWorldLinesMost; count 0 none. They are
 // drawn in the last drawing of a frame, after the whole level is in the depth buffer, so a wall hides a line behind it, about three pixels wide, and everything the drawing changes on the card is
 // put back. EDITOR ONLY: the game never calls this, and with no lines set no game draw path does anything different. Added 2026-11-15 by Melanikus (Drake) for the AvP port (the waypoint boxes and the
 // entry-point markers of the level editor's Waypoint mode).

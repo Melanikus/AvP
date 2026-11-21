@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-19 by Melanikus (Frost) for the AvP port:
+//   the level editor's world lines: up to kEditorWorldLinesMost (524288, was 4096), drawn from a vertex buffer of their own with the view and projection on the card (DrawEditorWorldLines)
 // Modified 2026-11-18 by Melanikus (Frost) for the AvP port:
 //   the level editor's polygon view distance (R_SetEditorFarPlane): the projection's far plane at the editor's view distance. The game never sets it
 // Modified 2026-11-17 by Melanikus (Frost) for the AvP port:
@@ -470,6 +472,8 @@ static void DrawEditorWorldLines();
 static void DrawEditorWorldTriangles();
 static std::vector<EditorWorldTriangle> editorWorldTriangles;   // R_SetEditorWorldTriangles: the level editor's filled flat triangles in the 3D view (empty in the game)
 static std::vector<EditorWorldLine> editorWorldLines;   // R_SetEditorWorldLines: the level editor's lines in the 3D view (empty in the game)
+static bool editorWorldLinesChanged = false;   // the lines are not the ones on the card yet (DrawEditorWorldLines puts them there)
+static void LetGoOfEditorLinesBuffer();         // the card's copy of the lines is let go (none are drawn any more)
 extern float ViewMatrix[12];   // the camera's view of the level for this frame, set once by TranslationSetup (kshape.cpp)
 void ToyShadows_WhatIsBeingDrawn(int *shapeNumber, int *behaviour, bool *hasPolygonList);
 char const *GetLoadedShapeName(int position);
@@ -9266,12 +9270,27 @@ static void AddTheFixedBufferToNormalLines(NormalLinesList &list, const float *v
 // The level editor's lines in the 3D view (R_SetEditorWorldLines): the same sums and the same card settings as DrawAlienWays, which this is made from, for lines the editor gave in the level's places.
 void R_SetEditorWorldLines(const EditorWorldLine *lines, int count)
 {
+	// up to kEditorWorldLinesMost (renderer.h; it was 4096): the waypoint display draws every AI module's boxes and links at once (Frost 2026-11-19)
+	size_t const wanted = (lines && count > 0) ? (size_t)(count < kEditorWorldLinesMost ? count : kEditorWorldLinesMost) : 0;
+
+	// the editor gives its lines every frame: the same lines as the last time keep the card's copy (DrawEditorWorldLines)
+	if (wanted == editorWorldLines.size() && (wanted == 0 || memcmp(editorWorldLines.data(), lines, wanted * sizeof(EditorWorldLine)) == 0))
+	{
+		return;
+	}
+
 	editorWorldLines.clear();
 
-	if (lines && count > 0)
+	if (wanted > 0)
 	{
-		editorWorldLines.assign(lines, lines + (count < 4096 ? count : 4096));
+		editorWorldLines.assign(lines, lines + wanted);
 	}
+	else
+	{
+		LetGoOfEditorLinesBuffer();   // nothing to draw: the card's copy (up to 32 MB) is let go
+	}
+
+	editorWorldLinesChanged = true;
 }
 
 // The occlusion queries of the editor's triangle groups (R_SetEditorWorldTriangles): the answers of the frame before are collected at the start of the next draw, then each group gets a query of its own
@@ -9449,38 +9468,100 @@ static void DrawEditorWorldTriangles()
 	asItWas->Release();
 }
 
-static void DrawEditorWorldLines()
-{
-	static std::vector<AlienWaysViewEnd> ends;
-	ends.clear();
+// THE LINES ON THE CARD (Frost 2026-11-19, the owner's waypoint display: every AI module's boxes and links at once, genshd1 v2d about 235,000 lines). Until then every end of every line was
+// turned into the view on the CPU every frame, then thickened by AlienWaysView_Thicken into five copies (2.5 million ends at 250,000 lines) and sent with DrawPrimitiveUP. Now:
+// - the lines are put on the card ONCE, in the level's own places, in a vertex buffer of their own, and again only when R_SetEditorWorldLines is given different lines (or the device changed);
+// - the view (the game's ViewMatrix, up turned over, as the game's own polygons are: alien_ways_view.cpp IntoView) and the projection are one matrix, the main shader's WorldViewProj, so the
+//   card turns every end itself;
+// - THE SAME THICKNESS: AlienWaysView_Thicken moves each copy's ends right, left, up and down by kAlienWaysViewAside times the end's depth (its view z). That is a sum the matrix can hold: the
+//   view's x (or y) plus aside times the view's z. So each of the four copies is the same buffer drawn again with that shift between the view and the projection;
+// - a line wholly behind the camera costs no CPU at all: the card turns its two ends and clips it away, as it does a line that crosses the near plane;
+// - the draws are as long as the card allows (D3DCAPS9 MaxPrimitiveCount), five of them for the whole set on a card that takes a million.
+// The depth test, the depth bias and every other card setting are as they were, and put back afterwards. Nothing here runs in the game (the game never sets lines).
+static IDirect3DVertexBuffer9 *editorLinesBuffer = 0;   // the card's copy of editorWorldLines (MANAGED: it lives through a lost device; the game's device is a plain IDirect3DDevice9)
+static size_t editorLinesBufferRoom = 0;                // how many lines it has room for
+static LPDIRECT3DDEVICE9 editorLinesDevice = 0;         // the device it was made on
 
-	for (size_t i = 0; i < editorWorldLines.size(); i++)
+static void LetGoOfEditorLinesBuffer()
+{
+	if (editorLinesBuffer)
+	{
+		editorLinesBuffer->Release();
+		editorLinesBuffer = 0;
+	}
+
+	editorLinesBufferRoom = 0;
+	editorLinesDevice = 0;
+}
+
+// The lines into the card's buffer: made bigger only when they no longer fit. False when the card can't take them
+static bool PutEditorLinesOnTheCard(LPDIRECT3DDEVICE9 device)
+{
+	size_t const count = editorWorldLines.size();
+
+	if (editorLinesBuffer && (editorLinesDevice != device || editorLinesBufferRoom < count))
+	{
+		LetGoOfEditorLinesBuffer();
+	}
+
+	if (!editorLinesBuffer)
+	{
+		if (FAILED(device->CreateVertexBuffer((UINT)(count * 2 * sizeof(D3DLVERTEX)), D3DUSAGE_WRITEONLY, 0, D3DPOOL_MANAGED, &editorLinesBuffer, NULL)))
+		{
+			editorLinesBuffer = 0;
+			return false;
+		}
+
+		editorLinesBufferRoom = count;
+		editorLinesDevice = device;
+	}
+
+	D3DLVERTEX *vertices = 0;
+
+	if (FAILED(editorLinesBuffer->Lock(0, (UINT)(count * 2 * sizeof(D3DLVERTEX)), (void **)&vertices, 0)) || !vertices)
+	{
+		return false;
+	}
+
+	for (size_t i = 0; i < count; i++)
 	{
 		EditorWorldLine const &line = editorWorldLines[i];
 		int const at[2][3] = { { line.x0, line.y0, line.z0 }, { line.x1, line.y1, line.z1 } };
 
 		for (int end = 0; end < 2; end++)
 		{
-			float const x = (float)at[end][0], y = (float)at[end][1], z = (float)at[end][2];
-			AlienWaysViewEnd made;
+			D3DLVERTEX &made = vertices[i * 2 + end];
 
-			// the camera's view by the game's ViewMatrix, then up turned over, as the game's own polygons are (alien_ways_view.cpp IntoView)
-			made.x = ViewMatrix[0] * x + ViewMatrix[1] * y + ViewMatrix[2] * z + ViewMatrix[3];
-			made.y = -(ViewMatrix[4] * x + ViewMatrix[5] * y + ViewMatrix[6] * z + ViewMatrix[7]);
-			made.z = ViewMatrix[8] * x + ViewMatrix[9] * y + ViewMatrix[10] * z + ViewMatrix[11];
-			made.colour = line.colour;
-			ends.push_back(made);
+			made.x = (float)at[end][0];
+			made.y = (float)at[end][1];
+			made.z = (float)at[end][2];
+			made.color = line.colour;
+			made.specular = RGBA_MAKE(0, 0, 0, 0);
+			made.u = 0.0f;
+			made.v = 0.0f;
 		}
 	}
 
-	if (ends.empty())
+	editorLinesBuffer->Unlock();
+	editorWorldLinesChanged = false;
+	return true;
+}
+
+static void DrawEditorWorldLines()
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	size_t const count = editorWorldLines.size();
+
+	if (count == 0 || !device)
 	{
 		return;
 	}
 
-	AlienWaysView_Thicken(&ends, kAlienWaysViewAside);
+	if ((editorWorldLinesChanged || !editorLinesBuffer || editorLinesDevice != device) && !PutEditorLinesOnTheCard(device))
+	{
+		return;
+	}
 
-	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
 	IDirect3DStateBlock9 *asItWas = 0;
 
 	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
@@ -9489,7 +9570,6 @@ static void DrawEditorWorldLines()
 	}
 
 	d3d.effectSystem->SetActive(d3d.mainEffect);
-	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
 	d3d.mainDecl->Set();
 
 	device->SetPixelShader(NULL);
@@ -9515,26 +9595,47 @@ static void DrawEditorWorldLines()
 	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
 
-	static const size_t kMostLinesInOneDraw = 16000;
-	static std::vector<D3DLVERTEX> vertices;
-	vertices.resize(ends.size());
+	device->SetStreamSource(0, editorLinesBuffer, 0, sizeof(D3DLVERTEX));
 
-	for (size_t i = 0; i < ends.size(); i++)
+	// the view as a matrix for a row (x y z 1) times it, as the game's own sums give it on the CPU: view x = ViewMatrix[0..3], view y = -(ViewMatrix[4..7]), view z = ViewMatrix[8..11]
+	R_MATRIX view;
+
+	view._11 = ViewMatrix[0];  view._12 = -ViewMatrix[4];  view._13 = ViewMatrix[8];   view._14 = 0.0f;
+	view._21 = ViewMatrix[1];  view._22 = -ViewMatrix[5];  view._23 = ViewMatrix[9];   view._24 = 0.0f;
+	view._31 = ViewMatrix[2];  view._32 = -ViewMatrix[6];  view._33 = ViewMatrix[10];  view._34 = 0.0f;
+	view._41 = ViewMatrix[3];  view._42 = -ViewMatrix[7];  view._43 = ViewMatrix[11];  view._44 = 1.0f;
+
+	// the lines, then the four moved copies (AlienWaysView_Thicken's right, left, up and down, in its order)
+	static const float kMoves[5][2] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { -1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, -1.0f } };
+
+	static size_t mostInOneDraw = 0;
+
+	if (mostInOneDraw == 0)
 	{
-		vertices[i].x = ends[i].x;
-		vertices[i].y = ends[i].y;
-		vertices[i].z = ends[i].z;
-		vertices[i].color = ends[i].colour;
-		vertices[i].specular = RGBA_MAKE(0, 0, 0, 0);
-		vertices[i].u = 0.0f;
-		vertices[i].v = 0.0f;
+		D3DCAPS9 caps;
+
+		mostInOneDraw = SUCCEEDED(device->GetDeviceCaps(&caps)) && caps.MaxPrimitiveCount > 0 ? (size_t)caps.MaxPrimitiveCount : 65535;
 	}
 
-	for (size_t line = 0; line < ends.size() / 2; line += kMostLinesInOneDraw)
+	for (int m = 0; m < 5; m++)
 	{
-		size_t const left = ends.size() / 2 - line;
+		// the view's x and y plus aside times its z: a row times this is the moved end
+		R_MATRIX shift;
 
-		device->DrawPrimitiveUP(D3DPT_LINELIST, (UINT)(left < kMostLinesInOneDraw ? left : kMostLinesInOneDraw), &vertices[line * 2], sizeof(D3DLVERTEX));
+		D3DXMatrixIdentity(&shift);
+		shift._31 = kMoves[m][0] * kAlienWaysViewAside;
+		shift._32 = kMoves[m][1] * kAlienWaysViewAside;
+
+		R_MATRIX const viewProjection = view * shift * d3d.matProjection;
+
+		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &viewProjection);
+
+		for (size_t first = 0; first < count; first += mostInOneDraw)
+		{
+			size_t const left = count - first;
+
+			device->DrawPrimitive(D3DPT_LINELIST, (UINT)(first * 2), (UINT)(left < mostInOneDraw ? left : mostInOneDraw));
+		}
 	}
 
 	asItWas->Apply();
