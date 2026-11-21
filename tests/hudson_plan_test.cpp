@@ -2786,6 +2786,9 @@ static void CheckLanesWord()
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" pitch=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" crouched=\""), "with his view's tilt and his crouch");
 	// and the shot's crosshair: off=degrees off the alien's chest (- with none in shooting range), on=ms on it of the delay (Bishop 22:4x: "Why no shot?")
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" off=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" on=\""), "with his crosshair's miss and its time on");
+	// each A line has the alien's own extents, its display block's ObMinX..ObMaxX, Y and Z of the current pose, relative to its place, as NPCContainsPoint reads them
+	// (bh_waypoint.cpp 392; Bishop 23:3x: Drake's candidate 4 rests on a body model, 450 half-width and about 1,030 off the face, that the game should confirm)
+	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\" ext=\" + ExtentWords(alien)"), "an A line has the alien's extents");
 	// facehuggers (the owner 22:51): a LATCH line when one gets onto his face (a death in the real game, whatever his health), a hit by it, a refill it caused, and a
 	// SHOT line naming the kind
 	Check(Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "Write(\"LATCH f=\"") && Has(ReadSourceFile("3dc/avp/hudson_lanes.cpp"), "\"facehugger (on his face)\"") &&
