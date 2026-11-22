@@ -86,8 +86,12 @@ if ($ListOnly) { Stop-Here "MSVC $version is not installed (-ListOnly: nothing i
 if ($components.Count -ne 1) { Stop-Here "the catalog offers $($components.Count) components for MSVC $toolset (x86/x64); one is needed" }
 
 $timer = [System.Diagnostics.Stopwatch]::StartNew()
-$arguments = @('modify', '--installPath', $visualStudio, '--add', $components[0].id, '--quiet', '--norestart', '--nocache')
-Write-Host "install-msvc-pin: setup.exe $($arguments -join ' ')"
+# One command line, the folder in quotes: Start-Process joins a list of arguments with spaces and quotes none of them, so the first run gave the
+# installer "--installPath C:\Program" (Visual Studio is in C:\Program Files\...) and it found no product there (#282, run 1). The folder comes from
+# vswhere and the component from the catalog, and neither can hold a quote: both are checked first.
+if ($visualStudio.Contains('"') -or $components[0].id -notmatch '^[A-Za-z0-9.]+$') { Stop-Here 'the folder or the component name has a character that cannot go on a command line' }
+$arguments = "modify --installPath `"$visualStudio`" --add $($components[0].id) --quiet --norestart --nocache"
+Write-Host "install-msvc-pin: setup.exe $arguments"
 $process = Start-Process -FilePath $setup -ArgumentList $arguments -Wait -PassThru -NoNewWindow
 $timer.Stop()
 Write-Host ("install-msvc-pin: the installer answered {0} after {1:N0} s" -f $process.ExitCode, $timer.Elapsed.TotalSeconds)
