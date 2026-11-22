@@ -3290,6 +3290,21 @@ Check ($testBuild.Contains('$outputDir  = if ($env:RUNNER_TEMP) { Join-Path $env
 Check ($testBuild.Contains('else { Join-Path (Split-Path -Parent $repository) "AvP-test-out\tests\$(Split-Path -Leaf $repository)" }')) 'and outside them, into a folder of this copy of the repository''s own'
 Check ($testBuild.Contains('if (Test-Path -LiteralPath $outputDir) { Remove-Item -LiteralPath $outputDir -Recurse -Force }')) 'and it empties only that folder, its name read letter for letter'
 
+# The same for every other local test output: the take-out runner's copies, its refusal check's folder, the sanitizer's builds, and the stock
+# and rimpng builds each go in a folder of this copy of the repository's own, and each is emptied by its name read letter for letter
+$takeoutRunner = (Get-Content -Raw (Join-Path $repository 'tests/takeouts/run.ps1')) -replace "`r", ''
+Check ($takeoutRunner.Contains('else { Join-Path (Split-Path -Parent $repository) "AvP-test-out\takeouts\$(Split-Path -Leaf $repository)" }')) 'outside the automatic checks, the take-out runner copies the code into a folder of this copy''s own'
+Check ($takeoutRunner.Contains('if (Test-Path -LiteralPath (Join-Path $base $Test)) { Remove-Item -LiteralPath (Join-Path $base $Test) -Recurse -Force }')) 'and empties only its own list''s folder there, its name read letter for letter'
+Check ($takeoutRunner.Contains('else { Join-Path $outside "AvP-test-out\takeouts-refusals\$(Split-Path -Leaf $copy)" }')) 'and its refusal check works in a folder of this copy''s own'
+$sanitizer = (Get-Content -Raw (Join-Path $repository 'tests/takeouts/sanitize.ps1')) -replace "`r", ''
+Check ($sanitizer.Contains('else { Join-Path (Split-Path -Parent $repository) "AvP-test-out\sanitize\$(Split-Path -Leaf $repository)" }')) 'outside the automatic checks, the sanitizer builds into a folder of this copy''s own'
+foreach ($tool in @('tests/stock/build.ps1', 'tools/rimpng/build.ps1')) {
+    $toolBuild = (Get-Content -Raw (Join-Path $repository $tool)) -replace "`r", ''
+    $kind = Split-Path -Leaf (Split-Path -Parent $tool)
+    Check ($toolBuild.Contains("`$out = Join-Path (Split-Path -Parent `$repository) `"AvP-test-out\$kind\`$(Split-Path -Leaf `$repository)`"")) "$tool builds into a folder of this copy's own"
+    Check ($toolBuild.Contains('if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }')) 'and empties only that folder, its name read letter for letter'
+}
+
 # --- Pull requests try the release's own checks on the machine the release runs them on
 $ubuntuJob = [regex]::Match($testsWorkflow, '(?ms)^  release-checks-on-ubuntu:\n.*\z').Value
 $releaseMachine = [regex]::Match($checkJob, '(?m)^    runs-on: (\S+)').Groups[1].Value
