@@ -3082,6 +3082,26 @@ Expect-Real (Real-Analysis) (Real-Arguments -asked $realNewId -md5 '') 'counted 
 Expect-Answer 'upload' (Upload-Text $realNewId) "analysis $realNewId" 'an upload that gives its analysis''s number the other way is taken' | Out-Null
 Expect-AnswerRefused 'upload' (Upload-Text ('f-' + ('ab' * 31) + '-1')) "the analysis number in VirusTotal's answer isn't one" 'and one with a SHA-256 too short is refused'
 
+# Only an analysis started in this run counts (2026-11-22, the same scan: VirusTotal never ran two of the re-analyses it was asked for, and
+# answered 404 about them, so the scan job sends the same bytes again; an upload of a file VirusTotal already knows must not hand back an
+# old analysis that would then pass as today's). The scan job gives -NotBefore, the time its step started less a minute, in seconds since
+# 1970, and the analysis's data.attributes.date may not be earlier, whatever its state. Today's real date for the zip's analysis.
+$realDate = '1795340964'
+function Dated-Analysis([string]$date = $realDate, [string]$status = 'completed') { return (Real-Analysis).Replace('"date": 1762600000', "`"date`": $date").Replace('"status": "completed"', "`"status`": `"$status`"") }
+function NotBefore-Arguments([string]$notBefore) { return (Real-Arguments) + @('-NotBefore', $notBefore) }
+
+Expect-Real (Dated-Analysis) (NotBefore-Arguments '1795340904') 'counted 0 0 66' 'an analysis started after the run began is counted'
+Expect-Real (Dated-Analysis) (NotBefore-Arguments $realDate) 'counted 0 0 66' 'and one started in the very second it began'
+Expect-RealRefused (Dated-Analysis) (NotBefore-Arguments '1795340965') 'started before this run' 'one started a second before is refused'
+Expect-RealRefused (Dated-Analysis -date '1762600000') (NotBefore-Arguments '1795340904') 'started before this run' 'and one from a year ago'
+Expect-RealRefused (Dated-Analysis -status 'queued' -date '1762600000') (NotBefore-Arguments '1795340904') 'started before this run' 'even while it is still queued, so an old analysis is never waited for'
+Expect-Real (Dated-Analysis -status 'queued') (NotBefore-Arguments '1795340904') 'waiting' 'a queued analysis started in this run is waited for'
+Expect-RealRefused ((Real-Analysis).Replace(', "date": 1762600000', '')) (NotBefore-Arguments '1795340904') 'has no data.attributes.date' 'an analysis with no date is refused when the run has a start'
+Expect-RealRefused (Dated-Analysis -date '"today"') (NotBefore-Arguments '1795340904') "data.attributes.date isn't a time" 'and one whose date is not a number'
+Expect-RealRefused (Dated-Analysis -date '1795340964.5') (NotBefore-Arguments '1795340904') "data.attributes.date isn't a time" 'or not a whole one'
+Expect-RealRefused (Dated-Analysis) (NotBefore-Arguments 'soon') 'has to be a whole number of seconds' 'a start of the run that is not a number is refused'
+Expect-RealRefused (Dated-Analysis) (NotBefore-Arguments '0') 'has to be a whole number of seconds' 'and one at the very start of 1970'
+
 # Nothing VirusTotal wrote is printed: GitHub takes a line starting :: as an order
 Write-File $answerFile (Analysis-Text '::warning::taken over')
 $result = Run-Script 'check-virustotal.ps1' (Virustotal-Arguments 'analysis')
