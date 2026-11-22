@@ -199,7 +199,11 @@
       <FunctionLevelLinking>false</FunctionLevelLinking>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <FloatingPointModel>Fast</FloatingPointModel>
-      <AdditionalOptions> /J /we4834</AdditionalOptions>
+      <!-- /Brepro: the same source and the same compiler make the same bytes (no time or random number written into the objects).
+           /pathmap (which needs /experimental:deterministic) names the repository's folder AvP wherever it is checked out, so no
+           checkout's path reaches the code (as the editor and the Smacker libraries build). Measured 2026-11-22 without them: the same
+           commit built twice on GitHub (run 45023318613, attempts 1 and 2) gave two AvP_Classic.exe, 11662cb4 and 633e2abd. -->
+      <AdditionalOptions> /J /we4834 /Brepro /experimental:deterministic /pathmap:$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..'))\=\AvP\</AdditionalOptions>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <PrecompiledHeaderOutputFile>
       </PrecompiledHeaderOutputFile>
@@ -227,7 +231,7 @@
            never in the package: tools/build-and-package.ps1 copies only what a player needs, and tools/check-release-package.ps1
            refuses them. /PDBALTPATH has the program record only the .pdb's name, not the folder it was built in. /DEBUG would
            turn off ICF (folding identical functions), so ICF and REF are set here, and the program's code is the same as without
-           symbols. -->
+           symbols. /Brepro: the program's time stamp and its .pdb's GUID come from its contents, not the clock. -->
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AssemblyDebug>false</AssemblyDebug>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
@@ -237,7 +241,7 @@
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <AdditionalOptions>/PDBALTPATH:%_PDB% %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/PDBALTPATH:%_PDB% /Brepro %(AdditionalOptions)</AdditionalOptions>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
       <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
            program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
