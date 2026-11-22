@@ -286,6 +286,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
+      # vcpkg's triplet builds every library with THE ONE COMPILER (win32/msvc-pin.props), so it's installed first, from Microsoft's own installer
+      - name: Install the one compiler (MSVC, as win32/msvc-pin.props pins it)
+        shell: pwsh
+        run: ./tools/install-msvc-pin.ps1
+
       - name: Build the pinned libraries, keeping their sources
         shell: pwsh
         run: |

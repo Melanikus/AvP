@@ -41,6 +41,16 @@ $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer
 $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (-not $visualStudio) { throw 'Visual Studio with the C++ tools was not found' }
 
+# THE ONE COMPILER (win32/msvc-pin.props), as tests/build.ps1 sets it up: installed first on GitHub's runner, and the same MSVC as the game
+. (Join-Path $repository 'tools/msvc-pin-version.ps1')
+$msvcPin = Get-MsvcPinVersion $repository
+if ($env:GITHUB_ACTIONS -eq 'true')
+{
+    & (Join-Path $repository 'tools/install-msvc-pin.ps1')
+    if ($LASTEXITCODE -ne 0) { throw "MSVC $msvcPin could not be installed (tools/install-msvc-pin.ps1 said why, above)" }
+}
+Get-MsvcPinFolder $visualStudio $msvcPin | Out-Null
+
 # Visual Studio's own PowerShell module sets the compiler up in this window, the way its setup batch file does in a command window, so nothing has to be written to disk to run it.
 # The antivirus distrusts a script that writes another to run, and took one of ours. The setup looks for vswhere on the path, so that goes on first. -arch=x86 builds 32-bit programs,
 # the same as the game.
@@ -109,7 +119,7 @@ if (Get-SetUpProblem $visualStudio)
     try
     {
         Import-Module (Join-Path $visualStudio 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
-        Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments '-arch=x86 -host_arch=amd64 -no_logo' | Out-Null
+        Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments "-arch=x86 -host_arch=amd64 -no_logo -vcvars_ver=$msvcPin" | Out-Null
         $problem = Get-SetUpProblem $visualStudio
     }
     catch

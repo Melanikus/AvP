@@ -173,8 +173,11 @@ Expect-Refused (Run-Imports) "msvcp140.dll isn't the copy in Visual Studio's red
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-$runtimeFolder = Get-ChildItem -Directory (Join-Path $visualStudio 'VC\Redist\MSVC\*\x86\Microsoft.VC*.CRT') | Select-Object -Last 1
-if (-not $runtimeFolder) { throw "Visual Studio's copy of Microsoft's runtime (VC\Redist\MSVC\<version>\x86) wasn't found, so the runtime's rows can't be tried" }
+# THE ONE COMPILER's runtime (win32/msvc-pin.props), the copy the package carries (tools/build-and-package.ps1), not the newest this machine has
+. (Join-Path $repository 'tools/msvc-pin-version.ps1')
+$msvcPin = Get-MsvcPinVersion $repository
+$runtimeFolder = Get-ChildItem -Directory (Join-Path $visualStudio "VC\Redist\MSVC\$msvcPin\x86\Microsoft.VC*.CRT") | Select-Object -Last 1
+if (-not $runtimeFolder) { throw "Visual Studio's copy of Microsoft's runtime for MSVC $msvcPin (VC\Redist\MSVC\$msvcPin\x86) wasn't found, so the runtime's rows can't be tried" }
 
 # A piece the package may carry, but which nothing in it needs
 $unneeded = @('msvcp140_codecvt_ids.dll', 'msvcp140_2.dll', 'msvcp140_1.dll' | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Package $_)) }) | Select-Object -First 1

@@ -44,6 +44,8 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
+  <!-- THE ONE COMPILER (AvPx's win32\msvc-pin.props says why): before Microsoft.Cpp.props, which would otherwise take the newest installed MSVC -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\..\..\win32\msvc-pin.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>

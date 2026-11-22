@@ -48,6 +48,8 @@
     <_ZVcpkgInstallManifestDependenciesInputs Include="..\..\vcpkg-overlay-triplets\**\*" />
   </ItemGroup>
   <Import Project="$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.props" Condition="Exists('$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.props')" />
+  <!-- THE ONE COMPILER (..\msvc-pin.props says why): before Microsoft.Cpp.props, which would otherwise take the newest installed MSVC -->
+  <Import Project="$(MSBuildThisFileDirectory)..\msvc-pin.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>

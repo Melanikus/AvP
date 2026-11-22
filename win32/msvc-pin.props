@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- msvc-pin.props: THE ONE COMPILER. Written 2026-11-21 by Melanikus (Frost) for the AvP port, Bishop for the owner after alpha.3 ("FIXING, NOT PATCHING").
+
+     WHY: alpha.3's libsmackerenc.dll and mp4-to-smk.exe were each flagged by one antivirus engine; the same code built here scanned 0 of 71. The one
+     difference was the compiler: GitHub's runner image (windows-2025-vs2026 20261116.315) had moved to MSVC 14.52.37025 under us, and this project
+     builds with 14.51.36231. The same source gave other machine code (the Rich header, the linker version, .text's size), so what shipped was never
+     what had been scanned. Pinning one exact compiler, on every machine, makes a build here and a build on CI the same bytes (with the deterministic
+     flags each project sets), so the files scanned clean are the files that ship.
+
+     WHAT: every project that ships imports this file after Microsoft.Cpp.Default.props and before Microsoft.Cpp.props. VCToolsVersion chooses the
+     MSVC folder (VC\Tools\MSVC\<version>) the whole build uses: compiler, linker and libraries. Microsoft.Cpp.props fills it in with the newest
+     installed one only when it is empty (Microsoft.Cpp.VCTools.props); set before Microsoft.Cpp.Default.props, a developer prompt would clear it
+     (ClearDevCommandPromptEnvVars). The build FAILS, saying why, if the version is anything else (a /p:VCToolsVersion on the command line included)
+     or that MSVC is not installed: it is never quietly built with another.
+
+     TO MOVE IT: change AvpxMsvcVersion here, install that MSVC on every machine that builds (Visual Studio Installer, the "MSVC v145 build tools" of
+     that version), build, and have the result scanned before anything ships. CI installs the same version from Microsoft's own installer. -->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <AvpxMsvcVersion>14.51.36231</AvpxMsvcVersion>
+    <VCToolsVersion>$(AvpxMsvcVersion)</VCToolsVersion>
+  </PropertyGroup>
+  <Target Name="AvpxMsvcPinCheck" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(VCToolsVersion)' != '$(AvpxMsvcVersion)'" Text="This build must use MSVC $(AvpxMsvcVersion) (msvc-pin.props), and it was asked for $(VCToolsVersion)." />
+    <Error Condition="!Exists('$(VCToolsInstallDir)bin\Hostx64\x86\cl.exe') and !Exists('$(VCToolsInstallDir)bin\Hostx86\x86\cl.exe')" Text="MSVC $(AvpxMsvcVersion) is not installed here (no compiler in $(VCToolsInstallDir)): install it with the Visual Studio Installer, as msvc-pin.props says." />
+  </Target>
+</Project>
