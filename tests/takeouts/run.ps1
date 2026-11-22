@@ -33,53 +33,111 @@ trap { Write-Host "Could not run the take-outs: $_"; exit 2 }
 # A name shown in a refusal is kept to one line
 function Show-Name([object]$named) { return ("$named" -replace "[`r`n]+", ' / ') }
 
-# A test's name, which is its list's name too: letters, digits and underscores only, so it can't name a file anywhere else
-function Test-TestName([string]$name) { return $name -cmatch '^[A-Za-z0-9_]+$' }
+# A test's name, which is its list's name too: letters, digits and underscores only, so it can't name a file anywhere else. \A and \z are
+# the very start and end of the name: ^ and $ would also take a name that ends in a line end.
+function Test-TestName([string]$name) { return $name -cmatch '\A[A-Za-z0-9_]+\z' }
 
-# A name in a list's "copy": a folder of the repository, or a file at its top by its plain name, such as servers.cfg
-function Get-CopyRefusal([object]$named, [string]$root)
+# The rule for every name inside a folder that a list, or a test's settings, give this, such as 3dc/avp or vcpkg_installed/x86-windows/lib/enet.lib.
+# It is a name: text, and not empty. It has no : (which names a drive, or a second part of a file). It doesn't start at a root (\ or /). And
+# each of its parts is letters, digits and - _ . + only, is not dots alone (. is the folder itself, and .. the one above it), and doesn't end
+# in a dot (Windows drops a dot at the end of a part, so it would read the name as another), and isn't one Windows reads as a device
+# instead of a file: CON, PRN, AUX, NUL, COM0 to COM9 or LPT0 to LPT9, in capitals or not, alone or before a dot. A space or a line end
+# isn't one of those letters, so no part has one. Gives back why a name breaks the rule, or nothing when it keeps it.
+function Get-NameRefusal([object]$named)
 {
-    if ((Test-Path -LiteralPath (Join-Path $root $named) -PathType Leaf) -and "$named" -cnotmatch '\A[A-Za-z0-9_][A-Za-z0-9_.-]*\z') {
-        return "A list copies a file only from the top of the repository, by its plain name: $(Show-Name $named)"
+    if ($named -isnot [string] -or $named -eq '') { return "isn't a name: a name here is text, and not empty" }
+    if ($named.Contains(':')) { return 'has a :, and a name here has none' }
+    if ($named -cmatch '\A[\\/]') { return 'starts at a root, and a name here starts inside its folder' }
+    foreach ($part in ($named -split '[\\/]')) {
+        if ($part -cmatch '\A\.+\z') { return 'has a part made of dots alone, and a name here has no . or .. part' }
+        if ($part -cnotmatch '\A[A-Za-z0-9_.+-]+\z' -or $part.EndsWith('.')) { return "has a part that isn't plain: each part is letters, digits and - _ . + only, and doesn't end in a dot" }
+        if ($part -match '\A(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\..*)?\z') { return 'has a part Windows reads as a device, not a file: CON, PRN, AUX, NUL, COM0-9 and LPT0-9 are never a part here' }
     }
     return ''
 }
 
-# A name in a test's settings that starts with vcpkg_installed: a file or a folder vcpkg built, such as vcpkg_installed/x86-windows/lib/enet.lib
+# Whether a name, inside a folder, is a link (a junction, or a symbolic link), or is inside one. Windows follows a link to wherever it
+# points, so what such a name gives may not be inside the folder at all. Each part is looked at in turn, from the folder down, as far as
+# the parts are there.
+function Test-HasLink([string]$folder, [string]$named)
+{
+    $path = $folder
+    foreach ($part in ($named -split '[\\/]')) {
+        $path = Join-Path $path $part
+        $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+        if ($null -eq $item) { return $false }
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return $true }
+    }
+    return $false
+}
+
+# Whether a path is inside a folder: below it, and not the folder itself, once the path is read the way Windows will read it, .. parts and all
+function Test-Inside([string]$path, [string]$folder)
+{
+    $full = [System.IO.Path]::GetFullPath($path)
+    $within = [System.IO.Path]::GetFullPath($folder).TrimEnd('\') + '\'
+    return $full.StartsWith($within, [StringComparison]::OrdinalIgnoreCase)
+}
+
+# A name in a list's "copy": a folder of the repository, or a file at its top by its plain name, such as servers.cfg. It keeps the rule for
+# names (Get-NameRefusal), is no link and in none (Test-HasLink), and is there.
+function Get-CopyRefusal([object]$named, [string]$root)
+{
+    $why = Get-NameRefusal $named
+    if ($why) { return "The list copies '$(Show-Name $named)', which $why" }
+    if (Test-HasLink $root $named) { return "The list copies $named, which is a link, or inside one, and what a list copies is in the repository itself" }
+    $copyFrom = Join-Path $root $named
+    if (Test-Path -LiteralPath $copyFrom -PathType Container) { return '' }
+    if (-not (Test-Path -LiteralPath $copyFrom -PathType Leaf)) { return "The list copies $named, and the repository has no such folder or file" }
+    if ($named -cnotmatch '\A[A-Za-z0-9_][A-Za-z0-9_.-]*\z') { return "A list copies a file only from the top of the repository, by its plain name: $named" }
+    return ''
+}
+
+# A name in a test's settings that starts with vcpkg_installed: a file or a folder vcpkg built, such as vcpkg_installed/x86-windows/lib/enet.lib.
+# It keeps the rule for names (Get-NameRefusal), is no link and in none (Test-HasLink), and is there.
 function Get-SettingsNameRefusal([string]$named, [string]$root, [string]$settingsName)
 {
-    if (($named -split '[\\/]') -contains '..' -or $named.Contains(':')) { return "$settingsName names $named, which isn't inside vcpkg_installed" }
+    $why = Get-NameRefusal $named
+    if ($why) { return "$settingsName names $(Show-Name $named), which $why" }
+    if (Test-HasLink $root $named) { return "$settingsName names $named, which is a link, or inside one, and what is copied is in the repository itself" }
     if (-not (Test-Path -LiteralPath (Join-Path $root $named))) { return "$settingsName names $named, and it isn't there. Build the game once, so vcpkg puts its libraries in vcpkg_installed." }
     return ''
 }
 
-# The file a row changes, in the copy of the code: not a path from a drive or a root, not one with a .. part, and not one the copy doesn't have
+# The file a row changes, in the copy of the code. It keeps the rule for names (Get-NameRefusal), is no link and in none (Test-HasLink),
+# and is a file inside the copy.
 function Get-RowFileRefusal([object]$file, [string]$copyRoot)
 {
-    $file = "$file"
-    $parts = $file -split '[\\/]'
-    if ($file -eq '' -or $file.Contains(':') -or [System.IO.Path]::IsPathRooted($file) -or ($parts -contains '..') -or
-        -not (Test-Path -LiteralPath (Join-Path $copyRoot $file) -PathType Leaf)) {
-        return "it names a file that isn't in the copy: $(Show-Name $file)"
-    }
+    $why = Get-NameRefusal $file
+    if ($why) { return "it names the file '$(Show-Name $file)', which $why" }
+    if (Test-HasLink $copyRoot $file) { return "it names the file $file, which is a link, or inside one, and a row changes a file in the copy itself" }
+    $path = Join-Path $copyRoot $file
+    if (-not (Test-Inside $path $copyRoot) -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { return "it names a file that isn't in the copy: $file" }
     return ''
 }
 
-# Copies what a list names under "copy" into the copy of the code. Of a folder, only the sources, not what earlier builds left behind. A file
-# is copied as it is.
+# Copies what a list names under "copy" into the copy of the code. Every name is checked first, and nothing is copied unless all are fine.
+# What is copied comes from inside the repository, and goes inside the copy. Of a folder, only the sources, not what earlier builds left
+# behind. A file is copied as it is.
 function Copy-ListEntries([object]$list, [string]$root, [string]$copyRoot)
 {
     foreach ($named in $list.copy) {
         $why = Get-CopyRefusal $named $root
         if ($why) { throw $why }
+        if (-not (Test-Inside (Join-Path $root $named) $root) -or -not (Test-Inside (Join-Path $copyRoot $named) $copyRoot)) {
+            throw "The list copies $named, which isn't inside the repository, or wouldn't be inside the copy"
+        }
+    }
 
+    # /XJ leaves out the links inside a folder (junctions, and symbolic links), so all that comes in is in the repository itself
+    foreach ($named in $list.copy) {
         # (Not $from: PowerShell reads $from and the -From parameter above as the same name, and an [int] can't hold a path)
         $copyFrom = Join-Path $root $named
         if (Test-Path -LiteralPath $copyFrom -PathType Leaf) {
             Copy-Item -LiteralPath $copyFrom -Destination (Join-Path $copyRoot $named)
             continue
         }
-        & robocopy $copyFrom (Join-Path $copyRoot $named) /E /NFL /NDL /NJH /NJS /NP /XF *.obj *.pdb *.exe *.ilk *.iobj *.ipdb *.dll *.lib *.exp *.idb *.tlog *.recipe *.log | Out-Null
+        & robocopy $copyFrom (Join-Path $copyRoot $named) /E /XJ /NFL /NDL /NJH /NJS /NP /XF *.obj *.pdb *.exe *.ilk *.iobj *.ipdb *.dll *.lib *.exp *.idb *.tlog *.recipe *.log | Out-Null
         if ($LASTEXITCODE -ge 8) { throw "Couldn't copy $(Show-Name $named)" }
     }
     $global:LASTEXITCODE = 0
@@ -87,23 +145,31 @@ function Copy-ListEntries([object]$list, [string]$root, [string]$copyRoot)
 
 # A test that links a library vcpkg built names it in its settings, under vcpkg_installed (net_close_test names ENet's headers and enet.lib).
 # The copy of the folders leaves .lib files out on purpose, so exactly the ones the settings name are copied here, from this repository's own
-# vcpkg_installed, which a build of the game fills. (Added 2026-11-07, for net_close_test.) Other words in the settings go to the compiler,
-# which reads them itself, the same as when the Tests check builds the test (tests/build.ps1): this copies or changes nothing by them.
+# vcpkg_installed, which a build of the game fills. (Added 2026-11-07, for net_close_test.) Every name is checked first, and nothing is
+# copied unless all are fine. Other words in the settings go to the compiler, which reads them itself, the same as when the Tests check
+# builds the test (tests/build.ps1): this copies or changes nothing by them.
 function Copy-SettingsLibraries([string]$settings, [string]$root, [string]$copyRoot, [string]$settingsName)
 {
     if (-not (Test-Path -LiteralPath $settings)) { return }
-    foreach ($word in @(Get-Content -LiteralPath $settings | ForEach-Object { $_ -split '\s+' } | Where-Object { $_ })) {
-        $named = $word -replace '^/I', ''
-        if ($named -cnotmatch '^vcpkg_installed[\\/]') { continue }
+    $words = @(Get-Content -LiteralPath $settings | ForEach-Object { $_ -split '\s+' } | Where-Object { $_ })
+    $names = @($words | ForEach-Object { $_ -replace '^/I', '' } | Where-Object { $_ -cmatch '^vcpkg_installed[\\/]' })
+
+    foreach ($named in $names) {
         $why = Get-SettingsNameRefusal $named $root $settingsName
         if ($why) { throw $why }
+        if (-not (Test-Inside (Join-Path $root $named) $root) -or -not (Test-Inside (Join-Path $copyRoot $named) $copyRoot)) {
+            throw "$settingsName names $named, which isn't inside the repository, or wouldn't be inside the copy"
+        }
+    }
 
+    foreach ($named in $names) {
         # Not $from and $to: PowerShell reads a name the same in capitals or small letters, so those would be -From and -To above,
         # which hold whole numbers, and a path can't go in one.
         $libraryFrom = Join-Path $root $named
         $libraryTo = Join-Path $copyRoot $named
         if (Test-Path -LiteralPath $libraryFrom -PathType Container) {
-            & robocopy $libraryFrom $libraryTo /E /NFL /NDL /NJH /NJS /NP | Out-Null
+            # /XJ leaves out the links inside the folder, as for the folders a list copies
+            & robocopy $libraryFrom $libraryTo /E /XJ /NFL /NDL /NJH /NJS /NP | Out-Null
             if ($LASTEXITCODE -ge 8) { throw "Couldn't copy $named" }
         }
         else {
