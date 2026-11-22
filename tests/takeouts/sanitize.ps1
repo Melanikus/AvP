@@ -6,7 +6,8 @@
 # Run it from anywhere, in PowerShell:
 #   tests/takeouts/sanitize.ps1 <test>              for example: tests/takeouts/sanitize.ps1 relief_map_file_test
 #
-# The program lands in a folder called AvP-test-out next to the repository, or under $env:RUNNER_TEMP in the automatic checks.
+# The program lands in AvP-test-out\sanitize\<this copy's folder name> next to the repository, a folder of this copy of the repository's own
+# (modified 2026-11-21: copies side by side shared one, and emptied each other's), or under $env:RUNNER_TEMP in the automatic checks.
 #
 # Modified 2026-11-08 by Melanikus for the AvP port:
 #   Visual Studio's setup is done once in a window, not again on every run, and this stops, saying why, if the setup didn't give the compiler (SANITIZE-RUN-1)
@@ -31,7 +32,7 @@ $repository = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if ($Test -cnotmatch '\A[A-Za-z0-9_]+\z') { throw "'$Test' isn't a test's name. A test's name is only letters, digits and _, so nothing outside its own folder is ever emptied" }
 if (-not (Test-Path -LiteralPath (Join-Path $repository "tests\$Test.args") -PathType Leaf)) { throw "there's no test called $Test`: tests\$Test.args isn't there" }
 
-$base = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-sanitize' } else { Join-Path (Split-Path -Parent $repository) 'AvP-test-out\sanitize' }
+$base = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-sanitize' } else { Join-Path (Split-Path -Parent $repository) "AvP-test-out\sanitize\$(Split-Path -Leaf $repository)" }
 $out = Join-Path $base $Test
 if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
 New-Item -ItemType Directory -Force $out | Out-Null
