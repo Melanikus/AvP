@@ -3044,6 +3044,44 @@ Expect-AnswerRefused 'analysis' (Analysis-Text -id 'QW5vdGhlcg==') 'a different 
 Expect-AnswerRefused 'analysis' (Analysis-Text -counts '"malicious": 0, "suspicious": 0, "undetected": 19, "harmless": 0') 'only 19 scanners gave an answer about the zip, fewer than the 20' 'a finished analysis with too few scanners is refused'
 Expect-AnswerRefused 'analysis' (Analysis-Text 'done') "in a state this doesn't know" 'an analysis in a state this does not know is refused'
 
+# The same analysis in VirusTotal's other spelling (2026-11-22, the alpha.4 release scan, run 45007310716, refused at check-virustotal.ps1:345: asked about
+# "ZTc2Njgw...", the base64 of "<the zip's MD5>:<time>", VirusTotal answered with data.id "f-<the zip's SHA-256>-<the same time>"). Today's real answer, its
+# numbers as they came. The scan job gives -Md5, the file's own MD5, so the asked number can be tied to the file.
+$realSha = '88ffc319e472d26f3743c175df78ad144fad036b64a0cbc148c92a43346ec449'
+$realMd5 = 'e76680d9695a957d69188ac58c1ce78f'
+$realAsked = 'ZTc2NjgwZDk2OTVhOTU3ZDY5MTg4YWM1OGMxY2U3OGY6MTc5NTM0MDk2NA=='
+$realNewId = "f-$realSha-1795340964"
+$realCounts = '"malicious": 0, "suspicious": 0, "undetected": 66, "harmless": 0, "timeout": 1, "confirmed-timeout": 0, "failure": 0, "type-unsupported": 7'
+
+function Real-Analysis([string]$id = $realNewId, [string]$hash = $realSha) { return $analysisTemplate.Replace('COUNTS', $realCounts).Replace('STATUS', 'completed').Replace('ID', $id).Replace('HASH', $hash) }
+function Real-Arguments([string]$asked = $realAsked, [string]$md5 = $realMd5) { return @('-Answer', $answerFile, '-Kind', 'analysis', '-Sha256', $realSha, '-AnalysisId', $asked) + $(if ($md5) { @('-Md5', $md5) } else { @() }) }
+
+function Expect-Real([string]$text, [string[]]$arguments, [string]$answer, [string]$what)
+{
+    Write-File $answerFile $text
+    $result = Run-Script 'check-virustotal.ps1' $arguments
+    $said = @($result.Text -split "`n" | Where-Object { $_.StartsWith('ANSWER: ') })
+    Check ($result.Code -eq 0 -and $said.Count -eq 1 -and $said[0] -ceq "ANSWER: $answer") "$what. It said: $($result.Text)"
+}
+
+function Expect-RealRefused([string]$text, [string[]]$arguments, [string]$reason, [string]$what)
+{
+    Write-File $answerFile $text
+    Expect-Refused 'check-virustotal.ps1' $arguments $reason $what
+}
+
+Expect-Real (Real-Analysis -id $realAsked) (Real-Arguments) 'counted 0 0 66' 'the real answer, naming the analysis as it was asked about, is counted'
+Expect-Real (Real-Analysis) (Real-Arguments) 'counted 0 0 66' 'and naming it the other way, f-<its SHA-256>-<the same time>, it is the same analysis, counted'
+Expect-RealRefused (Real-Analysis -id ('f-' + ('cd' * 32) + '-1795340964')) (Real-Arguments) 'a different analysis' 'the other way with another file''s SHA-256 is refused'
+Expect-RealRefused (Real-Analysis -id "f-$realSha-1795340965") (Real-Arguments) 'a different analysis' 'and with another time'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -md5 ('0' * 32)) 'a different analysis' 'and when the asked number is of another MD5 than the file''s'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -md5 '') 'a different analysis' 'and when the scan job gave no MD5, so the asked number cannot be tied to the file'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -asked 'bm90IGFuIG1kNTp0aW1l') 'a different analysis' 'and when the asked number does not decode to an MD5 and a time'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -md5 $realMd5.ToUpperInvariant()) 'has to be 32 small letters and digits' 'an MD5 to check against that is not written as one is refused'
+Expect-Real (Real-Analysis) (Real-Arguments -asked $realNewId -md5 '') 'counted 0 0 66' 'an analysis number the upload gave the other way is taken, and matched as it is'
+Expect-Answer 'upload' (Upload-Text $realNewId) "analysis $realNewId" 'an upload that gives its analysis''s number the other way is taken' | Out-Null
+Expect-AnswerRefused 'upload' (Upload-Text ('f-' + ('ab' * 31) + '-1')) "the analysis number in VirusTotal's answer isn't one" 'and one with a SHA-256 too short is refused'
+
 # Nothing VirusTotal wrote is printed: GitHub takes a line starting :: as an order
 Write-File $answerFile (Analysis-Text '::warning::taken over')
 $result = Run-Script 'check-virustotal.ps1' (Virustotal-Arguments 'analysis')
