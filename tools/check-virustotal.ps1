@@ -15,14 +15,17 @@ What it checks, by what it's given:
 - -Answer <file> -Kind lookup -Sha256 <hash>: VirusTotal's answer to "what do you know about the file with this hash?"
   (GET /api/v3/files/<hash>, when it answered 200). Either it has a finished analysis of enough scanners, which is counted, or it hasn't,
   and the file is sent again.
-- -Answer <file> -Kind upload -Sha256 <hash>: its answer to the upload (POST /api/v3/files): the number of the analysis it started.
-- -Answer <file> -Kind analysis -Sha256 <hash> -AnalysisId <id> [-Md5 <hash>] [-NotBefore <seconds>]: its answer to "how is that analysis going?"
-  (GET /api/v3/analyses/<id>): still going, or finished, and then counted. VirusTotal may name the analysis in its other spelling
-  (2026-11-22): asked about the base64 of "<the file's MD5>:<time>", it answered about "f-<the file's SHA-256>-<the same time>". That is
-  taken as the same analysis only when the SHA-256 is ours, the asked number decodes to the MD5 the scan job gives (-Md5, from the file
-  itself) and the two times are the same; without -Md5 it is refused. With -NotBefore (seconds since 1970: the scan job gives the time its
-  step started, less a minute), an analysis VirusTotal says was started earlier is refused, whatever its state, so only an analysis this
-  run started counts, even when the scan job has had to send the same bytes again (2026-11-22).
+- -Answer <file> -Kind upload -Sha256 <hash> [-Md5 <hash>]: its answer to the upload (POST /api/v3/files): the number of the analysis it
+  started. A number in the other spelling (below) has to carry this SHA-256, and, with -Md5, one in base64 has to decode to that MD5.
+- -Answer <file> -Kind analysis -Sha256 <hash> -AnalysisId <id> -Md5 <hash> -NotBefore <seconds>: its answer to "how is that analysis
+  going?" (GET /api/v3/analyses/<id>): still going, or finished, and then counted. VirusTotal may name the analysis in its other spelling
+  (2026-11-22): asked about the base64 of "<the file's MD5>:<time>", it answered about "f-<the file's SHA-256>-<the same time>" once the
+  analysis had finished, and as asked while it was queued. That is taken as the same analysis only when the SHA-256 is ours, the asked
+  number decodes to the MD5 the scan job gives (-Md5, from the file itself) and the two times are the same. An asked number that names
+  another file (another SHA-256 the other way, another MD5 in base64) is refused at once. -NotBefore is in seconds since 1970 (the scan
+  job gives the time its step started, less a minute): an analysis VirusTotal says was started earlier is refused, whatever its state, so
+  only an analysis this run started counts, even when the scan job has had to send the same bytes again. Both are required (Vasquez's
+  review, 2026-11-22), so no caller can forget them.
 
 What it prints: lines for a person, and, when the answer is in order, one line starting ANSWER: for the scan job, made only of what has
 been checked:
@@ -141,26 +144,58 @@ if ($NotBefore -and ($NotBefore -cnotmatch '^[1-9][0-9]{0,11}\z' -or [long]$NotB
     Stop-Answer 'the start of the run has to be a whole number of seconds since 1970'
 }
 
+# An analysis is always checked against the file's MD5 and when the run started (Vasquez's review, 2026-11-22), so no caller can forget them
+if ($Kind -ceq 'analysis' -and -not $Md5)
+{
+    Stop-Answer "an analysis is checked against the file's own MD5, and that (-Md5) is missing"
+}
+
+if ($Kind -ceq 'analysis' -and -not $NotBefore)
+{
+    Stop-Answer "an analysis is checked against when the run started, and that (-NotBefore) is missing"
+}
+
+# What an analysis number in the base64 spelling decodes to, "<an MD5>:<a time>", as its two parts; nothing when it isn't that, letter for letter
+function Get-NumberParts([string]$id)
+{
+    if ($id -cnotmatch '^[A-Za-z0-9+/]{4,200}={0,2}\z') { return $null }
+    try
+    {
+        $decoded = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($id))
+    }
+    catch
+    {
+        return $null
+    }
+    if ($decoded -cnotmatch '^([0-9a-f]{32}):([0-9]{1,12})\z') { return $null }
+    return @($Matches[1], $Matches[2])
+}
+
+# Whether an analysis number is this file's, as far as the number itself says (Vasquez's review, 2026-11-22): the other way it carries the
+# file's SHA-256; in base64 it decodes to the file's MD5 and a time, when the MD5 is known (an analysis always knows it; an upload may)
+function Test-ThisFile([string]$id)
+{
+    if ($id -cmatch $otherSpelling) { return ($Matches[1] -ceq $Sha256) }
+    if (-not $Md5) { return $true }
+    $parts = Get-NumberParts $id
+    return ($null -ne $parts -and $parts[0] -ceq $Md5)
+}
+
+if ($Kind -ceq 'analysis' -and -not (Test-ThisFile $AnalysisId))
+{
+    Stop-Answer "the analysis number asked about isn't this file's"
+}
+
 # Whether VirusTotal's answer names the analysis asked about in the other spelling: "f-<the file's SHA-256>-<time>" for the base64 of
 # "<the file's MD5>:<time>". Only when the SHA-256 is ours, the asked number decodes, letter for letter, to the MD5 the scan job gave (the
-# file's own) and a time, and the two times are the same. With no -Md5 the asked number can't be tied to the file, so it isn't.
+# file's own) and a time, and the two times are the same.
 function Test-OtherSpelling([string]$answeredId)
 {
     if ($answeredId -cnotmatch $otherSpelling) { return $false }
     $answeredSha = $Matches[1]
     $answeredTime = $Matches[2]
-    if ($answeredSha -cne $Sha256 -or -not $Md5) { return $false }
-    if ($AnalysisId -cnotmatch '^[A-Za-z0-9+/]{4,200}={0,2}\z') { return $false }
-    try
-    {
-        $decoded = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($AnalysisId))
-    }
-    catch
-    {
-        return $false
-    }
-    if ($decoded -cnotmatch '^([0-9a-f]{32}):([0-9]{1,12})\z') { return $false }
-    return ($Matches[1] -ceq $Md5 -and $Matches[2] -ceq $answeredTime)
+    $parts = Get-NumberParts $AnalysisId
+    return ($answeredSha -ceq $Sha256 -and $null -ne $parts -and $parts[0] -ceq $Md5 -and $parts[1] -ceq $answeredTime)
 }
 
 if (-not $Answer -or -not (Test-Path -LiteralPath $Answer -PathType Leaf))
@@ -372,6 +407,11 @@ if ($Kind -ceq 'upload')
     if ($id -cnotmatch '^[A-Za-z0-9+/=]{1,200}\z' -and $id -cnotmatch $otherSpelling)
     {
         Stop-Answer "the analysis number in VirusTotal's answer isn't one"
+    }
+
+    if (-not (Test-ThisFile $id))
+    {
+        Stop-Answer "the analysis number in VirusTotal's answer isn't this file's"
     }
 
     Write-Host 'VirusTotal took the zip and started an analysis.'
