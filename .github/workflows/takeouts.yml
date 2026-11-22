@@ -107,23 +107,26 @@ jobs:
         with:
           persist-credentials: false
 
-      # A test that links one of the game's own libraries names vcpkg_installed in its settings (net_close_test links our ENet),
-      # and the runner copies exactly those files into its copy of the code. So they're fetched first, by the same action and with
-      # the same ports as the Tests check, so both checks build a test against the same libraries. A list whose test names
-      # nothing there skips this.
-      - name: See whether this list's test links the game's libraries
+      # A test can need the game's own libraries in two ways, and the runner copies exactly the files named into its copy of the code:
+      # - linked in: the test's settings name them, under vcpkg_installed (net_close_test links our ENet)
+      # - loaded while it runs: the list names them, under "libraries" (shader_test loads Microsoft's D3DX; added 2026-11-21, #163)
+      # Either way they're fetched first, by the same action and with the same ports as the Tests check, so both checks test against
+      # the same libraries. A list whose test needs neither skips this.
+      - name: See whether this list's test needs the game's libraries
         id: libraries
         shell: pwsh
         env:
           LIST: ${{ matrix.list }}
         run: |
           $settings = "tests/$($env:LIST).args"
+          $listFile = "tests/takeouts/$($env:LIST).json"
           $links = (Test-Path -LiteralPath $settings) -and ((Get-Content -LiteralPath $settings -Raw) -match 'vcpkg_installed')
-          "It links the game's libraries: $links"
-          "links=$(if ($links) { 'yes' } else { 'no' })" >> $env:GITHUB_OUTPUT
+          $loads = (Test-Path -LiteralPath $listFile) -and ($null -ne (Get-Content -LiteralPath $listFile -Raw | ConvertFrom-Json).libraries)
+          "It links the game's libraries: $links. It loads them while it runs: $loads"
+          "needed=$(if ($links -or $loads) { 'yes' } else { 'no' })" >> $env:GITHUB_OUTPUT
 
-      - name: Fetch the game's libraries the test links
-        if: steps.libraries.outputs.links == 'yes'
+      - name: Fetch the game's libraries the test needs
+        if: steps.libraries.outputs.needed == 'yes'
         uses: ./.github/actions/fetch-test-libraries
         with:
           ports: dxsdk-d3dx enet mldsa-native mlkem-native

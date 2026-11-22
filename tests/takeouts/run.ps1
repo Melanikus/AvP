@@ -180,6 +180,42 @@ function Copy-SettingsLibraries([string]$settings, [string]$root, [string]$copyR
     $global:LASTEXITCODE = 0
 }
 
+# A library a list names under "libraries", to copy from this repository's vcpkg_installed: a file a test loads while it runs, instead of
+# linking it, so the test's settings, which go to the compiler, can't name it (shader_test loads Microsoft's D3DX that way). It keeps the
+# rule for names (Get-NameRefusal), is inside vcpkg_installed, is no link and in none (Test-HasLink), and is a file that is there. (Added
+# 2026-11-21, #163.)
+function Get-LibraryRefusal([object]$named, [string]$root)
+{
+    $why = Get-NameRefusal $named
+    if ($why) { return "The list names the library '$(Show-Name $named)', which $why" }
+    if ($named -cnotmatch '\Avcpkg_installed[\\/]') { return "The list names the library $named, which isn't inside vcpkg_installed" }
+    if (Test-HasLink $root $named) { return "The list names the library $named, which is a link, or inside one, and what is copied is in the repository itself" }
+    $libraryFrom = Join-Path $root $named
+    if (Test-Path -LiteralPath $libraryFrom -PathType Container) { return "The list names the library $named, which is a folder, and a list's libraries are files" }
+    if (-not (Test-Path -LiteralPath $libraryFrom -PathType Leaf)) { return "The list names the library $named, and it isn't there. Build the game once, so vcpkg puts its libraries in vcpkg_installed." }
+    return ''
+}
+
+# Copies the libraries a list names under "libraries" into the copy of the code, each to the same place in it. Every name is checked
+# first, and nothing is copied unless all are fine. The copy of the folders leaves every .dll out on purpose, so these are the only ones
+# in it. A list with no "libraries" copies none.
+function Copy-ListLibraries([object]$list, [string]$root, [string]$copyRoot)
+{
+    foreach ($named in $list.libraries) {
+        $why = Get-LibraryRefusal $named $root
+        if ($why) { throw $why }
+        if (-not (Test-Inside (Join-Path $root $named) $root) -or -not (Test-Inside (Join-Path $copyRoot $named) $copyRoot)) {
+            throw "The list names the library $named, which isn't inside the repository, or wouldn't be inside the copy"
+        }
+    }
+
+    foreach ($named in $list.libraries) {
+        $libraryTo = Join-Path $copyRoot $named
+        New-Item -ItemType Directory -Force (Split-Path -Parent $libraryTo) | Out-Null
+        Copy-Item -LiteralPath (Join-Path $root $named) -Destination $libraryTo
+    }
+}
+
 # -CheckRefusals: shows that the checks above refuse each name they should, for its own reason, and take the good ones. It makes a made-up
 # repository in a folder of its own, with made-up files in it (text, since nothing here is built or run), and asks about names made to be
 # refused. It also gives whole lists, and whole settings, to the two copying functions, to show nothing is copied unless every name is
@@ -199,12 +235,12 @@ function Test-Refusals
     }
     $made = Join-Path $root 'repository'
     $copyRoot = Join-Path $root 'copy'
-    foreach ($folder in @('tests', 'dependencies\made-up\src', '.github', 'vcpkg_installed\x86-windows\include', 'vcpkg_installed\x86-windows\lib')) {
+    foreach ($folder in @('tests', 'dependencies\made-up\src', '.github', 'vcpkg_installed\x86-windows\include', 'vcpkg_installed\x86-windows\lib', 'vcpkg_installed\x86-windows\bin')) {
         New-Item -ItemType Directory -Force (Join-Path $made $folder) | Out-Null
     }
     New-Item -ItemType Directory -Force $copyRoot | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $root $note), 'tests/takeouts/run.ps1 -CheckRefusals makes this folder, and empties it the next time it runs.')
-    foreach ($file in @('made-up.cfg', 'tests\made-up.cpp', 'vcpkg_installed\x86-windows\lib\made-up.lib')) {
+    foreach ($file in @('made-up.cfg', 'tests\made-up.cpp', 'vcpkg_installed\x86-windows\lib\made-up.lib', 'vcpkg_installed\x86-windows\bin\made-up.dll')) {
         [System.IO.File]::WriteAllText((Join-Path $made $file), 'A made-up file: only its name is checked.')
     }
 
@@ -309,6 +345,23 @@ function Test-Refusals
     )
     foreach ($case in $cases) { Answer $case.What $case.Reason (Ask { Get-RowFileRefusal $case.Name $made }) }
 
+    Write-Host 'Libraries a list names, under vcpkg_installed:'
+    $cases = @(
+        @{ Name = 'vcpkg_installed/x86-windows/bin/made-up.dll'; Reason = ''; What = 'a library vcpkg built is taken' },
+        @{ Name = 'vcpkg_installed\x86-windows\bin\made-up.dll'; Reason = ''; What = 'and the same written with \' },
+        @{ Name = 'tests/made-up.cpp'; Reason = "isn't inside vcpkg_installed"; What = 'a file outside vcpkg_installed is refused' },
+        @{ Name = 'vcpkg_installed/../tests/made-up.cpp'; Reason = $dots; What = 'a name with a .. part is refused' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin/made-up.dll:x'; Reason = $colon; What = 'a name with a : is refused' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin/made-up.dll.'; Reason = $plain; What = 'a name ending in a dot is refused' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin/NUL.dll'; Reason = $device; What = 'a name with a device in it is refused' },
+        @{ Name = 'vcpkg_installed/x86-windows/linked/made-up.cpp'; Reason = $link; What = 'a name through a link to outside the repository is refused' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin'; Reason = 'which is a folder'; What = 'a folder is refused: a list''s libraries are files' },
+        @{ Name = 'vcpkg_installed/x86-windows/bin/missing.dll'; Reason = "and it isn't there"; What = 'a library that isn''t there is refused' },
+        @{ Name = 5; Reason = $notName; What = 'a number is refused' },
+        @{ Name = ''; Reason = $notName; What = 'an empty name is refused' }
+    )
+    foreach ($case in $cases) { Answer $case.What $case.Reason (Ask { Get-LibraryRefusal $case.Name $made }) }
+
     Write-Host 'A path has to be inside its folder:'
     $cases = @(
         @{ Path = (Join-Path $copyRoot 'tests'); Inside = $true; What = 'a folder in the copy is inside it' },
@@ -366,6 +419,18 @@ function Test-Refusals
         if ($right) { Write-Host "ok      $($case.What)" } else { Write-Host "FAILED  $($case.What). It said: '$said'"; $script:wrongAnswers++ }
     }
 
+    $cases = @(
+        @{ Json = '{"libraries": ["vcpkg_installed/x86-windows/bin/made-up.dll"]}'; Said = 'copied to: vcpkg_installed\x86-windows\bin\made-up.dll'; What = 'a list''s library is copied to the same place in the copy' },
+        @{ Json = '{"libraries": ["vcpkg_installed/x86-windows/bin/made-up.dll", "vcpkg_installed/../tests/made-up.cpp"]}'; Said = 'refused'; What = 'a list with one bad library copies none, not even the good one before it' },
+        @{ Json = '{"libraries": "vcpkg_installed/x86-windows/bin/made-up.dll:x"}'; Said = 'refused'; What = 'one bad library on its own, not in a list, is refused too' },
+        @{ Json = '{"copy": ["tests"]}'; Said = 'copied to: '; What = 'a list with no libraries copies none, and that is fine' }
+    )
+    foreach ($case in $cases) {
+        $said = Ask-Copying { Copy-ListLibraries ($case.Json | ConvertFrom-Json) $made $copyRoot }
+        $right = if ($case.Said -eq 'refused') { $said -ne '' -and -not $said.StartsWith('copied to:') -and -not $said.Contains('already copied') } else { $said -eq $case.Said }
+        if ($right) { Write-Host "ok      $($case.What)" } else { Write-Host "FAILED  $($case.What). It said: '$said'"; $script:wrongAnswers++ }
+    }
+
     # Every folder copied above was asked to leave out the links inside it (robocopy's /XJ), so all that comes in is in the repository itself
     $what = 'every folder is copied leaving out the links inside it'
     if ($script:folderCopies -gt 0 -and $script:linksLeftOut -eq $script:folderCopies) { Write-Host "ok      $what" }
@@ -397,9 +462,11 @@ New-Item -ItemType Directory -Force $tree | Out-Null
 $bytes = [System.Text.Encoding]::GetEncoding(28591)
 $list = [System.IO.File]::ReadAllText($rowsFile, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
 
-# What the list copies, and the libraries the test's settings name (Copy-ListEntries and Copy-SettingsLibraries, above)
+# What the list copies, the libraries the test's settings name, and the ones the list names (Copy-ListEntries, Copy-SettingsLibraries and
+# Copy-ListLibraries, above)
 Copy-ListEntries $list $repository $tree
 Copy-SettingsLibraries (Join-Path $repository "tests\$Test.args") $repository $tree "tests\$Test.args"
+Copy-ListLibraries $list $repository $tree
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath

@@ -43,8 +43,15 @@ runs on a release candidate, the team fixes what it finds, and a release is refu
 Each list is `<test>.json`: what to copy, and rows that each name a change, with the file, the exact text and what to put in its place. Lines end in `\n` here, whatever the file uses. The repository
 itself is never touched.
 
+A test that loads one of the game's libraries while it runs, instead of linking it, names the files under `"libraries"`, because its settings go to the compiler and can't. shader_test
+loads Microsoft's D3DX that way:
+
+    "libraries": ["vcpkg_installed/x86-windows/bin/D3DX9_43.dll", "vcpkg_installed/x86-windows/bin/D3DCompiler_43.dll"]
+
+A list's libraries are files inside `vcpkg_installed`, and they keep the rule below.
+
 `run.ps1` checks every name it is given before it copies or changes anything by it: each name in a list's `"copy"`, the file each row changes,
-each name under `vcpkg_installed` in a test's settings, and the test's own name. A name has no `:`, doesn't start at a root (`\` or `/`), and each of
+each name under `vcpkg_installed` in a test's settings, each of a list's `"libraries"`, and the test's own name. A name has no `:`, doesn't start at a root (`\` or `/`), and each of
 its parts is letters, digits and `- _ . +` only, isn't dots alone, doesn't end in a dot, and isn't a device name (`CON`, `PRN`, `AUX`, `NUL`, `COM0`-`COM9`,
 `LPT0`-`LPT9`). It is no link (a junction or a symbolic link) and in none, and it has to be there. Folders are copied without the links inside them. What is
 copied comes from inside the repository and goes inside the copy, and a list, or settings, with one refused name copy nothing. `tests/takeouts/run.ps1 -CheckRefusals` shows each name is
