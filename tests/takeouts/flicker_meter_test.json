@@ -1,0 +1,78 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "any change at all counts, however small",
+			"changes": [
+				{
+					"file": "3dc/flicker_meter.cpp",
+					"from": "if (fabsf(samples[i] - lastFrame[i]) > howMuchCounts)",
+					"to": "if (fabsf(samples[i] - lastFrame[i]) > 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "nearly back counts as back",
+			"changes": [
+				{
+					"file": "3dc/flicker_meter.cpp",
+					"from": "<= howMuchCounts * 0.5f)",
+					"to": "<= howMuchCounts * 2.0f)"
+				}
+			]
+		},
+		{
+			"name": "flicker is counted in no band",
+			"changes": [
+				{
+					"file": "3dc/flicker_meter.cpp",
+					"from": "\t\t\t\t\t\tcounts.cameBackInBand[bands[i]]++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the frame before is never kept, so nothing comes back",
+			"changes": [
+				{
+					"file": "3dc/flicker_meter.cpp",
+					"from": "frameBefore.swap(lastFrame);",
+					"to": "frameBefore.clear();"
+				}
+			]
+		},
+		{
+			"name": "forgetting keeps the last frame",
+			"changes": [
+				{
+					"file": "3dc/flicker_meter.cpp",
+					"from": "\tlastFrame.clear();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a place of unknown distance falls in the nearest band",
+			"changes": [
+				{
+					"file": "3dc/flicker_meter.h",
+					"from": "return (distance <= 1.0f) ? 4 : (distance >= 50000.0f)",
+					"to": "return (distance >= 50000.0f)"
+				}
+			]
+		},
+		{
+			"name": "the second band starts at 10 metres, not 5",
+			"changes": [
+				{
+					"file": "3dc/flicker_meter.h",
+					"from": "(distance >= 5000.0f) ? 1 : 0;",
+					"to": "(distance >= 10000.0f) ? 1 : 0;"
+				}
+			]
+		}
+	]
+}
