@@ -54,12 +54,11 @@ without a pass of each on that exact commit (`tools/check-release.ps1`):
    **Review deployments**, because the VirusTotal key is kept in the `release` environment. Approve it.
    - If an answer can't be trusted (not the shape VirusTotal's answers are, about another file, or from fewer than 20 scanners), the run stops
      there, red, and no draft is made. Its log says why, starting `REFUSED:`. `tools/check-virustotal.ps1` is the list of what it checks.
-   - If any scanner flags a program, the run stops there, red, and no draft is made: a release ships only at zero findings on every program
-     in it (the owner, 2026-11-21). The log names what was flagged.
-   - If any scanner flags the zip, the run goes on to the draft, so that you can read what was found, and then ends red (the user's ruling,
-     2026-11-08).
+   - If any scanner flags the zip or a program, the run stops there, red, and no draft is made: a release ships only at zero findings, on
+     the zip and on every program in it (the owner, 2026-11-21; it takes the place of the 2026-11-08 ruling that made a draft saying so).
+     The log names what was flagged. Leave the flagged part out or fix it, and run again.
 5. The fourth job waits for you too. Approve it, and it makes a draft release. Its text says what VirusTotal found, with the link to the
-   report. If any scanner flagged the zip, the text starts by saying so, in bold: don't publish it before reading the report.
+   report. It checks the zip's counts again first, and makes no draft if any scanner flagged it.
    - **Approve it within a day of the build.** The package the build made is kept for one day (`retention-days: 1` in `release.yml`), and
      this job downloads it after you approve. A day later it's gone, and the job stops with no draft. Nothing is harmed: start the run
      again.
