@@ -144,13 +144,17 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # VirusTotal runs about 70 virus scanners on a file. The zip is sent there every time, and the analysis that starts waited for: only a
+  # VirusTotal runs about 70 virus scanners on a file. The zip is sent there every time, and so is every PROGRAM inside it, on its own (the
+  # owner's ruling, 2026-11-22: "can we not scan the txts on virus total... just the binaries?", his written rule: zero findings on the zip and
+  # on every program inside it; a scanner can flag a program sent alone that it passed inside the zip). A program is told by its first two
+  # bytes, "MZ", never by its name; every other file is covered by the zip's own scan. The analyses that start are waited for: only a
   # verdict from this run counts. What comes back is from outside our code, so tools/check-virustotal.ps1 reads every answer before anything
   # here believes it (AvP Tao #3). Nothing VirusTotal wrote is printed but an analysis's number, which may only be letters, digits, + / = and -,
   # so it can't start an order to GitHub (a line starting ::) or break a line, and it's escaped before it goes into an address.
   #
-  # The user's ruling, 2026-11-08: if any scanner flags it, the draft is still made, its text starts by saying so, and the run ends red, so
-  # nobody publishes it before reading the report. An answer that can't be trusted stops the run here, with no draft.
+  # The user's ruling, 2026-11-08: if any scanner flags the zip, the draft is still made, its text starts by saying so, and the run ends red,
+  # so nobody publishes it before reading the report. A program flagged on its own stops the run here, with no draft (the owner, 2026-11-21:
+  # a release ships only at zero findings). An answer that can't be trusted stops the run here, with no draft.
   #
   # Why a job of its own: the key is kept in the release environment, and only a job under it can read it, so this waits for the owner too.
   # The last job can write to the repository, and an answer from outside is never read there: this job can write nothing.
@@ -158,8 +162,9 @@ jobs:
     name: Scan the package on VirusTotal
     needs: build
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the gate
-    timeout-minutes: 60     # the free key takes 4 questions a minute, an analysis takes a few minutes, and one VirusTotal
-                            # never runs is waited for 10 minutes before the zip is sent again, 3 times at most
+    timeout-minutes: 120    # the free key takes 4 questions a minute, about 16 files are sent (the zip and its programs), an analysis
+                            # takes a few minutes, and one VirusTotal never runs is waited for 10 minutes before that file is sent again,
+                            # 3 times at most
     environment: release    # where the VirusTotal key is kept. See RELEASING.md
     permissions:
       contents: read        # to read the code, for tools/check-virustotal.ps1. Nothing else
@@ -213,20 +218,19 @@ jobs:
           $answers = Join-Path $env:RUNNER_TEMP 'virustotal'
           New-Item -ItemType Directory -Force $answers | Out-Null
 
-          # Every question to VirusTotal, waits included, has to be done by this time, inside the job's 60 minutes
-          $giveUp = (Get-Date).AddMinutes(55)
+          # Every question to VirusTotal, waits included, has to be done by this time, inside the job's 120 minutes
+          $giveUp = (Get-Date).AddMinutes(115)
 
           # Only an analysis this run started counts: the checker refuses one VirusTotal dates before this step began, less a minute for the
-          # runner's clock and VirusTotal's being apart. And VirusTotal's numbers for an analysis are made from the zip's MD5 (2026-11-22): the
-          # checker ties them to this zip with it, worked out here from the zip itself.
+          # runner's clock and VirusTotal's being apart. And VirusTotal's numbers for an analysis are made from the file's MD5 (2026-11-22): the
+          # checker ties them to the file with it, worked out here from each file itself (Send-One).
           $notBefore = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - 60
-          $md5 = (Get-FileHash -Algorithm MD5 -LiteralPath $zip).Hash.ToLowerInvariant()
 
-          # tools/check-virustotal.ps1 checks the zip, or one saved answer, prints what it found, and gives back the line starting
-          # ANSWER:. Anything wrong stops this step with its reason, and so the run, with no draft.
-          function Ask-Checker([string[]]$arguments)
+          # tools/check-virustotal.ps1 checks a file (the zip, or a program in it) by its SHA-256, or one saved answer about it, prints what
+          # it found, and gives back the line starting ANSWER:. Anything wrong stops this step with its reason, and so the run, with no draft.
+          function Ask-Checker([string]$fileSha, [string[]]$arguments)
           {
-            $said = @(& pwsh -NoProfile -File ./tools/check-virustotal.ps1 -Sha256 $sha @arguments)
+            $said = @(& pwsh -NoProfile -File ./tools/check-virustotal.ps1 -Sha256 $fileSha @arguments)
             $code = $LASTEXITCODE
             $said | ForEach-Object { Write-Host $_ }
             if ($code -ne 0) { exit 1 }
@@ -256,58 +260,133 @@ jobs:
             }
           }
 
-          # The zip is the one the build made, and small enough to send
-          if ((Ask-Checker @('-Package', $zip)) -cne 'ready') { throw 'The zip is not ready to send' }
-
-          # It's sent every time (POST files), whether VirusTotal knows it or not, and only the analysis that upload starts is counted:
-          # once builds repeat byte for byte, the same zip comes back every release, and a clean verdict from long ago would pass for ever.
-          # An upload starts a fresh analysis with today's scanners either way (measured 2026-11-22 on the editor's release: a file VirusTotal
-          # had known for six hours, uploaded again, had a new analysis finished within four minutes). The analysis is asked about every 30
-          # seconds or so, until the time is up.
-          # VirusTotal can give a number for an analysis it then never runs (the editor's alpha.4 scan, 2026-11-22: asked about, it answered
-          # 404 for as long as anyone asked). So a 404 is taken as still waiting until 10 minutes after the zip was sent, and it isn't asked
-          # again before then; after that the zip is sent again and the new analysis waited for. It's sent 3 times at most; then the run stops.
-          $sends = 0
-          $answer = 'waiting'
-          while ($answer -ceq 'waiting')
+          # Each file is sent every time (POST files), whether VirusTotal knows it or not, and only the analysis that upload starts is
+          # counted: once builds repeat byte for byte, the same files come back every release, and a clean verdict from long ago would pass for
+          # ever. An upload starts a fresh analysis with today's scanners either way (measured 2026-11-22 on the editor's release: a file
+          # VirusTotal had known for six hours, uploaded again, had a new analysis finished within four minutes). Before its upload, each file
+          # is checked to be one the build made and small enough to send (-Package). What is kept of each, by its SHA-256: where its bytes
+          # are, its name, its MD5, how many times it has been sent, and when it was last.
+          $sending = @{}
+          function Send-One([string]$path, [string]$fileSha, [string]$what)
           {
-            $status = Ask-VirusTotal 'Post' 'files' "$answers/upload.json" @{ file = Get-Item -LiteralPath $zip }
-            if ($status -ne 200) { throw "VirusTotal answered the upload with HTTP $status" }
-            $sends++
-            $sentAt = Get-Date
-            $answer = Ask-Checker @('-Answer', "$answers/upload.json", '-Kind', 'upload', '-Md5', $md5)
+            if ((Ask-Checker $fileSha @('-Package', $path)) -cne 'ready') { throw "$what is not ready to send" }
+            if (-not $sending.ContainsKey($fileSha)) { $sending[$fileSha] = @{ Path = $path; What = $what; Md5 = (Get-FileHash -Algorithm MD5 -LiteralPath $path).Hash.ToLowerInvariant(); Sends = 0 } }
+            $file = $sending[$fileSha]
+            $status = Ask-VirusTotal 'Post' 'files' "$answers/$fileSha-upload.json" @{ file = Get-Item -LiteralPath $path }
+            if ($status -ne 200) { throw "VirusTotal answered the upload of $what with HTTP $status" }
+            $file.Sends = $file.Sends + 1
+            $file.SentAt = Get-Date
+            $file.Missing = $false
+            $answer = Ask-Checker $fileSha @('-Answer', "$answers/$fileSha-upload.json", '-Kind', 'upload', '-Md5', $file.Md5)
             # An analysis's number in either of VirusTotal's spellings (the checker's): base64, or f-<a SHA-256>-<a time>
-            if ($answer -cnotmatch '^analysis ([A-Za-z0-9+/=]{1,200}|f-[0-9a-f]{64}-[0-9]{1,12})\z') { throw 'The upload gave no analysis' }
-            $id = $answer.Substring('analysis '.Length)
+            if ($answer -cnotmatch '^analysis ([A-Za-z0-9+/=]{1,200}|f-[0-9a-f]{64}-[0-9]{1,12})\z') { throw "The upload of $what gave no analysis" }
+            Write-Host "$($what): sent ($($file.Sends) of at most 3)"
+            return $answer.Substring('analysis '.Length)
+          }
 
-            $answer = 'waiting'
-            while ($answer -ceq 'waiting')
+          # Every file is sent first, then every analysis is waited for: they run at VirusTotal side by side, so the wait is for the slowest,
+          # not for each in turn. Gives back each file's counts by its SHA-256: how many scanners called it malicious, how many suspicious,
+          # and how many answered.
+          # VirusTotal can give a number for an analysis it then never runs (the editor's alpha.4 scan, 2026-11-22: asked about, it answered
+          # 404 for as long as anyone asked). So a 404 is taken as still waiting until 10 minutes after that file was sent, and its analysis
+          # isn't asked about again before then; after that the file is sent again and the new analysis waited for. A file is sent 3 times
+          # at most; then the run stops, naming it.
+          function Wait-All($started)
+          {
+            $done = @{}
+            while ($done.Count -lt $started.Count)
             {
-              Start-Sleep -Seconds 10
-              $status = Ask-VirusTotal 'Get' "analyses/$([uri]::EscapeDataString($id))" "$answers/analysis.json"
-              if ($status -eq 404)
+              $asked = $false
+              foreach ($fileSha in @($started.Keys))
               {
-                $left = 600 - ((Get-Date) - $sentAt).TotalSeconds
-                if ($left -gt 0) { Start-Sleep -Seconds ([math]::Ceiling($left)); continue }
-                if ($sends -ge 3) { throw "VirusTotal never ran an analysis of the zip: it was sent $sends times, and 10 minutes after each it answered 404 about the analysis it had given a number for" }
-                Write-Host 'VirusTotal has no analysis of the zip 10 minutes after it was sent, so it is sent again.'
-                break
+                if ($done.ContainsKey($fileSha)) { continue }
+                $id = $started[$fileSha]
+                $file = $sending[$fileSha]
+                $waited = ((Get-Date) - $file.SentAt).TotalSeconds
+                if ($file.Missing -and $waited -lt 600) { continue }
+                $asked = $true
+                $status = Ask-VirusTotal 'Get' "analyses/$([uri]::EscapeDataString($id))" "$answers/$fileSha-analysis.json"
+                if ($status -eq 404)
+                {
+                  if ($waited -lt 600) { $file.Missing = $true; continue }
+                  if ($file.Sends -ge 3) { throw "VirusTotal never ran an analysis of $($file.What): it was sent $($file.Sends) times, and 10 minutes after each it answered 404 about the analysis it had given a number for" }
+                  Write-Host "$($file.What): VirusTotal has no analysis 10 minutes after it was sent, so it is sent again."
+                  $started[$fileSha] = Send-One $file.Path $fileSha $file.What
+                  continue
+                }
+                if ($status -ne 200) { throw "VirusTotal answered the question about the analysis of $($file.What) with HTTP $status" }
+                $answer = Ask-Checker $fileSha @('-Answer', "$answers/$fileSha-analysis.json", '-Kind', 'analysis', '-AnalysisId', $id, '-Md5', $file.Md5, '-NotBefore', "$notBefore")
+                if ($answer -ceq 'waiting') { continue }
+                if ($answer -cmatch '^counted (0|[1-9][0-9]{0,3}) (0|[1-9][0-9]{0,3}) ([1-9][0-9]{0,3})\z') { $done[$fileSha] = @([int]$Matches[1], [int]$Matches[2], [int]$Matches[3]) }
+                else { throw 'tools/check-virustotal.ps1 gave no count' }
               }
-              if ($status -ne 200) { throw "VirusTotal answered the question about the analysis with HTTP $status" }
-              $answer = Ask-Checker @('-Answer', "$answers/analysis.json", '-Kind', 'analysis', '-AnalysisId', $id, '-Md5', $md5, '-NotBefore', "$notBefore")
+              # Every analysis left is one VirusTotal said it doesn't have, waiting out its 10 minutes: wait without asking
+              if (-not $asked) { Start-Sleep -Seconds 20 }
+            }
+            return $done
+          }
+
+          # A PROGRAM is a file whose first two bytes are "MZ" (0x4D 0x5A), how every Windows program starts, read from the file and never from
+          # its name (Tao 3: one renamed readme.txt is still a program, a text named as a library is not). Only those two bytes are read.
+          function Test-Program([string]$path)
+          {
+            $stream = [System.IO.File]::OpenRead($path)
+            try
+            {
+              $head = New-Object byte[] 2
+              $read = $stream.Read($head, 0, 2)
+              return ($read -eq 2 -and $head[0] -eq 0x4D -and $head[1] -eq 0x5A)
+            }
+            finally
+            {
+              $stream.Dispose()
             }
           }
 
-          # What it found, for the last job: how many scanners called it malicious, how many suspicious, and how many gave an answer
-          if ($answer -cmatch '^counted (0|[1-9][0-9]{0,3}) (0|[1-9][0-9]{0,3}) ([1-9][0-9]{0,3})\z')
+          # The zip first, then every program inside it, each on its own; every other file is covered by the zip's own scan. -Force takes the
+          # files whose names start with a dot, which the Linux runner would leave out. A name is shown only as letters, numbers and . _ - /.
+          # A package with no program in it isn't the one the build makes. One line says which files went alone and which the zip covers.
+          $started = [ordered]@{}
+          $started[$sha] = Send-One $zip $sha 'the zip'
+          $inside = Join-Path $env:RUNNER_TEMP 'package-files'
+          Expand-Archive -LiteralPath $zip -DestinationPath $inside
+          $root = (Resolve-Path -LiteralPath $inside).ProviderPath.TrimEnd('/')
+          $alone = @()
+          $coveredByZip = @()
+          foreach ($entry in @(Get-ChildItem -LiteralPath $root -Recurse -File -Force | Sort-Object FullName))
           {
-            $noMark = New-Object System.Text.UTF8Encoding $false
-            [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "sha256=$sha`nmalicious=$($Matches[1])`nsuspicious=$($Matches[2])`nanswered=$($Matches[3])`n", $noMark)
+            $shown = ($entry.FullName.Substring($root.Length + 1) -replace '\\', '/') -replace '[^A-Za-z0-9._/-]', '_'
+            if (Test-Program $entry.FullName) { $alone += ,@($entry.FullName, $shown) } else { $coveredByZip += $shown }
           }
-          else
+          if ($alone.Count -eq 0) { throw 'No file in the zip starts as a program does, so it is not the package the build makes' }
+          "Sent alone, as programs (their first bytes are MZ): $(@($alone | ForEach-Object { $_[1] }) -join ', '). Covered by the zip's own scan only: $(if ($coveredByZip.Count) { $coveredByZip -join ', ' } else { 'none' })."
+          $sent = @()
+          foreach ($program in $alone)
           {
-            throw 'tools/check-virustotal.ps1 gave no count'
+            $fileSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $program[0]).Hash.ToLowerInvariant()
+            $sent += ,@($program[1], $fileSha)
+            if (-not $started.Contains($fileSha)) { $started[$fileSha] = Send-One $program[0] $fileSha $program[1] }
           }
+          "Analyses started: $($started.Count) (the zip, and $($started.Count - 1) different programs of the $($alone.Count + $coveredByZip.Count) files in it). Waiting for them all."
+          $counted = Wait-All $started
+
+          # What it found about the zip, for the last job: how many scanners called it malicious, how many suspicious, and how many gave an answer
+          $counts = $counted[$sha]
+          $noMark = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "sha256=$sha`nmalicious=$($counts[0])`nsuspicious=$($counts[1])`nanswered=$($counts[2])`n", $noMark)
+          "the zip: $($counts[0]) malicious, $($counts[1]) suspicious, of $($counts[2]) scanners (sha256 $sha)"
+
+          # Every program on its own: one flagged stops the run here, before anything is attested or drafted (the owner, 2026-11-21: a
+          # release ships only at zero findings, on the zip and on every program in it)
+          $flagged = 0
+          foreach ($s in $sent)
+          {
+            $c = $counted[$s[1]]
+            "$($s[0]): $($c[0]) malicious, $($c[1]) suspicious, of $($c[2]) scanners (sha256 $($s[1]))"
+            if ($c[0] + $c[1] -gt 0) { $flagged++ }
+          }
+          if ($flagged -gt 0) { throw "VirusTotal flagged $flagged of the $($sent.Count) programs in the package, so no draft is made: a release ships only at zero findings" }
+          "VirusTotal: none of the $($sent.Count) programs in the package was flagged (the zip covers its other $($coveredByZip.Count) files)"
 
   publish:
     name: Make the draft release

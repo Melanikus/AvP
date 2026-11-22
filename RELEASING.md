@@ -48,10 +48,14 @@ without a pass of each on that exact commit (`tools/check-release.ps1`):
    built or published at this point.
 3. The second job builds the game and checks the package. `tools/check-release-package.ps1` is the list of what it looks for. The first
    build on a clean machine takes a while, because the libraries are built from source.
-4. The third job sends the zip to VirusTotal, which runs about 70 virus scanners on a file, and waits for their answers. It waits for you
-   first: GitHub shows **Review deployments**, because the VirusTotal key is kept in the `release` environment. Approve it.
+4. The third job sends the zip to VirusTotal, which runs about 70 virus scanners on a file, and every program inside the zip on its own (a
+   program is a file whose first two bytes are "MZ", whatever its name; every other file is covered by the zip's own scan), and waits for
+   their answers. One line of its log says which files went alone and which the zip covered. It waits for you first: GitHub shows
+   **Review deployments**, because the VirusTotal key is kept in the `release` environment. Approve it.
    - If an answer can't be trusted (not the shape VirusTotal's answers are, about another file, or from fewer than 20 scanners), the run stops
      there, red, and no draft is made. Its log says why, starting `REFUSED:`. `tools/check-virustotal.ps1` is the list of what it checks.
+   - If any scanner flags a program, the run stops there, red, and no draft is made: a release ships only at zero findings on every program
+     in it (the owner, 2026-11-21). The log names what was flagged.
    - If any scanner flags the zip, the run goes on to the draft, so that you can read what was found, and then ends red (the user's ruling,
      2026-11-08).
 5. The fourth job waits for you too. Approve it, and it makes a draft release. Its text says what VirusTotal found, with the link to the
