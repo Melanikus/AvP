@@ -26,6 +26,12 @@ jobs:
         with:
           persist-credentials: false
 
+      # THE ONE COMPILER (win32/msvc-pin.props), from Microsoft's own installer, before anything is built: vcpkg's triplet asks for it (#282 run 2:
+      # without it here, vcpkg found "no valid Visual Studio instance" for the libraries the tests link)
+      - name: Install the one compiler (MSVC, as win32/msvc-pin.props pins it)
+        shell: pwsh
+        run: ./tools/install-msvc-pin.ps1
+
       # Hudson is the team's test bot. Since 2026-11-09 it's in the game (the owner: "Hudson goes into avpx_main"), and this proves a player's
       # game can never run any of it: every way in does nothing unless -dev and -hudson asked for a run. It comes first, before anything is
       # built, so that a way in left awake fails the pull request that brings it. Until 2026-11-09 this was check-no-hudson.ps1.
@@ -215,6 +221,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # THE ONE COMPILER (win32/msvc-pin.props), before vcpkg builds the sanitized libraries with it (its triplet asks for it), as in the Unit tests job
+      - name: Install the one compiler (MSVC, as win32/msvc-pin.props pins it)
+        shell: pwsh
+        run: ./tools/install-msvc-pin.ps1
 
       # The same libraries as the Unit tests job, for the tests that use them, but ENet and the two post-quantum libraries are built
       # with the sanitizer here, so their code is watched too: it's the code that reads what comes in from the network. sanitize.ps1 links the network tests against that copy, and

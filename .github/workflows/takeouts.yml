@@ -107,6 +107,12 @@ jobs:
         with:
           persist-credentials: false
 
+      # THE ONE COMPILER (win32/msvc-pin.props), from Microsoft's own installer, before vcpkg builds the libraries a test links with it (its
+      # triplet asks for it) and before run.ps1 builds the test
+      - name: Install the one compiler (MSVC, as win32/msvc-pin.props pins it)
+        shell: pwsh
+        run: ./tools/install-msvc-pin.ps1
+
       # A test can need the game's own libraries in two ways, and the runner copies exactly the files named into its copy of the code:
       # - linked in: the test's settings name them, under vcpkg_installed (net_close_test links our ENet)
       # - loaded while it runs: the list names them, under "libraries" (shader_test loads Microsoft's D3DX; added 2026-11-21, #163)
