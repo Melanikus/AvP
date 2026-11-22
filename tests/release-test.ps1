@@ -3232,6 +3232,30 @@ Check ($snykWorkflow -match '(?m)^    if: needs\.vcpkg-changes\.outputs\.full ==
 Check ($snykWorkflow -match '(?m)^            workflow_dispatch\) answer yes ') 'a library scan run by hand is always in full'
 Check ($snykWorkflow -match 'if \[ "\$CHANGES" != "success" \]; then') 'and when whether the libraries changed cannot be worked out, the library scan fails rather than passing'
 
+# --- The scripts and the workflows are scanned too (Tao 1: Snyk Code reads no PowerShell, workflow YAML or bash). Each scanner is pinned
+# by its hash, the two built by their own release workflows are checked against that workflow's record, nothing may tell them to look away,
+# and every security rule chosen for PowerShell stays in the list. Added 2026-11-21 by Melanikus for the AvP port.
+$sastSteps = [regex]::Match($snykWorkflow, '(?ms)^  snyk-code:\n.*?(?=^  snyk-open-source:)').Value
+foreach ($tool in @('ZIZMOR', 'ACTIONLINT', 'PSSCRIPTANALYZER', 'INJECTIONHUNTER', 'SHELLCHECK_DEB')) {
+    Check ($snykWorkflow -match "(?m)^  $($tool)_SHA256: [0-9a-f]{64}$") "$tool is pinned by its SHA-256"
+}
+Check ($sastSteps.Contains('echo "$ZIZMOR_SHA256  $t/zizmor.tar.gz" | sha256sum -c -') -and $sastSteps.Contains('--cert-identity "https://github.com/zizmorcore/zizmor/.github/workflows/release.yml@refs/tags/v$ZIZMOR_VERSION"')) 'zizmor is checked by its hash and by its release workflow''s record, in the required Snyk Code job'
+Check ($sastSteps.Contains('echo "$ACTIONLINT_SHA256  $t/actionlint.tar.gz" | sha256sum -c -') -and $sastSteps.Contains('--cert-identity "https://github.com/rhysd/actionlint/.github/workflows/release.yaml@refs/tags/v$ACTIONLINT_VERSION"')) 'and so is actionlint'
+Check ($sastSteps.Contains('echo "$SHELLCHECK_DEB_SHA256  $t/shellcheck_${SHELLCHECK_DEB_VERSION}_amd64.deb" | sha256sum -c -') -and $sastSteps.Contains('apt-get download "shellcheck=$SHELLCHECK_DEB_VERSION"')) 'shellcheck is Ubuntu''s signed package, checked by its hash'
+Check ($sastSteps.Contains('echo "$PSSCRIPTANALYZER_SHA256  $t/psscriptanalyzer.nupkg" | sha256sum -c -') -and $sastSteps.Contains('echo "$INJECTIONHUNTER_SHA256  $t/injectionhunter.nupkg" | sha256sum -c -')) 'PSScriptAnalyzer and InjectionHunter are checked by their hashes'
+Check ($sastSteps.Contains("git grep -n -I -E 'Suppress[M]essage|shellcheck[ ]disable|zizmor:[ ]ignore'")) 'nothing may tell the script or workflow scanners to look away'
+Check ($sastSteps.Contains('"$RUNNER_TEMP/scanners/zizmor/zizmor" --no-ignores --persona=regular')) 'zizmor reads every workflow and action with no ignores'
+Check ($sastSteps.Contains('-shellcheck="$RUNNER_TEMP/scanners/shellcheck/usr/bin/shellcheck" -pyflakes=')) 'actionlint reads every workflow, with the pinned shellcheck on each bash step'
+Check ($sastSteps.Contains('"$RUNNER_TEMP/scanners/shellcheck/usr/bin/shellcheck" --norc')) 'shellcheck reads every .sh file, with no settings file'
+foreach ($rule in @('PSAvoidUsingPlainTextForPassword', 'PSAvoidUsingComputerNameHardcoded', 'PSAvoidUsingConvertToSecureStringWithPlainText', 'PSUsePSCredentialType',
+        'PSAvoidUsingUsernameAndPasswordParams', 'PSAvoidUsingInvokeExpression', 'PSAvoidUsingAllowUnencryptedAuthentication', 'PSAvoidUsingBrokenHashAlgorithms',
+        'PSAvoidUsingEmptyCatchBlock', 'PSPossibleIncorrectComparisonWithNull', 'PSPossibleIncorrectUsageOfAssignmentOperator',
+        'PSPossibleIncorrectUsageOfRedirectionOperator', 'PSAvoidAssignmentToAutomaticVariable', 'PSAvoidOverwritingBuiltInCmdlets')) {
+    Check ($sastSteps.Contains("'$rule'")) "PSScriptAnalyzer's security rule $rule is in the list"
+}
+Check ($sastSteps.Contains('-CustomRulePath $injection') -and $sastSteps.Contains('-SuppressedOnly')) 'InjectionHunter''s rules run too, and anything left out on request fails'
+Check ($sastSteps.Contains("throw 'A workflow step that no scanner reads is a blind spot'") -and $sastSteps.Contains("throw 'A PowerShell file that can''t be read is a blind spot'")) 'every workflow step is read by a scanner, and every PowerShell file parses'
+
 # --- The test build, read as text. What it makes is recorded by a job that builds nothing, and only once that job has checked it, so the
 # owner can ask GitHub to vouch for a test build as for a release. Added 2026-11-09 by Melanikus for the AvP port.
 $buildWithoutComments = ((($buildWorkflow -replace "`r", '') -split "`n") | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
