@@ -2968,6 +2968,10 @@ $sha = 'ab' * 32
 $answerFile = Join-Path $work 'answer.json'
 $goodCounts = '"malicious": 0, "suspicious": 0, "undetected": 58, "harmless": 0, "timeout": 1, "confirmed-timeout": 0, "failure": 0, "type-unsupported": 12'
 $analysisId = 'OTFiMDcwMjVmYTM1MmQ2ZjA5YTM4NmU5ZTNlNjk4YmE6MTc2MjYwMDAwMA=='
+# What that number decodes to: "91b07025fa352d6f09a386e9e3e698ba:1762600000", an MD5 and a time. The scan job gives the checker both: the file's MD5,
+# and its step's start (here a minute before the made-up analysis's date)
+$analysisMd5 = '91b07025fa352d6f09a386e9e3e698ba'
+$analysisStart = '1762599940'
 
 # Answers as VirusTotal writes them, with HASH, ID, COUNTS and STATUS put in by each test
 $lookupTemplate = '{ "data": { "type": "file", "id": "ID", "attributes": { "sha256": "HASH", "last_analysis_date": 1762600000, "last_analysis_stats": { COUNTS }, "names": ["AvP.zip"] } } }'
@@ -2978,7 +2982,7 @@ function Lookup-Text([string]$counts = $goodCounts, [string]$id = $sha, [string]
 function Upload-Text([string]$id = $analysisId) { return $uploadTemplate.Replace('ID', $id) }
 function Analysis-Text([string]$status = 'completed', [string]$counts = $goodCounts, [string]$id = $analysisId, [string]$hash = $sha) { return $analysisTemplate.Replace('COUNTS', $counts).Replace('STATUS', $status).Replace('ID', $id).Replace('HASH', $hash) }
 
-function Virustotal-Arguments([string]$kind) { return @('-Answer', $answerFile, '-Kind', $kind, '-Sha256', $sha) + $(if ($kind -ceq 'analysis') { @('-AnalysisId', $analysisId) } else { @() }) }
+function Virustotal-Arguments([string]$kind) { return @('-Answer', $answerFile, '-Kind', $kind, '-Sha256', $sha) + $(if ($kind -ceq 'analysis') { @('-AnalysisId', $analysisId, '-Md5', $analysisMd5, '-NotBefore', $analysisStart) } else { @() }) }
 
 function Expect-Answer([string]$kind, [string]$text, [string]$answer, [string]$what)
 {
@@ -3043,6 +3047,71 @@ Expect-AnswerRefused 'analysis' (Analysis-Text -hash ('cd' * 32)) 'of a differen
 Expect-AnswerRefused 'analysis' (Analysis-Text -id 'QW5vdGhlcg==') 'a different analysis' 'and so is an answer about another analysis'
 Expect-AnswerRefused 'analysis' (Analysis-Text -counts '"malicious": 0, "suspicious": 0, "undetected": 19, "harmless": 0') 'only 19 scanners gave an answer about the zip, fewer than the 20' 'a finished analysis with too few scanners is refused'
 Expect-AnswerRefused 'analysis' (Analysis-Text 'done') "in a state this doesn't know" 'an analysis in a state this does not know is refused'
+
+# The same analysis in VirusTotal's other spelling (2026-11-22, the alpha.4 release scan, run 45007310716, refused at check-virustotal.ps1:345: asked about
+# "ZTc2Njgw...", the base64 of "<the zip's MD5>:<time>", VirusTotal answered with data.id "f-<the zip's SHA-256>-<the same time>"; while an analysis is
+# queued it answers with the number as asked). Today's real answer, its numbers as they came. The scan job gives -Md5, the file's own MD5, so the asked
+# number is tied to the file, and -NotBefore, its step's start less a minute, so only an analysis this run started counts: that day VirusTotal never ran
+# two of the re-analyses it was asked for, so the scan job sends the same bytes again, and an old analysis must never come back as today's. An analysis
+# can't be checked without either, and a number that names another file is refused at once (Vasquez's review, 2026-11-22: no caller can forget them).
+$realSha = '88ffc319e472d26f3743c175df78ad144fad036b64a0cbc148c92a43346ec449'
+$realMd5 = 'e76680d9695a957d69188ac58c1ce78f'
+$realAsked = 'ZTc2NjgwZDk2OTVhOTU3ZDY5MTg4YWM1OGMxY2U3OGY6MTc5NTM0MDk2NA=='
+$realDate = '1795340964'
+$realNewId = "f-$realSha-$realDate"
+$realStart = '1795340904'
+$realCounts = '"malicious": 0, "suspicious": 0, "undetected": 66, "harmless": 0, "timeout": 1, "confirmed-timeout": 0, "failure": 0, "type-unsupported": 7'
+$otherNewId = "f-$('cd' * 32)-$realDate"
+
+function Real-Analysis([string]$id = $realNewId, [string]$hash = $realSha, [string]$date = $realDate, [string]$status = 'completed') { return $analysisTemplate.Replace('COUNTS', $realCounts).Replace('STATUS', $status).Replace('ID', $id).Replace('HASH', $hash).Replace('"date": 1762600000', "`"date`": $date") }
+function Real-Arguments([string]$asked = $realAsked, [string]$md5 = $realMd5, [string]$notBefore = $realStart, [string]$kind = 'analysis') { return @('-Answer', $answerFile, '-Kind', $kind, '-Sha256', $realSha) + $(if ($kind -ceq 'analysis') { @('-AnalysisId', $asked) } else { @() }) + $(if ($md5) { @('-Md5', $md5) } else { @() }) + $(if ($notBefore) { @('-NotBefore', $notBefore) } else { @() }) }
+
+function Expect-Real([string]$text, [string[]]$arguments, [string]$answer, [string]$what)
+{
+    Write-File $answerFile $text
+    $result = Run-Script 'check-virustotal.ps1' $arguments
+    $said = @($result.Text -split "`n" | Where-Object { $_.StartsWith('ANSWER: ') })
+    Check ($result.Code -eq 0 -and $said.Count -eq 1 -and $said[0] -ceq "ANSWER: $answer") "$what. It said: $($result.Text)"
+}
+
+function Expect-RealRefused([string]$text, [string[]]$arguments, [string]$reason, [string]$what)
+{
+    Write-File $answerFile $text
+    Expect-Refused 'check-virustotal.ps1' $arguments $reason $what
+}
+
+Expect-Real (Real-Analysis -id $realAsked) (Real-Arguments) 'counted 0 0 66' 'the real answer, naming the analysis as it was asked about, is counted'
+Expect-Real (Real-Analysis) (Real-Arguments) 'counted 0 0 66' 'and naming it the other way, f-<its SHA-256>-<the same time>, it is the same analysis, counted'
+Expect-Real (Real-Analysis -id $realAsked -status 'queued') (Real-Arguments) 'waiting' 'while it is queued, named as asked, it is waited for'
+Expect-RealRefused (Real-Analysis -id $otherNewId) (Real-Arguments) 'a different analysis' 'the other way with another file''s SHA-256 is refused'
+Expect-RealRefused (Real-Analysis -id "f-$realSha-1795340965") (Real-Arguments) 'a different analysis' 'and with another time'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -md5 ('0' * 32)) "the analysis number asked about isn't this file's" 'an asked number of another MD5 than the file''s is refused at once, however the answer names it'
+Expect-RealRefused (Real-Analysis -id $realAsked) (Real-Arguments -md5 ('0' * 32)) "the analysis number asked about isn't this file's" 'even when the answer names it as asked'
+Expect-RealRefused (Real-Analysis -id 'bm90IGFuIG1kNTp0aW1l') (Real-Arguments -asked 'bm90IGFuIG1kNTp0aW1l') "the analysis number asked about isn't this file's" 'and so is an asked number that does not decode to an MD5 and a time'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -md5 $realMd5.ToUpperInvariant()) 'has to be 32 small letters and digits' 'an MD5 to check against that is not written as one is refused'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -md5 '') '(-Md5) is missing' 'an analysis is not checked without the file''s MD5'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -notBefore '') '(-NotBefore) is missing' 'nor without the start of the run'
+Expect-Real (Real-Analysis) (Real-Arguments -asked $realNewId) 'counted 0 0 66' 'an analysis number the upload gave the other way is taken, and matched as it is'
+Expect-RealRefused (Real-Analysis -id $otherNewId -status 'queued') (Real-Arguments -asked $otherNewId) "the analysis number asked about isn't this file's" 'but one the other way with another file''s SHA-256 is refused at once, before it finishes'
+
+# The number an upload gives: the other way it has to carry this file's SHA-256, and as base64 it has to decode to the file's MD5 when one is given
+Expect-Answer 'upload' (Upload-Text "f-$sha-$realDate") "analysis f-$sha-$realDate" 'an upload that gives its analysis''s number the other way is taken' | Out-Null
+Expect-AnswerRefused 'upload' (Upload-Text $realNewId) "the analysis number in VirusTotal's answer isn't this file's" 'and refused at once when that names another file''s SHA-256'
+Expect-AnswerRefused 'upload' (Upload-Text ('f-' + ('ab' * 31) + '-1')) "the analysis number in VirusTotal's answer isn't one" 'and so is one with a SHA-256 too short'
+Expect-Real (Upload-Text $realAsked) (Real-Arguments -kind 'upload' -notBefore '') "analysis $realAsked" 'an upload''s base64 number of the file''s own MD5 is taken'
+Expect-RealRefused (Upload-Text $realAsked) (Real-Arguments -kind 'upload' -notBefore '' -md5 ('0' * 32)) "the analysis number in VirusTotal's answer isn't this file's" 'and one of another MD5 is refused'
+
+# Only an analysis started in this run counts, whatever its state. Today's real date for the zip's analysis.
+Expect-Real (Real-Analysis) (Real-Arguments -notBefore $realDate) 'counted 0 0 66' 'an analysis started in the very second the run began is counted'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -notBefore '1795340965') 'started before this run' 'one started a second before is refused'
+Expect-RealRefused (Real-Analysis -date '1762600000') (Real-Arguments) 'started before this run' 'and one from a year ago'
+Expect-RealRefused (Real-Analysis -date '1762600000' -status 'queued') (Real-Arguments) 'started before this run' 'even while it is still queued, so an old analysis is never waited for'
+Expect-Real (Real-Analysis -status 'queued') (Real-Arguments) 'waiting' 'a queued analysis started in this run is waited for'
+Expect-RealRefused ((Real-Analysis).Replace(", `"date`": $realDate", '')) (Real-Arguments) 'has no data.attributes.date' 'an analysis with no date is refused'
+Expect-RealRefused (Real-Analysis -date '"today"') (Real-Arguments) "data.attributes.date isn't a time" 'and one whose date is not a number'
+Expect-RealRefused (Real-Analysis -date '1795340964.5') (Real-Arguments) "data.attributes.date isn't a time" 'or not a whole one'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -notBefore 'soon') 'has to be a whole number of seconds' 'a start of the run that is not a number is refused'
+Expect-RealRefused (Real-Analysis) (Real-Arguments -notBefore '0') 'has to be a whole number of seconds' 'and one at the very start of 1970'
 
 # Nothing VirusTotal wrote is printed: GitHub takes a line starting :: as an order
 Write-File $answerFile (Analysis-Text '::warning::taken over')
