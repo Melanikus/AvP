@@ -38,11 +38,18 @@ $build = Get-MsvcPinBuild $repository
 $toolset = ($version -split '\.')[0..1] -join '.'
 Write-Host "install-msvc-pin: the pinned MSVC is $version, its compiler and linker build $build (toolset $toolset)"
 
-# vcpkg builds the libraries with the same compiler: its triplet names the same version (VCPKG_PLATFORM_TOOLSET_VERSION), or nothing is built
-$triplet = Join-Path $repository 'vcpkg-overlay-triplets/x86-windows.cmake'
-if (-not [System.IO.File]::ReadAllText($triplet).Contains("set(VCPKG_PLATFORM_TOOLSET_VERSION `"$version`")"))
+# vcpkg builds the libraries with the same compiler: its triplets name the same version (VCPKG_PLATFORM_TOOLSET_VERSION), or nothing is built.
+# Both of them: x86-windows, the libraries the game ships, and x64-windows, the HOST triplet vcpkg builds its own build-time tools with
+# (vcpkg-cmake and the like: nothing of it ships, but no tool of the build drifts either; 2026-11-22, the alpha.4 release log's
+# "Detecting compiler hash for triplet x64-windows" found the image's 14.52.37025)
+foreach ($name in 'x86-windows', 'x64-windows')
 {
-    Stop-Here "$triplet doesn't say set(VCPKG_PLATFORM_TOOLSET_VERSION `"$version`"): vcpkg would build the libraries with another compiler"
+    $triplet = Join-Path $repository "vcpkg-overlay-triplets/$name.cmake"
+    if (-not (Test-Path -LiteralPath $triplet -PathType Leaf)) { Stop-Here "there is no ${triplet}: vcpkg would take its own $name triplet, and the newest MSVC with it" }
+    if (-not [System.IO.File]::ReadAllText($triplet).Contains("set(VCPKG_PLATFORM_TOOLSET_VERSION `"$version`")"))
+    {
+        Stop-Here "$triplet doesn't say set(VCPKG_PLATFORM_TOOLSET_VERSION `"$version`"): vcpkg would build with another compiler"
+    }
 }
 
 # This machine's Visual Studio, as vswhere (Microsoft's, beside the installer) gives it
@@ -64,6 +71,16 @@ $visualStudio = $instance.installationPath
 Write-Host "install-msvc-pin: Visual Studio $($instance.catalog.productDisplayVersion) at $visualStudio"
 
 $compiler = Join-Path $visualStudio "VC\Tools\MSVC\$version\bin\Hostx64\x86\cl.exe"
+# vcpkg's host triplet (vcpkg-overlay-triplets/x64-windows.cmake) builds its build-time tools with the pinned MSVC's x64 compiler: it must be there too,
+# or vcpkg stops where it can't find it; this says so first, naming it
+$hostCompiler = Join-Path $visualStudio "VC\Tools\MSVC\$version\bin\Hostx64\x64\cl.exe"
+function Stop-WithoutHostCompiler
+{
+    if (-not (Test-Path -LiteralPath $hostCompiler -PathType Leaf))
+    {
+        Stop-Here "MSVC $version has no x64 compiler ($hostCompiler), which vcpkg's host triplet x64-windows builds its tools with"
+    }
+}
 function Say-Installed
 {
     $tools = @(Get-ChildItem -LiteralPath (Join-Path $visualStudio 'VC\Tools\MSVC') -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
@@ -85,9 +102,10 @@ foreach ($t in $toolPackages) { Write-Host "install-msvc-pin: its tools package 
 if (Test-Path -LiteralPath $compiler -PathType Leaf)
 {
     # The folder is there: its compiler and linker must be the pinned build too (Get-MsvcPinFolder stops here on GitHub, saying which build it found,
-    # and warns on a machine of ours)
+    # and warns on a machine of ours), and its x64 compiler must be there for vcpkg's host triplet
     try { Get-MsvcPinFolder $visualStudio $version | Out-Null } catch { Stop-Here $_.Exception.Message }
-    Write-Host "install-msvc-pin: MSVC $version is installed ($compiler): nothing to do"
+    Stop-WithoutHostCompiler
+    Write-Host "install-msvc-pin: MSVC $version is installed ($compiler, and the x64 one vcpkg's host triplet uses): nothing to do"
     exit 0
 }
 if ($ListOnly) { Stop-Here "MSVC $version is not installed (-ListOnly: nothing installed)" }
@@ -119,5 +137,6 @@ if (-not (Test-Path -LiteralPath $compiler -PathType Leaf))
     Stop-Here "after the install there is still no ${compiler}: the component installs another patch of MSVC $toolset (above). Move the pin on purpose, with a scan, or ask for this one"
 }
 try { Get-MsvcPinFolder $visualStudio $version | Out-Null } catch { Stop-Here $_.Exception.Message }
-Write-Host "install-msvc-pin: MSVC $version build $build is installed ($compiler)"
+Stop-WithoutHostCompiler
+Write-Host "install-msvc-pin: MSVC $version build $build is installed ($compiler, and the x64 one vcpkg's host triplet uses)"
 exit 0
