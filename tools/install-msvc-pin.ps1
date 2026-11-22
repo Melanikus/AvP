@@ -14,7 +14,8 @@ documents, with the Visual Studio Installer this machine already has, from Micro
      toolset: if that isn't the pinned one, this stops and says which it got, so the pin is moved on purpose, never by accident.
   5. The compiler's own build is pinned too (AvpxMsvcBuild, as 36263): Microsoft re-services a toolset under the same folder name. Before
      installing, the catalog's tools package must be that build (<toolset>.<build>), and after, cl.exe and link.exe must be it; a folder
-     already here with another build stops this too, saying to update Visual Studio's build tools (2026-11-22, editor PR #98).
+     already here with another build stops this too, saying to update Visual Studio's build tools (2026-11-22, editor PR #98). Each of
+     those STOPS only on GitHub (GITHUB_ACTIONS "true"), where what ships is built; on a machine of ours it is a warning and this goes on.
 Its runtime DLLs come with it (the component's Microsoft.VC.<toolset>.CRT.Redist.X86), in VC\Redist\MSVC: they're listed too.
 
 Run on a build machine before building, from the repository's root: ./tools/install-msvc-pin.ps1. It answers 0 when the pinned MSVC is
@@ -83,18 +84,22 @@ foreach ($t in $toolPackages) { Write-Host "install-msvc-pin: its tools package 
 
 if (Test-Path -LiteralPath $compiler -PathType Leaf)
 {
-    # The folder is there: its compiler and linker must be the pinned build too (Get-MsvcPinFolder stops here, saying which build it found)
+    # The folder is there: its compiler and linker must be the pinned build too (Get-MsvcPinFolder stops here on GitHub, saying which build it found,
+    # and warns on a machine of ours)
     try { Get-MsvcPinFolder $visualStudio $version | Out-Null } catch { Stop-Here $_.Exception.Message }
-    Write-Host "install-msvc-pin: MSVC $version build $build is installed ($compiler): nothing to do"
+    Write-Host "install-msvc-pin: MSVC $version is installed ($compiler): nothing to do"
     exit 0
 }
 if ($ListOnly) { Stop-Here "MSVC $version is not installed (-ListOnly: nothing installed)" }
 if ($components.Count -ne 1) { Stop-Here "the catalog offers $($components.Count) components for MSVC $toolset (x86/x64); one is needed" }
 # The component installs the build its tools package is (the catalog says it before anything is installed): any other build would put another
-# compiler in the pinned folder, so nothing is installed (2026-11-22: VS 18.12's catalog served 14.51.36263 into the folder 14.51.36231)
+# compiler in the pinned folder (2026-11-22: VS 18.12's catalog served 14.51.36263 into the folder 14.51.36231). On GitHub, where what ships is
+# built, nothing is installed then; on a machine of ours it is installed with a warning (win32/msvc-pin.props: "enforce on CI, warn locally")
 if ($toolPackages.Count -ne 1 -or $toolPackages[0].version -cne "$toolset.$build")
 {
-    Stop-Here "the catalog's tools package for MSVC $toolset is $(@($toolPackages | ForEach-Object { $_.version }) -join ', '), not $toolset.${build}: Microsoft serves another build of it now. Move the pin on purpose (AvpxMsvcBuild, with a scan), never by accident"
+    $other = "the catalog's tools package for MSVC $toolset is $(@($toolPackages | ForEach-Object { $_.version }) -join ', '), not $toolset.${build}"
+    if ($env:GITHUB_ACTIONS -ceq 'true') { Stop-Here "${other}: Microsoft serves another build of it now. Move the pin on purpose (AvpxMsvcBuild, with a scan), never by accident" }
+    Write-Warning "install-msvc-pin: ${other}: it is installed, but builds with it are not the shipped bytes. Update this machine's Visual Studio to build $build when you can"
 }
 
 $timer = [System.Diagnostics.Stopwatch]::StartNew()

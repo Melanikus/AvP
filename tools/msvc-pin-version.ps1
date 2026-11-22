@@ -42,9 +42,15 @@ function Get-MsvcPinFolder([string]$visualStudio, [string]$version)
     # passes it and none can pass another
     $build = Get-MsvcPinBuild (Split-Path -Parent $PSScriptRoot)
     $have = "compiler build $(Get-MsvcToolBuild $compiler), linker build $(Get-MsvcToolBuild $linker)"
+    # On GitHub (GITHUB_ACTIONS "true"), where what ships is built, another build stops the script; on a machine of ours it is a warning, and the
+    # script goes on (win32/msvc-pin.props says why: the owner's "enforce on CI, warn locally")
     if ((Get-MsvcToolBuild $compiler) -ne $build -or (Get-MsvcToolBuild $linker) -ne $build)
     {
-        throw "MSVC $version in $visualStudio has $have, and this project builds with build $build (win32/msvc-pin.props): Microsoft re-serviced the toolset under the same folder. Update Visual Studio's MSVC $version build tools to build $build, or move the pin on purpose, with a scan."
+        if ($env:GITHUB_ACTIONS -ceq 'true')
+        {
+            throw "MSVC $version in $visualStudio has $have, and this project builds with build $build (win32/msvc-pin.props): Microsoft re-serviced the toolset under the same folder. What ships is built here, so this stops: move the pin on purpose, with a scan."
+        }
+        Write-Warning "MSVC $version in $visualStudio has $have, not the pinned build $build (win32/msvc-pin.props) that GitHub builds what ships with: this goes on, but its bytes are not the shipped ones. Update Visual Studio's MSVC $version build tools to build $build when you can."
     }
     return $folder
 }
