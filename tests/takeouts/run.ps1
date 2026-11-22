@@ -8,7 +8,8 @@
 #   tests/takeouts/run.ps1 <test> -From 3 -To 5    only those rows
 #   tests/takeouts/run.ps1 -CheckRefusals          checks that this refuses the names it should, each for its own reason (added 2026-11-21)
 #
-# The copy and the programs land in a folder called AvP-test-out next to the repository, or under $env:RUNNER_TEMP in the automatic checks. Not the temp folder: antivirus programs distrust
+# The copy and the programs land in AvP-test-out\takeouts\<this copy's folder name> next to the repository, a folder of this copy of the
+# repository's own (modified 2026-11-21: copies side by side shared one, and emptied each other's), or under $env:RUNNER_TEMP in the automatic checks. Not the temp folder: antivirus programs distrust
 # new programs that appear there. It gives back a non-zero result if any row wasn't noticed, or couldn't be run.
 #
 # A row that can't run says why and what to do. When its text has moved, node tests/takeouts/find-moved-row.js <test> <row> finds where it went (added 2026-11-07).
@@ -452,10 +453,10 @@ $repository = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $rowsFile = Join-Path $PSScriptRoot "$Test.json"
 if (-not (Test-Path $rowsFile)) { throw "There's no list of take-outs at $rowsFile" }
 
-$base = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-takeouts' } else { Join-Path (Split-Path -Parent $repository) 'AvP-test-out\takeouts' }
+$base = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-takeouts' } else { Join-Path (Split-Path -Parent $repository) "AvP-test-out\takeouts\$(Split-Path -Leaf $repository)" }
 $tree = Join-Path $base "$Test\tree"
 $out = Join-Path $base "$Test\out"
-if (Test-Path (Join-Path $base $Test)) { Remove-Item -Recurse -Force (Join-Path $base $Test) }
+if (Test-Path -LiteralPath (Join-Path $base $Test)) { Remove-Item -LiteralPath (Join-Path $base $Test) -Recurse -Force }
 New-Item -ItemType Directory -Force $tree | Out-Null
 
 # These bytes go in and out exactly as they are, whatever they are, and line endings are put back as they were found.
@@ -496,7 +497,7 @@ function Invoke-Tool([string]$program, [string]$arguments, [string]$folder, [str
 }
 
 function Build-And-Run {
-    if (Test-Path $out) { Remove-Item -Recurse -Force $out }
+    if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
     New-Item -ItemType Directory -Force $out | Out-Null
     # The test's settings come last, because they can end with /link, and anything after /link goes to the linker
     Invoke-Tool 'cl.exe' "/nologo `"/Fe:$out\t.exe`" `"/Fo:$out/`" @tests\$Test.args" $tree (Join-Path $out 'build.txt') | Out-Null
