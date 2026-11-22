@@ -132,8 +132,9 @@ jobs:
       #   bash: shellcheck, Ubuntu's own package, run by actionlint on each bash step and on its own on every .sh file
       - name: Install the pinned script and workflow scanners
         if: ${{ !cancelled() }}
+        # The job's read-only token: gh attestation verify asks GitHub for the tools' build records
         env:
-          GH_TOKEN: ${{ github.token }}   # read only: gh attestation verify asks GitHub for the tools' build records
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           t="$RUNNER_TEMP/scanners"; mkdir -p "$t"
