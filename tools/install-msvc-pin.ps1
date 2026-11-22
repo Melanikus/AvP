@@ -12,6 +12,9 @@ documents, with the Visual Studio Installer this machine already has, from Micro
   3. "setup.exe modify --add <component> --quiet --norestart", timed.
   4. The pinned folder must then be there, with its compiler. The component installs the newest patch Microsoft serves for that
      toolset: if that isn't the pinned one, this stops and says which it got, so the pin is moved on purpose, never by accident.
+  5. The compiler's own build is pinned too (AvpxMsvcBuild, as 36263): Microsoft re-services a toolset under the same folder name. Before
+     installing, the catalog's tools package must be that build (<toolset>.<build>), and after, cl.exe and link.exe must be it; a folder
+     already here with another build stops this too, saying to update Visual Studio's build tools (2026-11-22, editor PR #98).
 Its runtime DLLs come with it (the component's Microsoft.VC.<toolset>.CRT.Redist.X86), in VC\Redist\MSVC: they're listed too.
 
 Run on a build machine before building, from the repository's root: ./tools/install-msvc-pin.ps1. It answers 0 when the pinned MSVC is
@@ -30,8 +33,9 @@ function Stop-Here([string]$why)
 # The pinned version, from the one file every project imports
 . (Join-Path $PSScriptRoot 'msvc-pin-version.ps1')
 $version = Get-MsvcPinVersion $repository
+$build = Get-MsvcPinBuild $repository
 $toolset = ($version -split '\.')[0..1] -join '.'
-Write-Host "install-msvc-pin: the pinned MSVC is $version (toolset $toolset)"
+Write-Host "install-msvc-pin: the pinned MSVC is $version, its compiler and linker build $build (toolset $toolset)"
 
 # vcpkg builds the libraries with the same compiler: its triplet names the same version (VCPKG_PLATFORM_TOOLSET_VERSION), or nothing is built
 $triplet = Join-Path $repository 'vcpkg-overlay-triplets/x86-windows.cmake'
@@ -79,11 +83,19 @@ foreach ($t in $toolPackages) { Write-Host "install-msvc-pin: its tools package 
 
 if (Test-Path -LiteralPath $compiler -PathType Leaf)
 {
-    Write-Host "install-msvc-pin: MSVC $version is installed ($compiler): nothing to do"
+    # The folder is there: its compiler and linker must be the pinned build too (Get-MsvcPinFolder stops here, saying which build it found)
+    try { Get-MsvcPinFolder $visualStudio $version | Out-Null } catch { Stop-Here $_.Exception.Message }
+    Write-Host "install-msvc-pin: MSVC $version build $build is installed ($compiler): nothing to do"
     exit 0
 }
 if ($ListOnly) { Stop-Here "MSVC $version is not installed (-ListOnly: nothing installed)" }
 if ($components.Count -ne 1) { Stop-Here "the catalog offers $($components.Count) components for MSVC $toolset (x86/x64); one is needed" }
+# The component installs the build its tools package is (the catalog says it before anything is installed): any other build would put another
+# compiler in the pinned folder, so nothing is installed (2026-11-22: VS 18.12's catalog served 14.51.36263 into the folder 14.51.36231)
+if ($toolPackages.Count -ne 1 -or $toolPackages[0].version -cne "$toolset.$build")
+{
+    Stop-Here "the catalog's tools package for MSVC $toolset is $(@($toolPackages | ForEach-Object { $_.version }) -join ', '), not $toolset.${build}: Microsoft serves another build of it now. Move the pin on purpose (AvpxMsvcBuild, with a scan), never by accident"
+}
 
 $timer = [System.Diagnostics.Stopwatch]::StartNew()
 # One command line, the folder in quotes: Start-Process joins a list of arguments with spaces and quotes none of them, so the first run gave the
@@ -101,5 +113,6 @@ if (-not (Test-Path -LiteralPath $compiler -PathType Leaf))
 {
     Stop-Here "after the install there is still no ${compiler}: the component installs another patch of MSVC $toolset (above). Move the pin on purpose, with a scan, or ask for this one"
 }
-Write-Host "install-msvc-pin: MSVC $version is installed ($compiler)"
+try { Get-MsvcPinFolder $visualStudio $version | Out-Null } catch { Stop-Here $_.Exception.Message }
+Write-Host "install-msvc-pin: MSVC $version build $build is installed ($compiler)"
 exit 0
