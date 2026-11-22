@@ -38,6 +38,18 @@ permissions:
 env:
   SNYK_CLI_VERSION: v1.1308.3
   SNYK_CLI_SHA256: 5f323f45885341ea1473639859271925912ece82a2f77bc146bb4468f9838840
+  # The script and workflow scanners (the end of the Snyk Code job), pinned the same way. Each hash is its release file's, as GitHub publishes it,
+  # chosen on 2026-11-21 after a review of each: its hashes, its signatures or build records, and its source read for what it reaches.
+  PSSCRIPTANALYZER_VERSION: 1.25.0
+  PSSCRIPTANALYZER_SHA256: 14e634c828eb98efb9f40b2918ba90f139ed5eccdf663a2a747736d996995d60
+  INJECTIONHUNTER_VERSION: 1.0.0
+  INJECTIONHUNTER_SHA256: feb24c5c3e98f4741f3967a558983e5e23303e6fd9ed4f34e4b96cbe72a8f650
+  ZIZMOR_VERSION: 1.32.0
+  ZIZMOR_SHA256: bb110cc765eca9cd7efb2e284a956be5974c60027b0970f16397d86208a9957b
+  ACTIONLINT_VERSION: 1.7.12
+  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+  SHELLCHECK_DEB_VERSION: 0.9.0-1
+  SHELLCHECK_DEB_SHA256: eadf78f4dfcb1a271f47a9be5e38d124dffe9d4fea74956fab34e8c3e322a854
 
 jobs:
   snyk-code:
@@ -110,6 +122,210 @@ jobs:
         with:
           sarif_file: snyk-code.sarif
           category: snyk-code
+
+      # --- The scripts and the workflows (added 2026-11-21, Tao 1: Snyk Code reads no PowerShell, workflow YAML or bash, and a blind spot
+      # fails the gate). Four scanners, each pinned like Snyk's CLI above: its version and SHA-256 here, checked before it runs, and for the
+      # two built by their own project's release workflow, that workflow's signed record of building it (gh attestation verify). Each
+      # finding fails its step. Every step below runs even when one before it failed, so one run shows them all.
+      #   PowerShell: PSScriptAnalyzer (Microsoft's), with the security rules below and InjectionHunter's injection rules (Microsoft's)
+      #   workflow YAML: zizmor (GitHub Actions security) and actionlint (workflow errors)
+      #   bash: shellcheck, Ubuntu's own package, run by actionlint on each bash step and on its own on every .sh file
+      - name: Install the pinned script and workflow scanners
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}   # read only: gh attestation verify asks GitHub for the tools' build records
+        run: |
+          set -euo pipefail
+          t="$RUNNER_TEMP/scanners"; mkdir -p "$t"
+
+          # zizmor and actionlint: their release files, by hash, and the record that their own release workflow built them at that tag
+          curl -fsSL "https://github.com/zizmorcore/zizmor/releases/download/v$ZIZMOR_VERSION/zizmor-x86_64-unknown-linux-gnu.tar.gz" -o "$t/zizmor.tar.gz"
+          echo "$ZIZMOR_SHA256  $t/zizmor.tar.gz" | sha256sum -c -
+          gh attestation verify "$t/zizmor.tar.gz" --repo zizmorcore/zizmor --deny-self-hosted-runners \
+            --cert-identity "https://github.com/zizmorcore/zizmor/.github/workflows/release.yml@refs/tags/v$ZIZMOR_VERSION"
+          mkdir -p "$t/zizmor" && tar -xzf "$t/zizmor.tar.gz" -C "$t/zizmor"
+
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o "$t/actionlint.tar.gz"
+          echo "$ACTIONLINT_SHA256  $t/actionlint.tar.gz" | sha256sum -c -
+          gh attestation verify "$t/actionlint.tar.gz" --repo rhysd/actionlint --deny-self-hosted-runners \
+            --cert-identity "https://github.com/rhysd/actionlint/.github/workflows/release.yaml@refs/tags/v$ACTIONLINT_VERSION"
+          mkdir -p "$t/actionlint" && tar -xzf "$t/actionlint.tar.gz" -C "$t/actionlint"
+
+          # shellcheck: Ubuntu's own package. apt checks the archive's signature as it fetches the list and the package, and the package's
+          # hash is checked here. dpkg-deb -x only unpacks it: none of the package's own scripts run.
+          sudo apt-get update -qq
+          (cd "$t" && apt-get download "shellcheck=$SHELLCHECK_DEB_VERSION")
+          echo "$SHELLCHECK_DEB_SHA256  $t/shellcheck_${SHELLCHECK_DEB_VERSION}_amd64.deb" | sha256sum -c -
+          dpkg-deb -x "$t/shellcheck_${SHELLCHECK_DEB_VERSION}_amd64.deb" "$t/shellcheck"
+
+          # PSScriptAnalyzer and InjectionHunter: Microsoft's packages from the PowerShell Gallery, by hash. Every code file in both carries
+          # Microsoft's signature, checked when these hashes were chosen (2026-11-21); the hash pins those exact files.
+          curl -fsSL "https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer/$PSSCRIPTANALYZER_VERSION" -o "$t/psscriptanalyzer.nupkg"
+          echo "$PSSCRIPTANALYZER_SHA256  $t/psscriptanalyzer.nupkg" | sha256sum -c -
+          unzip -q "$t/psscriptanalyzer.nupkg" -d "$t/PSScriptAnalyzer"
+          curl -fsSL "https://www.powershellgallery.com/api/v2/package/InjectionHunter/$INJECTIONHUNTER_VERSION" -o "$t/injectionhunter.nupkg"
+          echo "$INJECTIONHUNTER_SHA256  $t/injectionhunter.nupkg" | sha256sum -c -
+          unzip -q "$t/injectionhunter.nupkg" -d "$t/InjectionHunter"
+
+          "$t/zizmor/zizmor" --version; "$t/actionlint/actionlint" -version | head -1; "$t/shellcheck/usr/bin/shellcheck" --version | sed -n 2p
+
+      # These scanners can be told to look away too: a comment in a script, or a settings file they find by themselves. We fix findings,
+      # so none of those may exist. (Each word is written here so that it doesn't match itself.)
+      - name: Fail if anything tells the script or workflow scanners to look away
+        if: ${{ !cancelled() }}
+        run: |
+          found=$(git grep -n -I -E 'Suppress[M]essage|shellcheck[ ]disable|zizmor:[ ]ignore' || true)
+          files=$(git ls-files | grep -iE '(^|/)(PSScriptAnalyzerSettings\.psd1|\.?shellcheckrc|\.?zizmor\.ya?ml)$|^\.github/actionlint\.ya?ml$' || true)
+          if [ -n "$found$files" ]; then
+            echo "$found"
+            echo "$files"
+            echo "::error::Something in the repository tells a script or workflow scanner to look away"
+            exit 1
+          fi
+          echo "No suppressions, and no scanner settings files."
+
+      # zizmor reads every workflow and action git tracks, named one by one, so none is left out. --no-ignores: no comment or settings file
+      # can hide a finding. With the job's read-only token it also asks GitHub whether each pinned action is that action's own commit, and
+      # whether it has a known vulnerability. If GitHub can't be reached, zizmor stops with an error and this step fails.
+      - name: Workflows (SAST) - zizmor
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -t files < <(git ls-files -- '.github/workflows/*.yml' '.github/workflows/*.yaml' '.github/actions/**/action.yml' '.github/actions/**/action.yaml')
+          echo "zizmor reads ${#files[@]} files"
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::No workflow to read"; exit 1; }
+          "$RUNNER_TEMP/scanners/zizmor/zizmor" --no-ignores --persona=regular --cache-dir "$RUNNER_TEMP/zizmor-cache" "${files[@]}"
+
+      # actionlint reads every workflow, and hands each bash step to the pinned shellcheck by its path (never one found on the runner).
+      - name: Workflows - actionlint, with shellcheck on each bash step
+        if: ${{ !cancelled() }}
+        run: |
+          mapfile -t files < <(git ls-files -- '.github/workflows/*.yml' '.github/workflows/*.yaml')
+          echo "actionlint reads ${#files[@]} workflows"
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::No workflow to read"; exit 1; }
+          "$RUNNER_TEMP/scanners/actionlint/actionlint" -shellcheck="$RUNNER_TEMP/scanners/shellcheck/usr/bin/shellcheck" -pyflakes= "${files[@]}"
+
+      # The .sh files, with the same shellcheck. --norc: no settings file changes what it reports.
+      - name: Shell scripts - shellcheck
+        if: ${{ !cancelled() }}
+        run: |
+          mapfile -t files < <(git ls-files -- '*.sh' '*.bash')
+          echo "shellcheck reads ${#files[@]} .sh files"
+          if [ "${#files[@]}" -eq 0 ]; then echo "No .sh files here"; exit 0; fi
+          "$RUNNER_TEMP/scanners/shellcheck/usr/bin/shellcheck" --norc "${files[@]}"
+
+      # PowerShell: every .ps1, .psm1 and .psd1 git tracks, and every PowerShell step of the workflows and actions, each written to a file of
+      # its own first (a step's shell is its shell:, or the runner's own: pwsh on Windows, bash elsewhere). A step that no scanner here reads
+      # fails, and so does any file PowerShell can't parse. Then PSScriptAnalyzer's security rules and InjectionHunter's rules on all of them:
+      # any finding fails, and so does any finding a script has asked it to leave out.
+      - name: PowerShell (SAST) - PSScriptAnalyzer and InjectionHunter
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scanners = Join-Path $env:RUNNER_TEMP 'scanners'
+          $steps = Join-Path $env:RUNNER_TEMP 'powershell-steps'
+          New-Item -ItemType Directory -Force $steps | Out-Null
+
+          # 1. Every workflow and action step's run: and its shell. A job named run: is at column 2; a step's run: is at column 6 or deeper.
+          $yamlFiles = @(git ls-files -- '.github/workflows/*.yml' '.github/workflows/*.yaml' '.github/actions/**/action.yml' '.github/actions/**/action.yaml')
+          $expected = 0; $pwshSteps = 0; $bashSteps = 0; $unread = @()
+          foreach ($file in $yamlFiles) {
+              $lines = @(Get-Content -LiteralPath $file)
+              $isAction = $file -like '.github/actions/*'
+
+              # Each job's runs-on, as plain words; a runs-on that isn't (an expression, a list) is unknown
+              $jobOf = @{}; $windows = @{}; $inJobs = $false; $job = $null
+              for ($i = 0; $i -lt $lines.Count; $i++) {
+                  if ($lines[$i] -match '^jobs:\s*(#.*)?$') { $inJobs = $true; continue }
+                  if ($lines[$i] -match '^\S') { $inJobs = $false }
+                  if ($inJobs -and $lines[$i] -match '^  ([A-Za-z0-9_-]+):\s*(#.*)?$') { $job = $Matches[1] }
+                  if ($inJobs -and $job -and $lines[$i] -match '^    runs-on:\s*([A-Za-z0-9_.-]+)\s*(#.*)?$') { $windows[$job] = $Matches[1] -match 'windows' }
+                  $jobOf[$i] = $job
+              }
+
+              for ($i = 0; $i -lt $lines.Count; $i++) {
+                  if ($lines[$i] -notmatch '^(?<lead>\s*)(?<dash>- )?run:(?<rest>.*)$') { continue }
+                  $key = $Matches.lead.Length + $Matches.dash.Length
+                  if ($key -lt 6) { continue }
+                  $expected++
+                  $rest = $Matches.rest.Trim()
+
+                  # The step's own lines, for its shell:
+                  $start = $i
+                  while ($start -ge 0 -and $lines[$start] -notmatch "^\s{$($key - 2)}- ") { $start-- }
+                  $end = $i + 1
+                  while ($end -lt $lines.Count -and ($lines[$end] -match '^\s*$' -or ($lines[$end] -match '^(\s*)' -and $Matches[1].Length -ge $key -and $lines[$end] -notmatch "^\s{$($key - 2)}- "))) { $end++ }
+                  $shell = $null
+                  for ($j = [Math]::Max($start, 0); $j -lt $end; $j++) {
+                      if ($lines[$j] -match "^(\s{$key}|\s{$($key - 2)}- )shell:\s*([A-Za-z0-9_.-]+)") { $shell = $Matches[2] }
+                  }
+                  $where = "${file}:$($i + 1)"
+                  if (-not $shell) {
+                      if ($isAction) { $unread += "$where (an action's step names no shell)"; continue }
+                      if (-not $windows.ContainsKey($jobOf[$i])) { $unread += "$where (its job's runs-on isn't plain words)"; continue }
+                      $shell = if ($windows[$jobOf[$i]]) { 'pwsh' } else { 'bash' }
+                  }
+
+                  # Its text: the block under it, or the rest of its line
+                  if ($rest -match '^[|>][+-]?\s*(#.*)?$') {
+                      $body = @(); $j = $i + 1
+                      while ($j -lt $lines.Count -and ($lines[$j] -match '^\s*$' -or ($lines[$j] -match '^(\s*)' -and $Matches[1].Length -gt $key))) { $body += $lines[$j]; $j++ }
+                      $indent = (@($body | Where-Object { $_ -match '\S' } | ForEach-Object { ($_ -replace '^(\s*).*$', '$1').Length }) | Measure-Object -Minimum).Minimum
+                      $text = (@($body | ForEach-Object { if ($_.Length -ge $indent) { $_.Substring($indent) } else { '' } }) -join "`n")
+                  }
+                  else {
+                      $text = $rest -replace "^'(.*)'$", '$1' -replace '^"(.*)"$', '$1'
+                  }
+
+                  if ($shell -match '^(pwsh|powershell)$') {
+                      # GitHub fills in each of its expressions (a dollar and two braces) before PowerShell reads the step: a plain word stands in
+                      $text = [regex]::Replace($text, '\$\{\{.*?\}\}', 'GITHUB_EXPRESSION')
+                      [System.IO.File]::WriteAllText((Join-Path $steps (($file -replace '[\\/.]', '_') + "_line$($i + 1).ps1")), $text + "`n")
+                      $pwshSteps++
+                  }
+                  elseif ($shell -match '^(bash|sh)$') { $bashSteps++ }
+                  else { $unread += "$where (shell $shell, which no scanner here reads)" }
+              }
+          }
+          Write-Host "Workflow and action files: $($yamlFiles.Count); steps with run: $expected; PowerShell: $pwshSteps; bash: $bashSteps (actionlint's shellcheck)"
+          foreach ($u in $unread) { Write-Host "::error::A step no scanner reads: $u" }
+          if ($expected -eq 0 -or $unread.Count -or ($pwshSteps + $bashSteps) -ne $expected) { throw 'A workflow step that no scanner reads is a blind spot' }
+
+          # 2. Every file PowerShell must read, and each must parse
+          $tracked = @(git ls-files | Where-Object { $_ -match '\.(ps1|psm1|psd1)$' })
+          $all = @($tracked | ForEach-Object { (Resolve-Path -LiteralPath $_).Path }) + @(Get-ChildItem -LiteralPath $steps -Filter '*.ps1' | ForEach-Object { $_.FullName })
+          $parseErrors = 0
+          foreach ($path in $all) {
+              $tokens = $null; $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
+              foreach ($e in $errors) { Write-Host "::error::$(Split-Path -Leaf $path):$($e.Extent.StartLineNumber) PowerShell can't parse it: $($e.Message)"; $parseErrors++ }
+          }
+          Write-Host "PowerShell to read: $($tracked.Count) files git tracks and $pwshSteps workflow steps; parse errors: $parseErrors"
+          if ($parseErrors -or $all.Count -ne ($tracked.Count + $pwshSteps)) { throw 'A PowerShell file that can''t be read is a blind spot' }
+
+          # 3. The scanners, on every one of them. The security rules, every severity: the credential rules (Microsoft's ScriptSecurity set),
+          # code run from a string, unencrypted authentication, broken hash algorithms, an error swallowed by an empty catch, the three
+          # comparisons and redirections that quietly do something else, assigning to PowerShell's own variables, and replacing its commands.
+          Import-Module (Join-Path $scanners 'PSScriptAnalyzer/PSScriptAnalyzer.psd1')
+          $injection = Join-Path $scanners 'InjectionHunter/InjectionHunter.psm1'
+          $rules = @('PSAvoidUsingPlainTextForPassword', 'PSAvoidUsingComputerNameHardcoded', 'PSAvoidUsingConvertToSecureStringWithPlainText',
+              'PSUsePSCredentialType', 'PSAvoidUsingUsernameAndPasswordParams', 'PSAvoidUsingInvokeExpression', 'PSAvoidUsingAllowUnencryptedAuthentication',
+              'PSAvoidUsingBrokenHashAlgorithms', 'PSAvoidUsingEmptyCatchBlock', 'PSPossibleIncorrectComparisonWithNull',
+              'PSPossibleIncorrectUsageOfAssignmentOperator', 'PSPossibleIncorrectUsageOfRedirectionOperator', 'PSAvoidAssignmentToAutomaticVariable',
+              'PSAvoidOverwritingBuiltInCmdlets')
+          $findings = @(); $leftOut = @()
+          foreach ($path in $all) {
+              $findings += @(Invoke-ScriptAnalyzer -Path $path -IncludeRule $rules)
+              $findings += @(Invoke-ScriptAnalyzer -Path $path -CustomRulePath $injection)
+              $leftOut += @(Invoke-ScriptAnalyzer -Path $path -IncludeRule $rules -SuppressedOnly)
+              $leftOut += @(Invoke-ScriptAnalyzer -Path $path -CustomRulePath $injection -SuppressedOnly)
+          }
+          foreach ($f in $findings) { Write-Host "::error::$(Split-Path -Leaf $f.ScriptPath):$($f.Line) $($f.RuleName) ($($f.Severity)): $($f.Message)" }
+          foreach ($f in $leftOut) { Write-Host "::error::$(Split-Path -Leaf $f.ScriptPath):$($f.Line) $($f.RuleName) was asked to look away" }
+          Write-Host "PSScriptAnalyzer and InjectionHunter read $($all.Count) files: $($findings.Count) findings, $($leftOut.Count) left out on request"
+          if ($findings.Count -or $leftOut.Count) { exit 1 }
 
   snyk-open-source:
     name: Snyk Open Source (SCA)
