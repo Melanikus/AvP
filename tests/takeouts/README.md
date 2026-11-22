@@ -43,6 +43,13 @@ runs on a release candidate, the team fixes what it finds, and a release is refu
 Each list is `<test>.json`: what to copy, and rows that each name a change, with the file, the exact text and what to put in its place. Lines end in `\n` here, whatever the file uses. The repository
 itself is never touched.
 
+`run.ps1` checks every name it is given before it copies or changes anything by it: each name in a list's `"copy"`, the file each row changes,
+each name under `vcpkg_installed` in a test's settings, and the test's own name. A name has no `:`, doesn't start at a root (`\` or `/`), and each of
+its parts is letters, digits and `- _ . +` only, isn't dots alone, doesn't end in a dot, and isn't a device name (`CON`, `PRN`, `AUX`, `NUL`, `COM0`-`COM9`,
+`LPT0`-`LPT9`). It is no link (a junction or a symbolic link) and in none, and it has to be there. Folders are copied without the links inside them. What is
+copied comes from inside the repository and goes inside the copy, and a list, or settings, with one refused name copy nothing. `tests/takeouts/run.ps1 -CheckRefusals` shows each name is
+refused for its own reason, and good names taken, on a made-up folder of its own; the Take-outs check runs it before any list.
+
 Rows whose name starts `SOURCE:` check a line that only a real game can run, such as what's asked of a graphics card. The test reads the source for it, so it only shows the line is there. What
 that line does on a card needs a run of the game.
 
