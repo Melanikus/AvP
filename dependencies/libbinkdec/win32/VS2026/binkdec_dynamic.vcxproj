@@ -90,16 +90,21 @@
       <!-- /MD: the C runtime comes from Microsoft's own DLLs, as the game's does. The game and this DLL each keep their own memory: the game
            passes its own buffers in, and the decoder frees what it made when it's closed. -->
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <!-- /Brepro: the same source and the same compiler make the same bytes (no time or random number written into the objects).
+           /pathmap (which needs /experimental:deterministic) names the library's folder libbinkdec wherever it is checked out, so no
+           checkout's path reaches the code (as libsmackerdec and libsmackerenc have it). Measured 2026-11-22 without them: the same commit
+           built twice on GitHub (run 45023318613, attempts 1 and 2) gave two libbinkdec.dll, c9292535 and ddba8780. -->
+      <AdditionalOptions>/Brepro /experimental:deterministic /pathmap:$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..'))\=\libbinkdec\ %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <!-- Symbols: a .pdb and a .map beside the library, so the place of a crash can be named. They stay with the build and are
            never in the package: tools/build-and-package.ps1 copies only what a player needs, and tools/check-release-package.ps1
            refuses them. /PDBALTPATH has the library record only the .pdb's name, not the folder it was built in. /DEBUG would
            turn off ICF (folding identical functions), so ICF and REF are set here, and the library's code is the same as without
-           symbols. -->
+           symbols. /Brepro: the library's time stamp and its .pdb's GUID come from its contents, not the clock. -->
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/PDBALTPATH:%_PDB% %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/PDBALTPATH:%_PDB% /Brepro %(AdditionalOptions)</AdditionalOptions>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <ModuleDefinitionFile>../binkdec.def</ModuleDefinitionFile>
