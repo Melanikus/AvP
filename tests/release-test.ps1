@@ -3282,6 +3282,14 @@ Check-Order $testsWorkflow './tools/check-hudson-asleep.ps1' './tests/build.ps1'
 Check-Order $testsWorkflow 'name: Unit tests' './tools/check-online-play.ps1' 'and the required Unit tests check refuses any way a player''s game could play online but the safe way'
 Check-Order $testsWorkflow './tools/check-online-play.ps1' './tests/build.ps1' 'before it builds anything'
 
+# --- Outside the automatic checks, each copy of the repository builds its tests into a folder of its own. tests/build.ps1 empties its output
+# folder first, and copies of the repository side by side would share the folder next to them, so one copy's build emptied another's tests,
+# take-out copies and sanitizer builds while they ran (2026-11-04, 2026-11-21). Added 2026-11-21 by Melanikus for the AvP port.
+$testBuild = (Get-Content -Raw (Join-Path $repository 'tests/build.ps1')) -replace "`r", ''
+Check ($testBuild.Contains('$outputDir  = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP ''avp-tests'' }')) 'in the automatic checks, tests/build.ps1 builds into the runner''s own folder'
+Check ($testBuild.Contains('else { Join-Path (Split-Path -Parent $repository) "AvP-test-out\tests\$(Split-Path -Leaf $repository)" }')) 'and outside them, into a folder of this copy of the repository''s own'
+Check ($testBuild.Contains('if (Test-Path -LiteralPath $outputDir) { Remove-Item -LiteralPath $outputDir -Recurse -Force }')) 'and it empties only that folder, its name read letter for letter'
+
 # --- Pull requests try the release's own checks on the machine the release runs them on
 $ubuntuJob = [regex]::Match($testsWorkflow, '(?ms)^  release-checks-on-ubuntu:\n.*\z').Value
 $releaseMachine = [regex]::Match($checkJob, '(?m)^    runs-on: (\S+)').Groups[1].Value
