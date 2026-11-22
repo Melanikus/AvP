@@ -3298,8 +3298,15 @@ if ($pickText.Length -gt 0)
 $fewest = [regex]::Match($virustotalScript, '(?m)^\$fewestScanners = ([0-9]+)\r?$').Groups[1].Value
 Check ($fewest.Length -gt 0 -and $publishJob.Contains("[int]`$env:SCAN_ANSWERED -lt $fewest) { throw")) 'the draft asks for as many scanners as the checker does'
 Check ($publishJob.Contains('if ($env:SCAN_SHA256 -cne $wanted) { throw')) 'and checks the scan was of this very zip'
-Check-Order $publishJob 'gh release create' 'if ($flagged -gt 0) { throw' 'a flagged zip still gets its draft, and then the run ends red'
-Check ($publishJob.Contains('$first = if ($flagged -gt 0) { @("**$warning**", '''') }')) "and the draft's text starts by saying so"
+# The owner, 2026-11-21: a release ships only at ZERO findings, on the zip and on every program in it. That takes the place of the 2026-11-08
+# ruling that made a draft saying so (a flagged draft is how the editor's alpha.3 came to be published; Bishop 2, 2026-11-22, by Tao 1). So a
+# flagged zip, or a flagged program, makes no draft: the scan stops, naming it, and the draft's job refuses too, before it attests or drafts.
+Check ($askStep.Contains('if ($counts[0] + $counts[1] -gt 0) { throw "VirusTotal flagged the zip (') -and $askStep.Contains('if ($flagged -gt 0) { throw "VirusTotal flagged $flagged of the $($sent.Count) programs')) 'a flagged zip or a flagged program stops the scan, naming it'
+$zeroRule = 'if ([int]$env:SCAN_MALICIOUS + [int]$env:SCAN_SUSPICIOUS -gt 0) { throw'
+Check ([regex]::Matches($publishJob, [regex]::Escape($zeroRule)).Count -eq 2) 'the draft''s job refuses a flagged zip in both its steps that read the counts'
+Check-Order $publishJob $zeroRule 'attest-build-provenance' 'before the build is attested'
+Check-Order $publishJob $zeroRule 'gh release create' 'and before any draft exists'
+Check (-not $publishJob.Contains('$warning') -and -not $publishJob.Contains('$first = if')) 'no draft is ever written for a flagged zip'
 
 foreach ($other in Get-ChildItem (Join-Path $repository '.github/workflows') -Filter '*.yml' | Where-Object { $_.Name -ne 'release.yml' })
 {
