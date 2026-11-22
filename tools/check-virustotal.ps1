@@ -8,7 +8,7 @@ script never goes on the network and never sees the key: the scan job keeps both
 Why: an answer comes from outside our code, so it's treated as hostile (AvP Tao #3). It's read as strict JSON, every part this uses is
 checked for its type and its range, and VirusTotal's hash of the file has to be ours. GitHub reads a line that starts with :: as an order,
 so only numbers and words this script has checked go into the log. The one thing VirusTotal wrote that's printed is an analysis's number,
-on its ANSWER: line, and only once it's been checked to be letters, digits, + / and =: nothing that can start an order or break a line.
+on its ANSWER: line, and only once it's been checked to be letters, digits, + / = and - (its two spellings): nothing that can start an order or break a line.
 
 What it checks, by what it's given:
 - -Package <zip> -Sha256 <hash>: the zip is the one the build made (that's its SHA-256), and small enough for VirusTotal's upload.
@@ -16,8 +16,11 @@ What it checks, by what it's given:
   (GET /api/v3/files/<hash>, when it answered 200). Either it has a finished analysis of enough scanners, which is counted, or it hasn't,
   and the file is sent again.
 - -Answer <file> -Kind upload -Sha256 <hash>: its answer to the upload (POST /api/v3/files): the number of the analysis it started.
-- -Answer <file> -Kind analysis -Sha256 <hash> -AnalysisId <id>: its answer to "how is that analysis going?"
-  (GET /api/v3/analyses/<id>): still going, or finished, and then counted.
+- -Answer <file> -Kind analysis -Sha256 <hash> -AnalysisId <id> [-Md5 <hash>]: its answer to "how is that analysis going?"
+  (GET /api/v3/analyses/<id>): still going, or finished, and then counted. VirusTotal may name the analysis in its other spelling
+  (2026-11-22): asked about the base64 of "<the file's MD5>:<time>", it answered about "f-<the file's SHA-256>-<the same time>". That is
+  taken as the same analysis only when the SHA-256 is ours, the asked number decodes to the MD5 the scan job gives (-Md5, from the file
+  itself) and the two times are the same; without -Md5 it is refused.
 
 What it prints: lines for a person, and, when the answer is in order, one line starting ANSWER: for the scan job, made only of what has
 been checked:
@@ -40,7 +43,8 @@ param(
     [string]$Answer,
     [string]$Kind,
     [string]$Sha256,
-    [string]$AnalysisId
+    [string]$AnalysisId,
+    [string]$Md5
 )
 
 $ErrorActionPreference = 'Stop'
@@ -115,9 +119,39 @@ if ($Kind -cnotin 'lookup', 'upload', 'analysis')
     Stop-Answer '-Kind has to be lookup, upload or analysis'
 }
 
-if ($Kind -ceq 'analysis' -and $AnalysisId -cnotmatch '^[A-Za-z0-9+/=]{1,200}\z')
+# An analysis's number is what VirusTotal's numbers are made of: its base64 spelling, or the other one, f-<a SHA-256>-<a time> (2026-11-22)
+$otherSpelling = '^f-([0-9a-f]{64})-([0-9]{1,12})\z'
+
+if ($Kind -ceq 'analysis' -and $AnalysisId -cnotmatch '^[A-Za-z0-9+/=]{1,200}\z' -and $AnalysisId -cnotmatch $otherSpelling)
 {
     Stop-Answer "an analysis is checked against the number the upload gave, and that's missing or isn't one"
+}
+
+if ($Md5 -and $Md5 -cnotmatch '^[0-9a-f]{32}\z')
+{
+    Stop-Answer 'the MD5 to check against has to be 32 small letters and digits'
+}
+
+# Whether VirusTotal's answer names the analysis asked about in the other spelling: "f-<the file's SHA-256>-<time>" for the base64 of
+# "<the file's MD5>:<time>". Only when the SHA-256 is ours, the asked number decodes, letter for letter, to the MD5 the scan job gave (the
+# file's own) and a time, and the two times are the same. With no -Md5 the asked number can't be tied to the file, so it isn't.
+function Test-OtherSpelling([string]$answeredId)
+{
+    if ($answeredId -cnotmatch $otherSpelling) { return $false }
+    $answeredSha = $Matches[1]
+    $answeredTime = $Matches[2]
+    if ($answeredSha -cne $Sha256 -or -not $Md5) { return $false }
+    if ($AnalysisId -cnotmatch '^[A-Za-z0-9+/]{4,200}={0,2}\z') { return $false }
+    try
+    {
+        $decoded = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($AnalysisId))
+    }
+    catch
+    {
+        return $false
+    }
+    if ($decoded -cnotmatch '^([0-9a-f]{32}):([0-9]{1,12})\z') { return $false }
+    return ($Matches[1] -ceq $Md5 -and $Matches[2] -ceq $answeredTime)
 }
 
 if (-not $Answer -or -not (Test-Path -LiteralPath $Answer -PathType Leaf))
@@ -326,7 +360,7 @@ if ($Kind -ceq 'upload')
     # The number goes into the address of the next question, so it may only be what VirusTotal's numbers are made of
     $id = Get-Text $data 'id' 'data'
 
-    if ($id -cnotmatch '^[A-Za-z0-9+/=]{1,200}\z')
+    if ($id -cnotmatch '^[A-Za-z0-9+/=]{1,200}\z' -and $id -cnotmatch $otherSpelling)
     {
         Stop-Answer "the analysis number in VirusTotal's answer isn't one"
     }
@@ -342,7 +376,9 @@ if ((Get-Text $data 'type' 'data') -cne 'analysis')
     Stop-Answer "VirusTotal's answer isn't about an analysis"
 }
 
-if ((Get-Text $data 'id' 'data') -cne $AnalysisId)
+$answeredId = Get-Text $data 'id' 'data'
+
+if ($answeredId -cne $AnalysisId -and -not (Test-OtherSpelling $answeredId))
 {
     Stop-Answer "VirusTotal's answer is about a different analysis from the one the upload started"
 }
