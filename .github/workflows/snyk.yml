@@ -139,16 +139,18 @@ jobs:
           set -euo pipefail
           t="$RUNNER_TEMP/scanners"; mkdir -p "$t"
 
-          # zizmor and actionlint: their release files, by hash, and the record that their own release workflow built them at that tag
+          # zizmor and actionlint: their release files, by hash, and the record that their own release workflow built them at that tag. The
+          # identity is the one in the record's certificate, the workflow that signed it: zizmor's release.yml calls release-binaries.yml,
+          # which builds and signs (its SLSA provenance, read 2026-11-21). Only build provenance is taken, not GitHub's own release record.
           curl -fsSL "https://github.com/zizmorcore/zizmor/releases/download/v$ZIZMOR_VERSION/zizmor-x86_64-unknown-linux-gnu.tar.gz" -o "$t/zizmor.tar.gz"
           echo "$ZIZMOR_SHA256  $t/zizmor.tar.gz" | sha256sum -c -
-          gh attestation verify "$t/zizmor.tar.gz" --repo zizmorcore/zizmor --deny-self-hosted-runners \
-            --cert-identity "https://github.com/zizmorcore/zizmor/.github/workflows/release.yml@refs/tags/v$ZIZMOR_VERSION"
+          gh attestation verify "$t/zizmor.tar.gz" --repo zizmorcore/zizmor --deny-self-hosted-runners --predicate-type https://slsa.dev/provenance/v1 \
+            --cert-identity "https://github.com/zizmorcore/zizmor/.github/workflows/release-binaries.yml@refs/tags/v$ZIZMOR_VERSION"
           mkdir -p "$t/zizmor" && tar -xzf "$t/zizmor.tar.gz" -C "$t/zizmor"
 
           curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o "$t/actionlint.tar.gz"
           echo "$ACTIONLINT_SHA256  $t/actionlint.tar.gz" | sha256sum -c -
-          gh attestation verify "$t/actionlint.tar.gz" --repo rhysd/actionlint --deny-self-hosted-runners \
+          gh attestation verify "$t/actionlint.tar.gz" --repo rhysd/actionlint --deny-self-hosted-runners --predicate-type https://slsa.dev/provenance/v1 \
             --cert-identity "https://github.com/rhysd/actionlint/.github/workflows/release.yaml@refs/tags/v$ACTIONLINT_VERSION"
           mkdir -p "$t/actionlint" && tar -xzf "$t/actionlint.tar.gz" -C "$t/actionlint"
 
