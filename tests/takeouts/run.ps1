@@ -225,8 +225,10 @@ function Copy-ListLibraries([object]$list, [string]$root, [string]$copyRoot)
 # are right.
 function Test-Refusals
 {
-    $outside = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
-    $root = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-takeouts-refusals' } else { Join-Path $outside 'AvP-test-out\takeouts-refusals' }
+    # Outside the automatic checks, in a folder of this copy of the repository's own, so a check in a copy beside this one can't empty it
+    $copy = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+    $outside = Split-Path -Parent $copy
+    $root = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-takeouts-refusals' } else { Join-Path $outside "AvP-test-out\takeouts-refusals\$(Split-Path -Leaf $copy)" }
 
     # The folder is emptied each time, so only one this made is: it leaves a note in it saying so
     $note = 'made by the take-outs refusal check.txt'
