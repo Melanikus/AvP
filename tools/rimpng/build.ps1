@@ -1,15 +1,16 @@
 # Builds rimpng. Written 2026-11-05 by Melanikus for the AvP port. README.md, beside this file, says what it's for.
 #
 # Run it from anywhere, in PowerShell: tools/rimpng/build.ps1
-# The program lands in a folder called AvP-test-out\rimpng next to the repository. Not the temp folder: antivirus programs distrust new programs that appear there.
+# The program lands in AvP-test-out\rimpng\<this copy's folder name> next to the repository, a folder of this copy of the repository's own (modified
+# 2026-11-21: copies side by side shared one, and emptied each other's). Not the temp folder: antivirus programs distrust new programs that appear there.
 # If anything fails, this stops with a non-zero exit code.
 
 $ErrorActionPreference = 'Stop'
 trap { Write-Host "Could not build it: $_"; exit 1 }
 
 $repository = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$out = Join-Path (Split-Path -Parent $repository) 'AvP-test-out\rimpng'
-if (Test-Path $out) { Remove-Item -Recurse -Force $out }
+$out = Join-Path (Split-Path -Parent $repository) "AvP-test-out\rimpng\$(Split-Path -Leaf $repository)"
+if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
 New-Item -ItemType Directory -Force $out | Out-Null
 
 # The compiler isn't on the path until Visual Studio has been set up, so find Visual Studio

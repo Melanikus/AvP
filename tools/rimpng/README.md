@@ -8,7 +8,7 @@ You need Visual Studio with the C++ tools, and nothing else. In PowerShell, from
 
     tools/rimpng/build.ps1
 
-The program lands in a folder called `AvP-test-out\rimpng` next to the repository. `tests/rimpng_test.cpp` builds the same code in the automatic checks, so it can't quietly stop building.
+The program lands in `AvP-test-out\rimpng\<this copy's folder name>` next to the repository, a folder of this copy of the repository's own. `tests/rimpng_test.cpp` builds the same code in the automatic checks, so it can't quietly stop building.
 
 ## Using it
 
