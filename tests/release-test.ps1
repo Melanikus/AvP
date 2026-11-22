@@ -3254,7 +3254,16 @@ $addresses = @([regex]::Matches($scanJob, 'https?://[^\s"/]+') | ForEach-Object 
 Check ($addresses.Count -eq 1 -and $addresses[0] -ceq 'https://www.virustotal.com') "it asks VirusTotal and nothing else. It names: $addresses"
 Check (-not $scanJob.Contains('ConvertFrom-Json') -and -not $scanJob.Contains('Get-Content $answers') -and -not $scanJob.Contains('Get-Content "$answers')) 'it never reads an answer itself: only the checker does'
 Check-Order $scanJob "Ask-Checker @('-Package', `$zip)" "Ask-VirusTotal 'Post' 'files'" 'the zip is checked before it is sent'
-Check ($scanJob.Contains("if (`$status -eq 404) {") -and $scanJob.Contains("while (`$answer -ceq 'waiting')") -and $scanJob.Contains('$giveUp = (Get-Date).AddMinutes(25)')) 'it sends the zip only when VirusTotal does not know it, and waits for the analysis, for a while'
+# Only an analysis this run started counts (2026-11-22, the editor's alpha.4 scan: VirusTotal names an analysis two ways, and never ran two of
+# the re-analyses it was asked for). The zip is always uploaded, so nothing VirusTotal said about it before is ever asked for, let alone
+# counted; the checker is given the zip's own MD5 and this step's start on every question about the analysis; and an analysis VirusTotal
+# never runs is waited for 10 minutes, then the zip is sent again, 3 times at most, inside one time limit for the whole step.
+Check (-not $askStep.Contains("Ask-VirusTotal 'Get' `"files/") -and -not $askStep.Contains("'-Kind', 'lookup'")) 'the zip is always sent: what VirusTotal knew of it before is never asked for, so an old verdict can never count'
+Check ($askStep.Contains('$md5 = (Get-FileHash -Algorithm MD5 -LiteralPath $zip).Hash.ToLowerInvariant()') -and $askStep.Contains('$notBefore = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - 60')) 'the zip''s own MD5 and the step''s start, less a minute, are worked out here'
+Check-Order $scanJob $nameRule '$md5 = (Get-FileHash' 'the MD5 is of the zip whose name has been checked'
+Check ($askStep.Contains("'-Kind', 'analysis', '-AnalysisId', `$id, '-Md5', `$md5, '-NotBefore', `"`$notBefore`"") -and $askStep.Contains("'-Kind', 'upload', '-Md5', `$md5")) 'and the checker is given both on every analysis, and the MD5 on the upload'
+Check ($askStep.Contains("if (`$status -eq 404)") -and $askStep.Contains('$left = 600 - ((Get-Date) - $sentAt).TotalSeconds') -and $askStep.Contains('if ($sends -ge 3) { throw')) 'an analysis VirusTotal never runs is waited for 10 minutes, then the zip is sent again, 3 times at most'
+Check ($askStep.Contains("while (`$answer -ceq 'waiting')") -and $askStep.Contains('$giveUp = (Get-Date).AddMinutes(55)') -and $scanJob -match '(?m)^    timeout-minutes: 60 ') 'and the analysis is waited for inside one time limit, within the job''s'
 
 $fewest = [regex]::Match($virustotalScript, '(?m)^\$fewestScanners = ([0-9]+)\r?$').Groups[1].Value
 Check ($fewest.Length -gt 0 -and $publishJob.Contains("[int]`$env:SCAN_ANSWERED -lt $fewest) { throw")) 'the draft asks for as many scanners as the checker does'
