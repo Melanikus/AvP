@@ -57,7 +57,17 @@ if (-not $visualStudio) { Write-Error 'Visual Studio with the C++ tools was not 
 # the same as the game.
 $env:PATH = "$(Split-Path -Parent $vswhere);$env:PATH"
 Import-Module (Join-Path $visualStudio 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
-Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments '-arch=x86 -host_arch=amd64 -no_logo' | Out-Null
+# THE ONE COMPILER (win32/msvc-pin.props): the tests are built with the same MSVC as the game (-vcvars_ver). On GitHub's runner it is installed
+# first, from Microsoft's own installer (tools/install-msvc-pin.ps1, as tools/build-and-package.ps1 does); anywhere else, the tests stop if it isn't there.
+. (Join-Path $repository 'tools/msvc-pin-version.ps1')
+$msvcPin = Get-MsvcPinVersion $repository
+if ($env:GITHUB_ACTIONS -eq 'true')
+{
+    & (Join-Path $repository 'tools/install-msvc-pin.ps1')
+    if ($LASTEXITCODE -ne 0) { Write-Error "MSVC $msvcPin could not be installed (tools/install-msvc-pin.ps1 said why, above)" }
+}
+Get-MsvcPinFolder $visualStudio $msvcPin | Out-Null
+Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments "-arch=x86 -host_arch=amd64 -no_logo -vcvars_ver=$msvcPin" | Out-Null
 
 # Runs one of the compiler's programs in a folder and gives back its exit code. What it says goes in a file, and anything it says as an error in that file's .errors. It's started this way,
 # and not by its name on its own, because Windows PowerShell takes anything a program writes as an error as the script failing.

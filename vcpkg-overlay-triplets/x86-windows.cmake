@@ -12,3 +12,8 @@ set(VCPKG_LIBRARY_LINKAGE dynamic)
 set(VCPKG_PROVIDED_FORTRAN ON)
 
 set(VCPKG_LINKER_FLAGS "/PDBALTPATH:%_PDB%")
+
+# THE ONE COMPILER (Frost 2026-11-21, Bishop for the owner after alpha.3; win32/msvc-pin.props says why): vcpkg builds every library with this
+# exact MSVC, the one the game and its own DLLs are built with, never the newest a machine happens to have. It must name the same version as
+# msvc-pin.props: tools/install-msvc-pin.ps1 stops a build where it doesn't.
+set(VCPKG_PLATFORM_TOOLSET_VERSION "14.51.36231")

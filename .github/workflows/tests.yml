@@ -179,7 +179,10 @@ jobs:
           $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           $env:PATH = "$(Split-Path -Parent $vswhere);$env:PATH"
           Import-Module (Join-Path $visualStudio 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
-          Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments '-arch=x86 -host_arch=amd64 -no_logo' | Out-Null
+          # THE ONE COMPILER (win32/msvc-pin.props), as build.ps1 sets it up
+          . ./tools/msvc-pin-version.ps1
+          $msvcPin = Get-MsvcPinVersion $PWD
+          Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments "-arch=x86 -host_arch=amd64 -no_logo -vcvars_ver=$msvcPin" | Out-Null
           $withoutChecks = @(((Get-Content tests/stl_bounds_canary_test.args) -join ' ') -split '\s+' | Where-Object { $_ -and $_ -cne '/D_MSVC_STL_HARDENING=1' })
           $said = & cl.exe /nologo /Zs @withoutChecks 2>&1 | Out-String
           $said

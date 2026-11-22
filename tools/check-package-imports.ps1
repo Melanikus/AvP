@@ -90,14 +90,16 @@ function Assert-MicrosoftSignature([string]$path, [string]$name) {
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-$dumpbin = Get-ChildItem (Join-Path $visualStudio 'VC\Tools\MSVC\*\bin\Hostx64\x86\dumpbin.exe') | Select-Object -Last 1
-if (-not $dumpbin) { throw 'dumpbin was not found' }
+# THE ONE COMPILER (win32/msvc-pin.props): its dumpbin, and its runtime DLLs, never the newest this machine has
+. (Join-Path $PSScriptRoot 'msvc-pin-version.ps1')
+$msvcPin = Get-MsvcPinVersion (Split-Path -Parent $PSScriptRoot)
+$dumpbin = Get-Item -LiteralPath (Join-Path (Get-MsvcPinFolder $visualStudio $msvcPin) 'bin\Hostx64\x86\dumpbin.exe') -ErrorAction SilentlyContinue
+if (-not $dumpbin) { throw "dumpbin was not found in MSVC $msvcPin" }
 
-# Where Visual Studio keeps the runtime DLLs it lets a program carry: VC\Redist\MSVC\<version>\x86\Microsoft.VC<toolset>.CRT, at the version its
-# own file Microsoft.VCRedistVersion.default.txt names, which goes with the compiler it builds with. tools/build-and-package.ps1 finds it the
-# same way, in the same lines.
-$redistVersion = "$(Get-Content -LiteralPath (Join-Path $visualStudio 'VC\Auxiliary\Build\Microsoft.VCRedistVersion.default.txt') -TotalCount 1)".Trim()
-if ($redistVersion -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw "Visual Studio's Microsoft.VCRedistVersion.default.txt doesn't name a version: $redistVersion" }
+# Where Visual Studio keeps the runtime DLLs it lets a program carry: VC\Redist\MSVC\<version>\x86\Microsoft.VC<toolset>.CRT, at THE ONE
+# COMPILER's version: the runtime that goes with the compiler that built the game (Microsoft.VCRedistVersion.default.txt names the newest this
+# machine has, which on GitHub's runner was 14.52's). tools/build-and-package.ps1 finds it the same way, in the same lines.
+$redistVersion = $msvcPin
 $runtimeFolders = @(Get-ChildItem -Directory -LiteralPath (Join-Path $visualStudio "VC\Redist\MSVC\$redistVersion\x86") -Filter 'Microsoft.VC*.CRT')
 if ($runtimeFolders.Count -ne 1) { throw "Visual Studio's redistributable folder for $redistVersion doesn't have exactly one Microsoft.VC*.CRT folder for x86" }
 $runtimeFolder = $runtimeFolders[0].FullName
