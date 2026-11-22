@@ -144,9 +144,9 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # VirusTotal runs about 70 virus scanners on a file. The zip is looked up there by its hash, sent if VirusTotal hasn't seen it, and the
-  # analysis waited for. What comes back is from outside our code, so tools/check-virustotal.ps1 reads every answer before anything here
-  # believes it (AvP Tao #3). Nothing VirusTotal wrote is printed but an analysis's number, which may only be letters, digits, + / and =,
+  # VirusTotal runs about 70 virus scanners on a file. The zip is sent there every time, and the analysis that starts waited for: only a
+  # verdict from this run counts. What comes back is from outside our code, so tools/check-virustotal.ps1 reads every answer before anything
+  # here believes it (AvP Tao #3). Nothing VirusTotal wrote is printed but an analysis's number, which may only be letters, digits, + / = and -,
   # so it can't start an order to GitHub (a line starting ::) or break a line, and it's escaped before it goes into an address.
   #
   # The user's ruling, 2026-11-08: if any scanner flags it, the draft is still made, its text starts by saying so, and the run ends red, so
@@ -158,7 +158,8 @@ jobs:
     name: Scan the package on VirusTotal
     needs: build
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the gate
-    timeout-minutes: 30     # the free key takes 4 questions a minute, and an analysis takes a few minutes
+    timeout-minutes: 60     # the free key takes 4 questions a minute, an analysis takes a few minutes, and one VirusTotal
+                            # never runs is waited for 10 minutes before the zip is sent again, 3 times at most
     environment: release    # where the VirusTotal key is kept. See RELEASING.md
     permissions:
       contents: read        # to read the code, for tools/check-virustotal.ps1. Nothing else
@@ -212,8 +213,14 @@ jobs:
           $answers = Join-Path $env:RUNNER_TEMP 'virustotal'
           New-Item -ItemType Directory -Force $answers | Out-Null
 
-          # Every question to VirusTotal, waits included, has to be done by this time, inside the job's 30 minutes
-          $giveUp = (Get-Date).AddMinutes(25)
+          # Every question to VirusTotal, waits included, has to be done by this time, inside the job's 60 minutes
+          $giveUp = (Get-Date).AddMinutes(55)
+
+          # Only an analysis this run started counts: the checker refuses one VirusTotal dates before this step began, less a minute for the
+          # runner's clock and VirusTotal's being apart. And VirusTotal's numbers for an analysis are made from the zip's MD5 (2026-11-22): the
+          # checker ties them to this zip with it, worked out here from the zip itself.
+          $notBefore = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - 60
+          $md5 = (Get-FileHash -Algorithm MD5 -LiteralPath $zip).Hash.ToLowerInvariant()
 
           # tools/check-virustotal.ps1 checks the zip, or one saved answer, prints what it found, and gives back the line starting
           # ANSWER:. Anything wrong stops this step with its reason, and so the run, with no draft.
@@ -252,19 +259,25 @@ jobs:
           # The zip is the one the build made, and small enough to send
           if ((Ask-Checker @('-Package', $zip)) -cne 'ready') { throw 'The zip is not ready to send' }
 
-          # Does VirusTotal already know it, with a finished analysis?
-          $status = Ask-VirusTotal 'Get' "files/$sha" "$answers/lookup.json"
-          if ($status -eq 200) { $answer = Ask-Checker @('-Answer', "$answers/lookup.json", '-Kind', 'lookup') }
-          elseif ($status -eq 404) { 'VirusTotal has never seen this zip.'; $answer = 'not-analysed' }
-          else { throw "VirusTotal answered the question about the zip with HTTP $status" }
-
-          # If not: send it, and wait for the analysis to finish. It's asked about every 30 seconds or so, until the time is up.
-          if ($answer -ceq 'not-analysed')
+          # It's sent every time (POST files), whether VirusTotal knows it or not, and only the analysis that upload starts is counted:
+          # once builds repeat byte for byte, the same zip comes back every release, and a clean verdict from long ago would pass for ever.
+          # An upload starts a fresh analysis with today's scanners either way (measured 2026-11-22 on the editor's release: a file VirusTotal
+          # had known for six hours, uploaded again, had a new analysis finished within four minutes). The analysis is asked about every 30
+          # seconds or so, until the time is up.
+          # VirusTotal can give a number for an analysis it then never runs (the editor's alpha.4 scan, 2026-11-22: asked about, it answered
+          # 404 for as long as anyone asked). So a 404 is taken as still waiting until 10 minutes after the zip was sent, and it isn't asked
+          # again before then; after that the zip is sent again and the new analysis waited for. It's sent 3 times at most; then the run stops.
+          $sends = 0
+          $answer = 'waiting'
+          while ($answer -ceq 'waiting')
           {
             $status = Ask-VirusTotal 'Post' 'files' "$answers/upload.json" @{ file = Get-Item -LiteralPath $zip }
             if ($status -ne 200) { throw "VirusTotal answered the upload with HTTP $status" }
-            $answer = Ask-Checker @('-Answer', "$answers/upload.json", '-Kind', 'upload')
-            if ($answer -cnotmatch '^analysis [A-Za-z0-9+/=]{1,200}\z') { throw 'The upload gave no analysis' }
+            $sends++
+            $sentAt = Get-Date
+            $answer = Ask-Checker @('-Answer', "$answers/upload.json", '-Kind', 'upload', '-Md5', $md5)
+            # An analysis's number in either of VirusTotal's spellings (the checker's): base64, or f-<a SHA-256>-<a time>
+            if ($answer -cnotmatch '^analysis ([A-Za-z0-9+/=]{1,200}|f-[0-9a-f]{64}-[0-9]{1,12})\z') { throw 'The upload gave no analysis' }
             $id = $answer.Substring('analysis '.Length)
 
             $answer = 'waiting'
@@ -272,8 +285,16 @@ jobs:
             {
               Start-Sleep -Seconds 10
               $status = Ask-VirusTotal 'Get' "analyses/$([uri]::EscapeDataString($id))" "$answers/analysis.json"
+              if ($status -eq 404)
+              {
+                $left = 600 - ((Get-Date) - $sentAt).TotalSeconds
+                if ($left -gt 0) { Start-Sleep -Seconds ([math]::Ceiling($left)); continue }
+                if ($sends -ge 3) { throw "VirusTotal never ran an analysis of the zip: it was sent $sends times, and 10 minutes after each it answered 404 about the analysis it had given a number for" }
+                Write-Host 'VirusTotal has no analysis of the zip 10 minutes after it was sent, so it is sent again.'
+                break
+              }
               if ($status -ne 200) { throw "VirusTotal answered the question about the analysis with HTTP $status" }
-              $answer = Ask-Checker @('-Answer', "$answers/analysis.json", '-Kind', 'analysis', '-AnalysisId', $id)
+              $answer = Ask-Checker @('-Answer', "$answers/analysis.json", '-Kind', 'analysis', '-AnalysisId', $id, '-Md5', $md5, '-NotBefore', "$notBefore")
             }
           }
 
