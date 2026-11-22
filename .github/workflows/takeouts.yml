@@ -41,6 +41,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # The runner checks every name a list, or a test's settings, gives it before it copies or changes anything by it. This shows those
+      # checks refuse each name they should, for its own reason, and take the good ones, before any list runs. It works on a made-up
+      # folder of its own, and builds and runs nothing. (Added 2026-11-21, #163.)
+      - name: Check the runner refuses the names it should
+        shell: pwsh
+        run: |
+          ./tests/takeouts/run.ps1 -CheckRefusals
+          exit $LASTEXITCODE
+
       # What was typed by hand comes in as plain text in the environment. It's never pasted into the script itself, so nothing typed can
       # become part of it.
       - name: Choose the lists
