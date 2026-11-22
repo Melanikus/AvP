@@ -16,11 +16,13 @@ What it checks, by what it's given:
   (GET /api/v3/files/<hash>, when it answered 200). Either it has a finished analysis of enough scanners, which is counted, or it hasn't,
   and the file is sent again.
 - -Answer <file> -Kind upload -Sha256 <hash>: its answer to the upload (POST /api/v3/files): the number of the analysis it started.
-- -Answer <file> -Kind analysis -Sha256 <hash> -AnalysisId <id> [-Md5 <hash>]: its answer to "how is that analysis going?"
+- -Answer <file> -Kind analysis -Sha256 <hash> -AnalysisId <id> [-Md5 <hash>] [-NotBefore <seconds>]: its answer to "how is that analysis going?"
   (GET /api/v3/analyses/<id>): still going, or finished, and then counted. VirusTotal may name the analysis in its other spelling
   (2026-11-22): asked about the base64 of "<the file's MD5>:<time>", it answered about "f-<the file's SHA-256>-<the same time>". That is
   taken as the same analysis only when the SHA-256 is ours, the asked number decodes to the MD5 the scan job gives (-Md5, from the file
-  itself) and the two times are the same; without -Md5 it is refused.
+  itself) and the two times are the same; without -Md5 it is refused. With -NotBefore (seconds since 1970: the scan job gives the time its
+  step started, less a minute), an analysis VirusTotal says was started earlier is refused, whatever its state, so only an analysis this
+  run started counts, even when the scan job has had to send the same bytes again (2026-11-22).
 
 What it prints: lines for a person, and, when the answer is in order, one line starting ANSWER: for the scan job, made only of what has
 been checked:
@@ -44,7 +46,8 @@ param(
     [string]$Kind,
     [string]$Sha256,
     [string]$AnalysisId,
-    [string]$Md5
+    [string]$Md5,
+    [string]$NotBefore
 )
 
 $ErrorActionPreference = 'Stop'
@@ -130,6 +133,12 @@ if ($Kind -ceq 'analysis' -and $AnalysisId -cnotmatch '^[A-Za-z0-9+/=]{1,200}\z'
 if ($Md5 -and $Md5 -cnotmatch '^[0-9a-f]{32}\z')
 {
     Stop-Answer 'the MD5 to check against has to be 32 small letters and digits'
+}
+
+# When the run started, in seconds since 1970 as VirusTotal writes times: after 1970's first second, and no later than 9999's last
+if ($NotBefore -and ($NotBefore -cnotmatch '^[1-9][0-9]{0,11}\z' -or [long]$NotBefore -gt 253402300799))
+{
+    Stop-Answer 'the start of the run has to be a whole number of seconds since 1970'
 }
 
 # Whether VirusTotal's answer names the analysis asked about in the other spelling: "f-<the file's SHA-256>-<time>" for the base64 of
@@ -384,6 +393,25 @@ if ($answeredId -cne $AnalysisId -and -not (Test-OtherSpelling $answeredId))
 }
 
 $attributes = Get-Part $data 'attributes' 'data'
+
+# Started in this run, whatever its state (2026-11-22): an old analysis, handed back for bytes sent again, never passes as today's, and is
+# never waited for either
+if ($NotBefore)
+{
+    $started = Get-Part $attributes 'date' 'data.attributes'
+    $when = [long]0
+
+    if ($started.ValueKind -ne $numberKind -or -not $started.TryGetInt64([ref]$when) -or $when -le 0 -or $when -gt 253402300799)
+    {
+        Stop-Answer "in VirusTotal's answer, data.attributes.date isn't a time"
+    }
+
+    if ($when -lt [long]$NotBefore)
+    {
+        Stop-Answer "VirusTotal's analysis was started before this run, so what it found isn't from this run's scanners"
+    }
+}
+
 $status = Get-Text $attributes 'status' 'data.attributes'
 
 if ($status -cin 'queued', 'in-progress')
