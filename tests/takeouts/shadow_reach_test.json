@@ -1,0 +1,78 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the camera has no plane behind it",
+			"changes": [
+				{
+					"file": "3dc/shadow_reach.cpp",
+					"from": "\tAddPlane(view, 0.0f, 0.0f, 1.0f, 0.0f);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the light's range is never asked",
+			"changes": [
+				{
+					"file": "3dc/shadow_reach.cpp",
+					"from": "if (distance - ball.radius >= range)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a plane leaves out a shadow whose ball alone is outside it",
+			"changes": [
+				{
+					"file": "3dc/shadow_reach.cpp",
+					"from": "if (ballInside < 0.0f && farInside < 0.0f)",
+					"to": "if (ballInside < 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "the shadow does not widen along the cone",
+			"changes": [
+				{
+					"file": "3dc/shadow_reach.cpp",
+					"from": "float const farRadius = range * widening;",
+					"to": "float const farRadius = 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "a ball round a box is only as wide as half its width",
+			"changes": [
+				{
+					"file": "3dc/shadow_reach.cpp",
+					"from": "ball[3] = sqrtf(halfX * halfX + halfY * halfY + halfZ * halfZ) + kBallRoundedUp;",
+					"to": "ball[3] = halfX;"
+				}
+			]
+		},
+		{
+			"name": "a shadow thrown into a box is taken to miss it",
+			"changes": [
+				{
+					"file": "3dc/shadow_reach.cpp",
+					"from": "if (!ShapeMissesBox(boxes[i], near, ball.radius, far, farRadius))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "only the first box on the list is asked",
+			"changes": [
+				{
+					"file": "3dc/shadow_reach.cpp",
+					"from": "for (int i = 0; i < numBoxes; i++)",
+					"to": "for (int i = 0; i < numBoxes && i < 1; i++)"
+				}
+			]
+		}
+	]
+}

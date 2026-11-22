@@ -1,0 +1,148 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a key's last number isn't compared, so two shadows are taken for one",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "if (memcmp(&table[place].key, &key, sizeof(key)) == 0)",
+					"to": "if (memcmp(&table[place].key, &key, sizeof(key) - sizeof(int32_t)) == 0)"
+				}
+			]
+		},
+		{
+			"name": "a light with no shadows here is not kept, so it is worked out again",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "if (corners < 0 || corners > kShadowVolumeMostCorners - cornersInUse || entriesInUse >= kMostEntries)\n\t{\n\t\treturn;",
+					"to": "if (corners <= 0 || corners > kShadowVolumeMostCorners - cornersInUse || entriesInUse >= kMostEntries)\n\t{\n\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "corners that exactly reach the end are refused",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "if (corners < 0 || corners > kShadowVolumeMostCorners - cornersInUse || entriesInUse >= kMostEntries)\n\t{\n\t\tstoreIsFull = true;",
+					"to": "if (corners < 0 || corners >= kShadowVolumeMostCorners - cornersInUse || entriesInUse >= kMostEntries)\n\t{\n\t\tstoreIsFull = true;"
+				}
+			]
+		},
+		{
+			"name": "keeping without room keeps it anyway",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "if (corners < 0 || corners > kShadowVolumeMostCorners - cornersInUse || entriesInUse >= kMostEntries)\n\t{\n\t\treturn;",
+					"to": "if (corners < 0)\n\t{\n\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "a full store is never emptied",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "if (storeIsFull && framesSinceEmptied > kShadowVolumeFramesBetweenEmptying)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a full store is emptied without waiting",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "if (storeIsFull && framesSinceEmptied > kShadowVolumeFramesBetweenEmptying)",
+					"to": "if (storeIsFull)"
+				}
+			]
+		},
+		{
+			"name": "a new frame keeps last frame's runs",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "\tnumRuns = 0;\n\n\tmemcpy(lastFrameLights",
+					"to": "\tmemcpy(lastFrameLights"
+				}
+			]
+		},
+		{
+			"name": "emptying the store keeps the runs",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "\tnumRuns = 0;\n\tstoreIsFull = false;",
+					"to": "\tstoreIsFull = false;"
+				}
+			]
+		},
+		{
+			"name": "a run with no corners goes on the list",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "if (run.corners == 0)\n\t{\n\t\treturn true;",
+					"to": "if (false)\n\t{\n\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "runs that touch are never joined",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "if (numRuns > 0 && runs[numRuns - 1].first + runs[numRuns - 1].corners == run.first)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "only the first of last frame's lights counts as still",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "for (int light = 0; light < lightsLastFrame; light++)",
+					"to": "for (int light = 0; light < lightsLastFrame && light < 1; light++)"
+				}
+			]
+		},
+		{
+			"name": "a light's last number isn't compared",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "kShadowVolumeNumbersEach * sizeof(float)) == 0)",
+					"to": "(kShadowVolumeNumbersEach - 1) * sizeof(float)) == 0)"
+				}
+			]
+		},
+		{
+			"name": "reading the counts leaves them counting on",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "\tmemset(&counts, 0, sizeof(counts));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a shadow found is not counted",
+			"changes": [
+				{
+					"file": "3dc/shadow_volumes.cpp",
+					"from": "\t\t\tcounts.found++;\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

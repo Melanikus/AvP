@@ -1,14 +1,15 @@
 # Builds the two programs that read the game's own files. Written 2026-11-05 by Melanikus for the AvP port. README.md, beside this file, says what they're for.
 #
 # Run it from anywhere, in PowerShell: tests/stock/build.ps1
-# The programs land in a folder called AvP-test-out\stock next to the repository. Not the temp folder: antivirus programs distrust new programs that appear there.
+# The programs land in AvP-test-out\stock\<this copy's folder name> next to the repository, a folder of this copy of the repository's own (modified
+# 2026-11-21: copies side by side shared one, and emptied each other's). Not the temp folder: antivirus programs distrust new programs that appear there.
 
 $ErrorActionPreference = 'Stop'
 trap { Write-Host "Could not build them: $_"; exit 1 }
 
 $repository = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$out = Join-Path (Split-Path -Parent $repository) 'AvP-test-out\stock'
-if (Test-Path $out) { Remove-Item -Recurse -Force $out }
+$out = Join-Path (Split-Path -Parent $repository) "AvP-test-out\stock\$(Split-Path -Leaf $repository)"
+if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
 New-Item -ItemType Directory -Force "$out\bink", "$out\smacker", "$out\pictures" | Out-Null
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'

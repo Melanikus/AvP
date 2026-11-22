@@ -1,0 +1,29 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"vcpkg-overlay-ports"
+	],
+	"rows": [
+		{
+			"name": "the host gives a client as many channels as it asks for",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "enet_host_create(address, connections, kNetChannels, incomingBandwidth, outgoingBandwidth)",
+					"to": "enet_host_create(address, connections, ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT, incomingBandwidth, outgoingBandwidth)"
+				}
+			]
+		},
+		{
+			"name": "the host reads packets with no checksum",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "\thost->checksum = enet_crc32;\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

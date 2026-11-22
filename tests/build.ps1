@@ -13,8 +13,9 @@
 # The .args file comes last on the compiler's line, so it can end with /link and settings for the linker.
 # Run it from anywhere, in PowerShell:  tests/build.ps1
 # To build only one test:  tests/build.ps1 -Only name
-# The programs land in $env:RUNNER_TEMP\avp-tests. Outside the automatic checks, they land in a folder called
-# AvP-test-out next to the repository. Not the temp folder: antivirus programs distrust new programs that appear there.
+# The programs land in $env:RUNNER_TEMP\avp-tests. Outside the automatic checks, they land in AvP-test-out\tests\<this copy's folder name>,
+# next to the repository: a folder of this copy's own, so a build here never empties another copy's (modified 2026-11-21, below). Not the
+# temp folder: antivirus programs distrust new programs that appear there.
 #
 # If anything fails, this script stops with a non-zero exit code, and the automatic check fails with it.
 #
@@ -24,6 +25,13 @@
 #   the game built that way (#111), and the user ruled static linking out (#125)
 #   every test is built with the standard library's own bounds checks, and the guard that refuses to compile one without them, and a test
 #   whose settings leave either out, or turn the checks off again, is refused with the reason (STL-HARDEN-1, #140)
+#
+# Modified 2026-11-21 by Melanikus for the AvP port:
+#   outside the automatic checks, each copy of the repository (each worktree) builds into a folder of its own, AvP-test-out\tests\<its folder's
+#   name>. This empties its output folder first, and copies side by side shared the AvP-test-out next to them, so a build in one emptied
+#   another's tests, take-out copies and sanitizer builds while they ran (2026-11-04, 2026-11-21). The tests\ part keeps the name apart from
+#   the folders the take-outs and the sanitizer use there. It is emptied by -LiteralPath, so a [ in a copy's name can never make it empty
+#   another copy's folder that the name would match as a pattern.
 
 param([string]$Only = '')
 
@@ -33,10 +41,10 @@ $ErrorActionPreference = 'Stop'
 trap { Write-Host "Could not build the tests: $_"; exit 1 }
 
 $repository = Split-Path -Parent $PSScriptRoot
-$outputDir  = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-tests' } else { Join-Path (Split-Path -Parent $repository) 'AvP-test-out' }
+$outputDir  = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-tests' } else { Join-Path (Split-Path -Parent $repository) "AvP-test-out\tests\$(Split-Path -Leaf $repository)" }
 
 # Start from an empty folder, so nothing old can be mistaken for a new build
-if (Test-Path $outputDir) { Remove-Item -Recurse -Force $outputDir }
+if (Test-Path -LiteralPath $outputDir) { Remove-Item -LiteralPath $outputDir -Recurse -Force }
 New-Item -ItemType Directory -Force $outputDir | Out-Null
 
 # The compiler isn't on the path until Visual Studio has been set up, so find Visual Studio
