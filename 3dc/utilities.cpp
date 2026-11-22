@@ -358,8 +358,11 @@ void avp_exit(int code)
 #endif
 }
 
-// The build's version, as 3dc/build_identity.cpp has it: tools/build-and-package.ps1 writes build_version.h before it builds (it isn't in the repository), and
-// a build without it says so. It's only ever letters, digits and . - (the script lets nothing else through).
+// The build's version, as 3dc/build_identity.cpp has it: tools/build-and-package.ps1 writes build_version.h before it builds (it isn't in the repository).
+// What comes through is one of: a release's version as tools/check-release.ps1 lets it through (three numbers, 1.0.0, or a beta of them, 1.0.0-beta.0); the
+// script's fixed words for any other build, "a test build, not a release"; or, with no build_version.h at all, the words below. The title is made by
+// snprintf into its own size, with the version as an argument and never as the format, so no version, whatever its letters, can overrun the title or
+// be read as a format.
 #if __has_include("build_version.h")
 #include "build_version.h"
 #endif
