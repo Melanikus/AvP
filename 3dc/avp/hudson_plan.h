@@ -590,6 +590,7 @@ extern const char *const kHudsonRefusedDieAtNotANumber;
 extern const char *const kHudsonRefusedSaveNotANumber;
 extern const char *const kHudsonRefusedSaveInANetGame;
 extern const char *const kHudsonRefusedSaveOnACustomMap;
+extern const char *const kHudsonRefusedSaveInASkirmish;
 extern const char *const kHudsonRefusedLevelFilmsNotYes;
 extern const char *const kHudsonRefusedScreenWord;
 extern const char *const kHudsonRefusedWindowSlot;

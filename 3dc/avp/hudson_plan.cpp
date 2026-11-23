@@ -188,6 +188,7 @@ const char *const kHudsonRefusedDieAtNotANumber = "dieat= isn't a number of seco
 const char *const kHudsonRefusedSaveNotANumber = "save= isn't a number of seconds from 1 to 3600";
 const char *const kHudsonRefusedSaveInANetGame = "save= saves a single-player game: the game saves none in a network game (savegame.cpp, SaveGameAllowed)";
 const char *const kHudsonRefusedSaveOnACustomMap = "save= saves a campaign level: a save names its level by campaign and episode, so the game saves none on a custom map";
+const char *const kHudsonRefusedSaveInASkirmish = "save= saves a single-player game: class= and listplace= start a skirmish, which the game plays as a network game of one (InitAVPNetGameForHost) and saves none in";
 const char *const kHudsonRefusedLevelFilmsNotYes = "levelfilms= can only be yes";
 const char *const kHudsonRefusedScreenWord = "screen= is second or main";
 const char *const kHudsonRefusedWindowSlot = "windowslot= is a number from 0 to 3, and less than windowsof=";
