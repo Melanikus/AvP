@@ -11,6 +11,7 @@
 // the log says how much flickered, kept apart by whether the camera was moving. That makes every frame slower, so it's only for measuring.
 
 #include "shadow_debug.h"
+#include "plain_write_picture.h"   // a picture is written only through plain_write.h, never through a link (card 6, Tao 1)
 #include "flicker_meter.h"
 
 #include <windows.h>
@@ -159,7 +160,7 @@ static void SaveCapture()
 		_snprintf(name, sizeof(name) - 1, "frame-%06d.png", captured[i].frame);
 		name[sizeof(name) - 1] = 0;
 
-		if (captured[i].screen && SUCCEEDED(D3DXSaveSurfaceToFileA((captureFolder + name).c_str(), D3DXIFF_PNG, captured[i].screen, NULL, NULL)))
+		if (captured[i].screen && PlainWrite_SurfaceToFile(captureFolder + name, D3DXIFF_PNG, captured[i].screen, NULL))
 		{
 			saved++;
 		}
@@ -169,13 +170,18 @@ static void SaveCapture()
 
 		if (captured[i].mask)
 		{
-			D3DXSaveSurfaceToFileA((captureFolder + name).c_str(), D3DXIFF_PNG, captured[i].mask, NULL, NULL);
+			PlainWrite_SurfaceToFile(captureFolder + name, D3DXIFF_PNG, captured[i].mask, NULL);
 		}
 	}
 
-	std::ofstream file((captureFolder + "numbers.txt").c_str(), std::ios::out);
-	file << captureNumbers;
-	file.close();
+	// as text, as the stream wrote it before, through plain_write.h
+	FILE *const numbers = PlainWrite_FOpen(captureFolder + "numbers.txt", "w");
+
+	if (numbers)
+	{
+		fwrite(captureNumbers.data(), 1, captureNumbers.size(), numbers);
+		fclose(numbers);
+	}
 
 	char line[100];
 	_snprintf(line, sizeof(line) - 1, "shadow capture: saved %d frames of %d", saved, framesTaken);

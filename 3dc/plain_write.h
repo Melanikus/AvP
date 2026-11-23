@@ -15,7 +15,18 @@
 //      - Something there: it must be a file on a disk, not a folder, not a link, with exactly one name. Then it's opened for writing,
 //        and that open file must be the very same file (the same disk and file number), still with one name. Only then, if it's to be
 //        emptied, is it emptied. So a file swapped for a link in between, or given a second name, is never emptied or written.
-//   3. Everything is written through that one handle.
+//   3. The file opened must lie in the folder held: its final path's folder (asked of its own handle) is the held folder's final path
+//      (asked of the held handle), the whole of it, in any capitals as NTFS compares them (PlainWrite_SameFolder). Opening by a name reads
+//      the path again from its top, so a folder ABOVE the one held, swapped for a junction between the two opens, would lead elsewhere;
+//      that open is refused (and a new file it made there is taken away again). (Frost's review of #294, MUST 1.)
+//   4. Everything is written through that one handle.
+//
+// WHAT IS GUARDED, AND WHAT ISN'T (Bishop 2 and Frost, 2026-11-23): the folder a file goes in, and the file itself, are judged; the folders
+// above them are followed as they are. That is on purpose: a player may have their Documents moved by a junction, or kept in OneDrive,
+// and the game must save there. Those folders are the player's own. What this guards against is hostile game data: a map pack, a
+// language.txt, a settings file, a picture in a folder the game writes in. Such data can put a FILE where the game writes (a link, a second
+// name), and that is refused; it can't make a junction out of the player's own folders above. And a swap above while a file is being
+// opened is caught by step 3.
 //
 // WHAT COUNTS AS A LINK: a reparse point that stands for another name, a symbolic link or a junction (or a mount point). Windows calls
 // these "name surrogates", and the handle says so. A hard link is a file with more than one name, and it's refused too. OTHER reparse
@@ -108,6 +119,64 @@ inline std::string PlainWrite_Error(const char *what, DWORD error)
 	return std::string(what) + " (Windows error " + std::to_string((unsigned long long)error) + ")";
 }
 
+// An open file's or folder's final path, as Windows has it (every link on the way followed, the names as they are on the disk), asked of
+// the handle itself, never of a name. The room grows to what Windows says it needs, so a long path is never cut short. False if it can't.
+inline bool PlainWrite_FinalPath(HANDLE handle, std::wstring *path)
+{
+	DWORD const how = FILE_NAME_NORMALIZED | VOLUME_NAME_DOS;
+	std::wstring room(MAX_PATH, L'\0');
+
+	for (int tries = 0; tries < 3; tries++)
+	{
+		DWORD const length = ::GetFinalPathNameByHandleW(handle, &room[0], (DWORD)room.size(), how);
+
+		if (length == 0)
+		{
+			return false;
+		}
+
+		if (length < room.size())
+		{
+			path->assign(room.c_str(), length);
+			return true;
+		}
+
+		room.assign((size_t)length + 1, L'\0');   // it said how much it needs, the 0 at its end included
+	}
+
+	return false;
+}
+
+// Does the open file lie in the open folder? The file's final path, its last name taken off, must be the folder's final path: the whole
+// of it (so C:\a\b is never taken for C:\a\bc), in any capitals as NTFS compares names (CompareStringOrdinal, which knows every letter, not
+// only a to z, so a Documents path with accents compares right). Asked of the two handles, never of names (plain_write.h, step 3).
+inline bool PlainWrite_SameFolder(HANDLE folder, HANDLE file)
+{
+	std::wstring folderPath, filePath;
+
+	if (!PlainWrite_FinalPath(folder, &folderPath) || !PlainWrite_FinalPath(file, &filePath))
+	{
+		return false;
+	}
+
+	size_t const slash = filePath.find_last_of(L'\\');
+
+	if (slash == std::wstring::npos)
+	{
+		return false;
+	}
+
+	std::wstring const fileFolder = filePath.substr(0, slash);
+
+	// the top of a disk is "\\?\C:\" for the folder and "\\?\C:\x" for a file in it: the folder's last \ goes, so the two compare alike
+	while (folderPath.size() > 1 && folderPath.back() == L'\\')
+	{
+		folderPath.pop_back();
+	}
+
+	return ::CompareStringOrdinal(fileFolder.c_str(), (int)fileFolder.size(), folderPath.c_str(), (int)folderPath.size(), TRUE) == CSTR_EQUAL;
+}
+
 // Opens path to write it, as the top of this file says. access, share and flags are CreateFile's (flags: its attributes and FILE_FLAG_s
 // for the open file; never a flag that follows or skips a link, which this decides). disposition is CreateFile's too:
 //   CREATE_ALWAYS     made if it isn't there, and emptied if it is (fopen's "w")
@@ -156,6 +225,7 @@ inline HANDLE PlainWrite_Open(const std::string &path, DWORD access, DWORD share
 	}
 
 	HANDLE file = INVALID_HANDLE_VALUE;
+	bool madeHere = false;   // the file was made by this call: if it is then refused, it is taken away again
 
 	// 2. The name, opened as itself only to be looked at (a folder too, so that it can be seen to be one)
 	if (whyNot.empty())
@@ -179,8 +249,9 @@ inline HANDLE PlainWrite_Open(const std::string &path, DWORD access, DWORD share
 			}
 			else
 			{
-				// Nothing there: a new file, made as itself. CREATE_NEW fails if anything appeared there meanwhile, a link included.
-				file = ::CreateFileA(path.c_str(), access | FILE_READ_ATTRIBUTES, share, NULL, CREATE_NEW, flags | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+				// Nothing there: a new file, made as itself. CREATE_NEW fails if anything appeared there meanwhile, a link included. (DELETE too,
+				// so that a file made in the wrong place, step 3, can be taken away through this handle.)
+				file = ::CreateFileA(path.c_str(), access | FILE_READ_ATTRIBUTES | DELETE, share, NULL, CREATE_NEW, flags | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
 
 				if (file == INVALID_HANDLE_VALUE)
 				{
@@ -189,8 +260,15 @@ inline HANDLE PlainWrite_Open(const std::string &path, DWORD access, DWORD share
 				}
 				else
 				{
+					madeHere = true;
 					BY_HANDLE_FILE_INFORMATION what;
 					whyNot = PlainWrite_FileWhy(file, &what);
+
+					// 3. the file made lies in the folder held
+					if (whyNot.empty() && !PlainWrite_SameFolder(folder, file))
+					{
+						whyNot = "it was made somewhere else than the folder held (a folder above was swapped while it was being made)";
+					}
 				}
 			}
 		}
@@ -229,6 +307,12 @@ inline HANDLE PlainWrite_Open(const std::string &path, DWORD access, DWORD share
 						whyNot = "it was swapped for another file while it was being opened";
 					}
 
+					// 3. the file opened lies in the folder held
+					if (whyNot.empty() && !PlainWrite_SameFolder(folder, file))
+					{
+						whyNot = "it isn't in the folder held (a folder above was swapped while it was being opened)";
+					}
+
 					// Only now, the very file judged above, is it emptied
 					if (whyNot.empty() && (disposition == CREATE_ALWAYS || disposition == TRUNCATE_EXISTING) && !::SetEndOfFile(file))
 					{
@@ -248,6 +332,14 @@ inline HANDLE PlainWrite_Open(const std::string &path, DWORD access, DWORD share
 	{
 		if (file != INVALID_HANDLE_VALUE)
 		{
+			// a file this call made, then refused, is taken away through its own handle (never by its name, which may lead elsewhere now)
+			if (madeHere)
+			{
+				FILE_DISPOSITION_INFO gone = {};
+				gone.DeleteFile = TRUE;
+				::SetFileInformationByHandle(file, FileDispositionInfo, &gone, sizeof(gone));
+			}
+
 			::CloseHandle(file);
 		}
 
@@ -278,9 +370,27 @@ inline FILE *PlainWrite_FOpen(const std::string &path, const char *mode, std::st
 		return NULL;
 	}
 
+	// C11's "x" (with "w" only): a new file, never one that is there, which "w" alone would empty (Frost's nit on #294)
+	bool const onlyNew = strchr(mode, 'x') != NULL;
+
+	if (onlyNew && mode[0] != 'w')
+	{
+		whyNot = "\"x\" goes only with \"w\"";
+		return NULL;
+	}
+
 	bool const both = strchr(mode, '+') != NULL;
 	DWORD const access = both ? (GENERIC_READ | GENERIC_WRITE) : GENERIC_WRITE;
-	DWORD const disposition = mode[0] == 'w' ? CREATE_ALWAYS : mode[0] == 'a' ? OPEN_ALWAYS : OPEN_EXISTING;
+	DWORD const disposition = onlyNew ? CREATE_NEW : mode[0] == 'w' ? CREATE_ALWAYS : mode[0] == 'a' ? OPEN_ALWAYS : OPEN_EXISTING;
+	std::string cMode;   // the mode as the C library takes it, without the "x", which this has done already
+
+	for (const char *c = mode; *c && cMode.size() < 8; c++)
+	{
+		if (*c != 'x')
+		{
+			cMode += *c;
+		}
+	}
 	int ioFlags = (both ? _O_RDWR : _O_WRONLY) | (strchr(mode, 'b') ? _O_BINARY : _O_TEXT);
 
 	if (mode[0] == 'a')
@@ -305,7 +415,7 @@ inline FILE *PlainWrite_FOpen(const std::string &path, const char *mode, std::st
 		return NULL;
 	}
 
-	FILE *const stream = _fdopen(descriptor, mode);
+	FILE *const stream = _fdopen(descriptor, cMode.c_str());
 
 	if (!stream)
 	{
@@ -317,28 +427,110 @@ inline FILE *PlainWrite_FOpen(const std::string &path, const char *mode, std::st
 	return stream;
 }
 
-// RED STUBS (Drake 2026-11-23, Frost's review of #294): the three new names, doing what the game did before (a plain CreateFile, a plain
-// CopyFile, and no check of where the file lies), so the test shows that failing. The next commit puts the real ones here.
-inline bool PlainWrite_SameFolder(HANDLE, HANDLE)
-{
-	return true;
-}
 
+// A whole file written at once, through PlainWrite_Open (made, or emptied first): a picture D3DX made in memory, say. False, with why set,
+// when it's refused, or not all of it could be written.
 inline bool PlainWrite_WriteWholeFile(const std::string &path, const void *bytes, size_t size, std::string *why)
 {
-	if (why) why->clear();
-	HANDLE const file = ::CreateFileA(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if (file == INVALID_HANDLE_VALUE) return false;
-	DWORD put = 0;
-	bool const ok = ::WriteFile(file, bytes, (DWORD)size, &put, NULL) && put == size;
-	::CloseHandle(file);
-	return ok;
+	std::string ignored;
+	std::string &whyNot = why ? *why : ignored;
+	HANDLE const file = PlainWrite_Open(path, GENERIC_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, &whyNot);
+
+	if (file == INVALID_HANDLE_VALUE)
+	{
+		return false;
+	}
+
+	const unsigned char *at = (const unsigned char *)bytes;
+	size_t left = size;
+	bool written = true;
+
+	while (written && left > 0)
+	{
+		DWORD const part = left > 0x10000000 ? 0x10000000 : (DWORD)left;   // (WriteFile takes at most a DWORD at a time)
+		DWORD put = 0;
+		written = ::WriteFile(file, at, part, &put, NULL) && put == part;
+		at += part;
+		left -= part;
+	}
+
+	if (!written)
+	{
+		whyNot = PlainWrite_Error("it couldn't be written whole", ::GetLastError());
+	}
+
+	if (!::CloseHandle(file) && written)
+	{
+		written = false;
+		whyNot = "it couldn't be closed";
+	}
+
+	return written;
 }
 
+// A copy of the file from, made at to through PlainWrite_Open (onlyNew: only if nothing is there; else what is there is emptied first, if
+// it is a plain file with one name). A plain CopyFile follows a link at to, and writes what it points at. The file copied is read as it is
+// (it is the game's own, the level being saved; card 6's read side judges reads). False, with why set, when either can't be opened, or the
+// copy isn't whole.
 inline bool PlainWrite_CopyFile(const std::string &from, const std::string &to, bool onlyNew, std::string *why)
 {
-	if (why) why->clear();
-	return ::CopyFileA(from.c_str(), to.c_str(), onlyNew ? TRUE : FALSE) != 0;
+	std::string ignored;
+	std::string &whyNot = why ? *why : ignored;
+	whyNot.clear();
+	HANDLE const source = ::CreateFileA(from.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+
+	if (source == INVALID_HANDLE_VALUE)
+	{
+		whyNot = PlainWrite_Error("the file to copy can't be opened", ::GetLastError());
+		return false;
+	}
+
+	HANDLE const copy = PlainWrite_Open(to, GENERIC_WRITE, 0, onlyNew ? CREATE_NEW : CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, &whyNot);
+
+	if (copy == INVALID_HANDLE_VALUE)
+	{
+		::CloseHandle(source);
+		return false;
+	}
+
+	std::string buffer(64 * 1024, '\0');
+	bool copied = true;
+
+	for (;;)
+	{
+		DWORD got = 0;
+
+		if (!::ReadFile(source, &buffer[0], (DWORD)buffer.size(), &got, NULL))
+		{
+			copied = false;
+			whyNot = PlainWrite_Error("the file to copy couldn't be read", ::GetLastError());
+			break;
+		}
+
+		if (got == 0)
+		{
+			break;   // its end
+		}
+
+		DWORD put = 0;
+
+		if (!::WriteFile(copy, buffer.data(), got, &put, NULL) || put != got)
+		{
+			copied = false;
+			whyNot = PlainWrite_Error("the copy couldn't be written whole", ::GetLastError());
+			break;
+		}
+	}
+
+	::CloseHandle(source);
+
+	if (!::CloseHandle(copy) && copied)
+	{
+		copied = false;
+		whyNot = "the copy couldn't be closed";
+	}
+
+	return copied;
 }
 
 #endif

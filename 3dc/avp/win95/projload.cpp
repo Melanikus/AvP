@@ -39,6 +39,7 @@
 #define DB_LEVEL 2
 
 #include "3dc.h"
+#include "plain_write.h"   // a file is written only through plain_write.h, never through a link (card 6, Tao 1)
 #include "inline.h"
 #include "module.h"
 #include "list_tem.hpp"
@@ -3515,7 +3516,8 @@ static void MakeBackupFile(File_Chunk* fc)
 		MoveFile(Name2,Name1);
 	}
 	Name2[length+1]='9';
-	CopyFile(fc->filename,Name2,FALSE);
+	// through plain_write.h: a plain CopyFile follows a link put at the backup's name, and writes the level over what it points at
+	PlainWrite_CopyFile(fc->filename, Name2, false, NULL);
 
 	delete[] Name1;
 	delete[] Name2;

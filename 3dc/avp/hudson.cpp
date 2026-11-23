@@ -128,6 +128,7 @@
 // Only two small places here touch the shadow code: Hudson_SetTheMode, and what reads the mode back. Leave those out, and a run can be added to a local build of an older branch, to compare with.
 
 #include "3dc.h"
+#include "plain_write_picture.h"   // a picture is written only through plain_write.h, never through a link (card 6, Tao 1)
 #include "plain_write.h"   // a file is written only through PlainWrite_FOpen, never through a link (card 6, Tao 1)
 #include "inline.h"
 #include "module.h"
@@ -1511,7 +1512,7 @@ void Hudson_SaveLampCompareScreen(const char *stage)
 	{
 		if (SUCCEEDED(screen->GetDesc(&size)) && SUCCEEDED(device->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL)))
 		{
-			saved = SUCCEEDED(device->GetRenderTargetData(screen, copy)) && SUCCEEDED(D3DXSaveSurfaceToFileA((pictures + name).c_str(), D3DXIFF_PNG, copy, NULL, NULL));
+			saved = SUCCEEDED(device->GetRenderTargetData(screen, copy)) && PlainWrite_SurfaceToFile(pictures + name, D3DXIFF_PNG, copy, NULL);
 			copy->Release();
 		}
 
@@ -1541,7 +1542,7 @@ void Hudson_SaveLampCompareSurface(struct IDirect3DTexture9 *surface)
 	{
 		LogString(std::string("hudson: no surface picture this frame, for ") + name);
 	}
-	else if (FAILED(D3DXSaveTextureToFileA((pictures + name).c_str(), D3DXIFF_PNG, surface, NULL)))
+	else if (!PlainWrite_TextureToFile(pictures + name, D3DXIFF_PNG, surface, NULL))
 	{
 		LogErrorString(std::string("hudson: couldn't save ") + name);
 	}
@@ -5322,7 +5323,7 @@ static bool SaveTheScreen(std::string const &path)
 	{
 		if (SUCCEEDED(screen->GetDesc(&size)) && SUCCEEDED(device->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL)))
 		{
-			saved = SUCCEEDED(device->GetRenderTargetData(screen, copy)) && SUCCEEDED(D3DXSaveSurfaceToFileA(path.c_str(), D3DXIFF_PNG, copy, NULL, NULL));
+			saved = SUCCEEDED(device->GetRenderTargetData(screen, copy)) && PlainWrite_SurfaceToFile(path, D3DXIFF_PNG, copy, NULL);
 			copy->Release();
 		}
 

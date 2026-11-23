@@ -335,12 +335,14 @@ HANDLE avp_CreateFile(LPCTSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMo
 
 #endif
 #ifdef _WIN32
-	// Asked to write (or to make or empty a file): only through PlainWrite_Open, never through a link (plain_write.h says why). Every
-	// caller gives no security attributes and no template file, so the open is the same but for that.
-	DWORD const writes = GENERIC_WRITE | GENERIC_ALL | FILE_WRITE_DATA | FILE_APPEND_DATA;
+	// Only a plain read of a file that is there opens as it was. Anything else goes through PlainWrite_Open, never through a link
+	// (plain_write.h says why): an access beyond reading (writing its data, and also FILE_WRITE_ATTRIBUTES, FILE_WRITE_EA, DELETE,
+	// WRITE_DAC, WRITE_OWNER, MAXIMUM_ALLOWED, which change a file without writing its data), and any way but OPEN_EXISTING (OPEN_ALWAYS
+	// makes a file even for reading). (Frost's review of #294, SHOULD 1.) Every caller gives no security attributes and no template file,
+	// so the open is the same but for that.
+	DWORD const reads = GENERIC_READ | FILE_READ_DATA | FILE_READ_ATTRIBUTES | FILE_READ_EA | READ_CONTROL | SYNCHRONIZE;
 
-	if ((dwDesiredAccess & writes) != 0 || dwCreationDisposition == CREATE_ALWAYS || dwCreationDisposition == CREATE_NEW
-		|| dwCreationDisposition == TRUNCATE_EXISTING)
+	if ((dwDesiredAccess & ~reads) != 0 || dwCreationDisposition != OPEN_EXISTING)
 	{
 		return PlainWrite_Open(lpFileName, dwDesiredAccess, dwShareMode, dwCreationDisposition, dwFlagsAndAttributes, NULL);
 	}
