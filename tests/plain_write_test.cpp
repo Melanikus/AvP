@@ -243,6 +243,111 @@ static void TestFOpen(const std::string &base)
 	::DeleteFileA(name.c_str());
 }
 
+// ---- The file opened is the one in the folder held (Frost's review of #294, MUST 1) ----------------------------------------------------
+
+// A folder opened as PlainWrite_Open holds it, and a file opened only to be looked at
+static HANDLE OpenFolder(const std::string &folder)
+{
+	return ::CreateFileA(folder.c_str(), FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+		FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+}
+
+static HANDLE OpenToLook(const std::string &file)
+{
+	return ::CreateFileA(file.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+}
+
+static void TestSameFolder(const std::string &base)
+{
+	puts("PlainWrite_SameFolder: the file opened lies in the folder held");
+
+	// A folder above the one held could be swapped for a junction between the folder's open and the file's (FILE_FLAG_OPEN_REPARSE_POINT
+	// stops only a path's last part being followed): then the file opened lies somewhere else. That swap can't be timed in a test, so the
+	// check itself is tried on two real folders: the file in A, A held, is in it; the file in B, A held, isn't (a "bc" beside "b" too).
+	std::string const a = base + "\\b", b = base + "\\bc";
+	::CreateDirectoryA(a.c_str(), NULL);
+	::CreateDirectoryA(b.c_str(), NULL);
+	WriteWholeFile(a + "\\x.cfg", "in b");
+	WriteWholeFile(b + "\\x.cfg", "in bc");
+
+	HANDLE const heldA = OpenFolder(a);
+	HANDLE const inA = OpenToLook(a + "\\x.cfg");
+	HANDLE const inB = OpenToLook(b + "\\x.cfg");
+	bool const opened = heldA != INVALID_HANDLE_VALUE && inA != INVALID_HANDLE_VALUE && inB != INVALID_HANDLE_VALUE;
+	Check(opened, "(the two folders and their files are made and opened)");
+	Check(opened && PlainWrite_SameFolder(heldA, inA), "a file in the folder held is in it");
+	Check(opened && !PlainWrite_SameFolder(heldA, inB), "a file in another folder isn't, though its name is the same and its folder's name starts the same (b, bc)");
+
+	// any capitals: the folder's name written in other capitals is the same folder (the final paths are compared as NTFS does, CompareStringOrdinal)
+	HANDLE const heldUpper = OpenFolder(base + "\\B");
+	Check(heldUpper != INVALID_HANDLE_VALUE && PlainWrite_SameFolder(heldUpper, inA), "the same folder named in other capitals is the same folder");
+
+	for (HANDLE h : { heldA, inA, inB, heldUpper })
+	{
+		if (h != INVALID_HANDLE_VALUE)
+		{
+			::CloseHandle(h);
+		}
+	}
+
+	::DeleteFileA((a + "\\x.cfg").c_str());
+	::DeleteFileA((b + "\\x.cfg").c_str());
+	::RemoveDirectoryA(a.c_str());
+	::RemoveDirectoryA(b.c_str());
+}
+
+// ---- A whole file at once, and a copy (Frost's review of #294: the D3DX pictures, the level backup) ----------------------------------------
+
+static void TestWholeFileAndCopy(const std::string &base)
+{
+	puts("PlainWrite_WriteWholeFile and PlainWrite_CopyFile");
+
+	std::string why;
+	std::string const name = base + "\\picture.png";
+
+	Check(PlainWrite_WriteWholeFile(name, "picture", 7, &why) && ReadWholeFile(name) == "picture", "a whole file is written");
+	Check(PlainWrite_WriteWholeFile(name, "pic", 3, &why) && ReadWholeFile(name) == "pic", "and written again, emptied first");
+	Check(!PlainWrite_WriteWholeFile(base + "\\NUL", "lost", 4, &why), "a device's name (NUL) is refused, never \"saved\" into nothing");
+
+	std::string const source = base + "\\level.rif";
+	std::string const copy = base + "\\level B9.rif";
+	WriteWholeFile(source, "the level's bytes");
+	Check(PlainWrite_CopyFile(source, copy, false, &why) && ReadWholeFile(copy) == "the level's bytes", "a copy is made");
+	WriteWholeFile(source, "changed");
+	Check(PlainWrite_CopyFile(source, copy, false, &why) && ReadWholeFile(copy) == "changed", "and made again over the old copy");
+	Check(!PlainWrite_CopyFile(source, copy, true, &why) && ReadWholeFile(copy) == "changed", "a copy asked to be new is refused over one that is there");
+	Check(!PlainWrite_CopyFile(source, base + "\\NUL", false, &why), "a copy onto a device's name (NUL) is refused");
+	Check(!PlainWrite_CopyFile(base + "\\no such level.rif", base + "\\nothing.rif", false, &why) && !IsThere(base + "\\nothing.rif"),
+		"a copy of a file that isn't there makes nothing");
+
+	::DeleteFileA(name.c_str());
+	::DeleteFileA(source.c_str());
+	::DeleteFileA(copy.c_str());
+}
+
+// C11's "x" (only a new file): "wx" must never empty a file that is there (Frost's nit on #294)
+static void TestExclusiveMode(const std::string &base)
+{
+	puts("PlainWrite_FOpen's \"x\"");
+
+	std::string why;
+	std::string const name = base + "\\only new.txt";
+	WriteWholeFile(name, "there before");
+
+	FILE *file = PlainWrite_FOpen(name, "wx", &why);
+	Check(!file && ReadWholeFile(name) == "there before", "\"wx\" refuses a file that is there, and leaves it as it was");
+
+	if (file)
+	{
+		fclose(file);
+	}
+
+	::DeleteFileA(name.c_str());
+	file = PlainWrite_FOpen(name, "wbx", &why);
+	Check(file && fwrite("new", 1, 3, file) == 3 && fclose(file) == 0 && ReadWholeFile(name) == "new", "\"wbx\" makes a file that isn't there");
+	::DeleteFileA(name.c_str());
+}
+
 // ---- FileStream's write ------------------------------------------------------------------------------------------------------------
 
 static bool StreamWrite(const std::string &name, const std::string &bytes)
@@ -363,7 +468,14 @@ static bool EveryWayRefuses(const std::string &name)
 		fclose(stream);
 	}
 
-	return !StreamWrite(name, "written through it") && refused;
+	// a whole file written at once (the D3DX pictures, made in memory first), and a copy made onto the name (the level backup)
+	bool const wholeRefused = !PlainWrite_WriteWholeFile(name, "written through it", 18, &why);
+	std::string const source = name + ".source";
+	WriteWholeFile(source, "copied through it");
+	bool const copyRefused = !PlainWrite_CopyFile(source, name, false, &why);
+	::DeleteFileA(source.c_str());
+
+	return !StreamWrite(name, "written through it") && refused && wholeRefused && copyRefused;
 }
 
 static void TestLinks(const std::string &base)
@@ -524,38 +636,109 @@ static bool IsJudgedItself(const std::string &name)
 	return false;
 }
 
-// The lines in text with a plain fopen in a writing mode, or a plain CreateFile asking to write. Words after // on a line are left out.
-static std::vector<size_t> RawWrites(const std::string &text)
+// The code alone, as the compiler for Windows reads it: every // and /* */ comment blanked (so a comment that names fopen isn't taken for a
+// call), every #include line, and every line of an "#ifdef _XBOX" part (the Xbox build is never made). Its line breaks are kept, so a line number
+// found in it is the file's own.
+static std::string CodeOnly(const std::string &text)
 {
-	// the code alone: each // comment blanked, so a comment that names fopen isn't taken for a call
 	std::string code = text;
+	size_t i = 0;
+
+	while (i < code.size())
+	{
+		if (code.compare(i, 2, "//") == 0)
+		{
+			while (i < code.size() && code[i] != '\n')
+			{
+				code[i++] = ' ';
+			}
+		}
+		else if (code.compare(i, 2, "/*") == 0)
+		{
+			while (i < code.size() && code.compare(i, 2, "*/") != 0)
+			{
+				code[i] = code[i] == '\n' ? '\n' : ' ';
+				i++;
+			}
+
+			for (int k = 0; k < 2 && i < code.size(); k++)
+			{
+				code[i++] = ' ';
+			}
+		}
+		else if (code[i] == '"')
+		{
+			// a string's words stay (a mode is in one), but a // or /* inside one is never taken for a comment
+			i++;
+
+			while (i < code.size() && code[i] != '"' && code[i] != '\n')
+			{
+				i += code[i] == '\\' ? 2 : 1;
+			}
+
+			i++;
+		}
+		else
+		{
+			i++;
+		}
+	}
+
+	// "#ifdef _XBOX" (or "#if defined(_XBOX)") parts: blanked to their #else or #endif; the nesting of other #if's inside them is followed
+	std::vector<int> stack;   // 1: inside an _XBOX part, 0: any other #if
 	size_t lineStart = 0;
 
 	while (lineStart < code.size())
 	{
-		size_t const lineEnd = code.find('\n', lineStart);
-		size_t const end = lineEnd == std::string::npos ? code.size() : lineEnd;
-		size_t const comment = code.find("//", lineStart);
+		size_t lineEnd = code.find('\n', lineStart);
+		lineEnd = lineEnd == std::string::npos ? code.size() : lineEnd;
+		size_t first = code.find_first_not_of(" \t", lineStart);
+		std::string const line = first != std::string::npos && first < lineEnd ? code.substr(first, lineEnd - first) : std::string();
+		bool const xboxIf = line.compare(0, 12, "#ifdef _XBOX") == 0 || line.compare(0, 18, "#if defined(_XBOX)") == 0;
 
-		if (comment != std::string::npos && comment < end)
+		if (line.compare(0, 3, "#if") == 0)
 		{
-			for (size_t i = comment; i < end; i++)
+			stack.push_back(xboxIf ? 1 : 0);
+		}
+		else if (line.compare(0, 5, "#else") == 0 && !stack.empty() && stack.back() == 1)
+		{
+			stack.back() = 0;
+		}
+		else if (line.compare(0, 6, "#endif") == 0 && !stack.empty())
+		{
+			stack.pop_back();
+		}
+		else if (line.compare(0, 8, "#include") == 0 || std::find(stack.begin(), stack.end(), 1) != stack.end())   // an #include names a header, never a write
+		{
+			for (size_t k = lineStart; k < lineEnd; k++)
 			{
-				code[i] = ' ';
+				code[k] = ' ';
 			}
 		}
 
-		lineStart = end + 1;
+		lineStart = lineEnd + 1;
 	}
 
+	return code;
+}
+
+// The lines in text that write a file without plain_write.h: a plain fopen in a writing mode, a plain CreateFile asking to write, any
+// std::ofstream or std::fstream, a D3DX picture saved straight to a file (D3DXSave...ToFile, never ...ToFileInMemory), a CopyFile, and a
+// freopen (but of the console, CONOUT$ or CONIN$, which is a device, not a file)
+static std::vector<size_t> RawWrites(const std::string &text)
+{
+	std::string const code = CodeOnly(text);
 	std::vector<size_t> lines;
-	const char *const kinds[] = { "fopen(", "CreateFile(", "CreateFile (", "CreateFileA(", "CreateFileA (", "CreateFileW(", "CreateFileW (" };
+	const char *const kinds[] = { "fopen(", "CreateFile(", "CreateFile (", "CreateFileA(", "CreateFileA (", "CreateFileW(", "CreateFileW (", "CreateFile2(",
+		"ofstream", "fstream", "D3DXSave", "CopyFile", "freopen(" };
 
 	for (const char *kind : kinds)
 	{
-		for (size_t at = code.find(kind); at != std::string::npos; at = code.find(kind, at + 1))
+		std::string const k = kind;
+
+		for (size_t at = code.find(k); at != std::string::npos; at = code.find(k, at + 1))
 		{
-			// a call of its own: not avp_fopen, _wfopen, avp_CreateFile and the like
+			// a name of its own: not avp_fopen, _wfopen, avp_CreateFile, ifstream and the like (a letter or _ before it makes it another name)
 			if (at > 0 && (code[at - 1] == '_' || isalnum((unsigned char)code[at - 1])))
 			{
 				continue;
@@ -563,10 +746,30 @@ static std::vector<size_t> RawWrites(const std::string &text)
 
 			size_t const statementEnd = code.find(';', at);
 			std::string const call = code.substr(at, statementEnd == std::string::npos ? std::string::npos : statementEnd - at);
-			bool const writes = kind[0] == 'f'
-				? (call.find("\"w") != std::string::npos || call.find("\"a") != std::string::npos || call.find("+\"") != std::string::npos)
-				: (call.find("GENERIC_WRITE") != std::string::npos || call.find("FILE_WRITE_DATA") != std::string::npos
-					|| call.find("FILE_APPEND_DATA") != std::string::npos || call.find("GENERIC_ALL") != std::string::npos);
+			bool writes = false;
+
+			if (k == "fopen(")
+			{
+				writes = call.find("\"w") != std::string::npos || call.find("\"a") != std::string::npos || call.find("+\"") != std::string::npos;
+			}
+			else if (k.compare(0, 10, "CreateFile") == 0)
+			{
+				writes = k == "CreateFile2(" || call.find("GENERIC_WRITE") != std::string::npos || call.find("FILE_WRITE_DATA") != std::string::npos
+					|| call.find("FILE_APPEND_DATA") != std::string::npos || call.find("GENERIC_ALL") != std::string::npos;
+			}
+			else if (k == "D3DXSave")
+			{
+				size_t const open = code.find('(', at);
+				writes = open != std::string::npos && code.substr(at, open - at).find("InMemory") == std::string::npos;
+			}
+			else if (k == "freopen(")
+			{
+				writes = call.find("CONOUT$") == std::string::npos && call.find("CONIN$") == std::string::npos;
+			}
+			else
+			{
+				writes = true;   // ofstream, fstream, CopyFile: a write whatever its words
+			}
 
 			if (writes)
 			{
@@ -593,6 +796,8 @@ static void TestTheGameUsesIt()
 	Check(plainfile.find("PlainWrite_ModeWrites(mode)") != std::string::npos && plainfile.find("PlainWrite_FOpen(") != std::string::npos,
 		"avp_fopen writes only through PlainWrite_FOpen");
 	Check(createfile.find("PlainWrite_Open(") != std::string::npos, "avp_CreateFile opens a file to write only through PlainWrite_Open");
+	Check(createfile.find("dwCreationDisposition != OPEN_EXISTING") != std::string::npos && createfile.find("(dwDesiredAccess & ~reads) != 0") != std::string::npos,
+		"and anything but a plain read of a file that is there (OPEN_ALWAYS makes one; DELETE, WRITE_DAC and the like change one) goes through it too");
 
 	std::string const stream = FunctionText(ReadSource("3dc/FileStream.cpp"), "bool FileStream::OpenActual(");
 	Check(stream.find("PlainWrite_Open(") != std::string::npos, "FileStream opens a file to write only through PlainWrite_Open");
@@ -607,7 +812,8 @@ static void TestTheGameUsesIt()
 	// CreateFile asking to write. The only ones left are in the files that judge what they open themselves.
 	std::vector<std::string> sources;
 	FindSources("3dc", &sources);
-	Check(sources.size() > 500, "the game's source files under 3dc are found to be read");
+	FindSources("win32", &sources);   // the Direct3D code there (d3_func.cpp) writes the screenshot
+	Check(sources.size() > 500, "the game's source files under 3dc and win32 are found to be read");
 
 	std::vector<std::string> raw;
 
@@ -631,7 +837,7 @@ static void TestTheGameUsesIt()
 		printf("    a raw write at %s\n", where.c_str());
 	}
 
-	Check(raw.empty(), "no file under 3dc writes with a plain fopen or CreateFile (each raw write is named above)");
+	Check(raw.empty(), "no file under 3dc or win32 writes without plain_write.h: no plain fopen, CreateFile, ofstream, fstream, D3DXSave...ToFile, CopyFile or freopen (each raw write is named above)");
 }
 
 int main()
@@ -642,6 +848,9 @@ int main()
 	TestOpenWays(base);
 	TestOpenRefusals(base);
 	TestFOpen(base);
+	TestSameFolder(base);
+	TestWholeFileAndCopy(base);
+	TestExclusiveMode(base);
 	TestFileStream(base);
 	TestLinks(base);
 	TestTheGameUsesIt();

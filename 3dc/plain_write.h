@@ -317,4 +317,28 @@ inline FILE *PlainWrite_FOpen(const std::string &path, const char *mode, std::st
 	return stream;
 }
 
+// RED STUBS (Drake 2026-11-23, Frost's review of #294): the three new names, doing what the game did before (a plain CreateFile, a plain
+// CopyFile, and no check of where the file lies), so the test shows that failing. The next commit puts the real ones here.
+inline bool PlainWrite_SameFolder(HANDLE, HANDLE)
+{
+	return true;
+}
+
+inline bool PlainWrite_WriteWholeFile(const std::string &path, const void *bytes, size_t size, std::string *why)
+{
+	if (why) why->clear();
+	HANDLE const file = ::CreateFileA(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (file == INVALID_HANDLE_VALUE) return false;
+	DWORD put = 0;
+	bool const ok = ::WriteFile(file, bytes, (DWORD)size, &put, NULL) && put == size;
+	::CloseHandle(file);
+	return ok;
+}
+
+inline bool PlainWrite_CopyFile(const std::string &from, const std::string &to, bool onlyNew, std::string *why)
+{
+	if (why) why->clear();
+	return ::CopyFileA(from.c_str(), to.c_str(), onlyNew ? TRUE : FALSE) != 0;
+}
+
 #endif
