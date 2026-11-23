@@ -99,8 +99,13 @@ uint64_t RimLoader_BytesThisLevel();
 // while a level is open): a tool's pictures must neither spend the open level's allowance (the level's own pictures would then be refused), nor start
 // it over (the level could then open twice its limit, and nothing would say so). While one of these lives, every picture opened is counted on an
 // allowance of its own, from nothing, of the same size and by the same rules; when it ends, the level's count, and whether the level was said to be
-// full, are put back exactly as they were. Made and ended on the thread that opens pictures, one picture or one tool's batch at a time. Inside
-// another one it counts apart from it too, and puts back what it found.
+// full, are put back exactly as they were. Inside another one it counts apart from it too, and puts back what it found.
+// A LEVEL THAT BEGINS while one lives (RimLoader_NewLevel: an Open with reached from a frame that holds it) keeps its own count when it ends: everything opened
+// since that level began is counted on it, and the old level's count is never put over it (Drake's review, 2026-11-23: a lower old count would let the new
+// level past its limit).
+// WHAT BOUNDS A TOOL is the one allowance it holds: a tool holds ONE for all the pictures it opens in one use (the placement picker: one for a whole visit,
+// from its opening to its closing), never one a picture, or its pictures would have no limit in all.
+// The counts are plain numbers with no lock, as the level's always were: one is made and ended on THE SAME THREAD AS THE LEVEL'S LOADING, never another.
 class RimLoaderToolAllowance
 {
 	public:
@@ -110,6 +115,7 @@ class RimLoaderToolAllowance
 	private:
 		uint64_t levelBytes;    // the count it found, put back when it ends
 		bool levelSaidFull;     // and whether the full level had been said in the log
+		uint64_t levelNumber;   // how many allowances had begun then: another since means a level began inside it, and its count stands
 
 		RimLoaderToolAllowance(RimLoaderToolAllowance const &) = delete;
 		RimLoaderToolAllowance &operator=(RimLoaderToolAllowance const &) = delete;

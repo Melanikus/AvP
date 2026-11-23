@@ -1053,6 +1053,41 @@ static void CheckToolAllowance()
 
 	Check(!RimLoader_SayLevelIsFull(), "and the level, which said it already, doesn't say it again");
 
+	// A LEVEL STARTED WHILE A TOOL'S ALLOWANCE LIVES (Drake's review of a45bc636, SHOULD 1): its end must not put the OLD level's count over the NEW level's (if the
+	// old one's were lower, the new level could open more than its limit). The new level's count stands: everything opened since it started is counted on it.
+	RimLoader_NewLevel();
+
+	for (int i = 0; i < 10; i++)
+	{
+		OpenOnly(TestFilePath());   // the old level: 160 MB
+	}
+
+	{
+		RimLoaderToolAllowance tool;
+
+		OpenOnly(TestFilePath());   // the tool's own
+		RimLoader_NewLevel();       // a new level starts inside the tool's allowance (an Open with reached from a frame that holds it, say)
+
+		for (int i = 0; i < 3; i++)
+		{
+			OpenOnly(TestFilePath());   // counted on the new level
+		}
+
+		RimLoader_SayLevelIsFull();   // and the new level said full
+	}
+
+	Check(RimLoader_BytesThisLevel() == largeBytes * 3, "a level started inside a tool's allowance keeps its own count when the allowance ends (48 MB, not the old level's 160)");
+	Check(!RimLoader_SayLevelIsFull(), "and its own word about being full (said once, inside)");
+
+	bool thirteenMore = true;
+
+	for (int i = 0; i < 13; i++)
+	{
+		thirteenMore = thirteenMore && (OpenOnly(TestFilePath()) == kRimFine);
+	}
+
+	Check(thirteenMore && OpenOnly(TestFilePath()) == kRimLevelHasTooMany, "so the new level's limit holds: 13 more fit, the 14th is refused");
+
 	std::string const header = ReadSourceFile("3dc/RimLoader.h");
 	Check(header.find("must not call it: that would start the level's allowance over") != std::string::npos, "RimLoader_NewLevel's words tell a tool inside an open level not to call it");
 

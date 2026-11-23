@@ -1193,6 +1193,16 @@
 					"to": "// (taken out: the line for a full level not put back)"
 				}
 			]
+		},
+		{
+			"name": "OLD: a level begun inside a tool's allowance gets the old level's count put back",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (levelsStarted == levelNumber)   // no level began inside it (Drake's review of a45bc636: else the old count would let the new level past its limit)",
+					"to": "if (true)   // (taken out: the old level's count put over a level that began inside)"
+				}
+			]
 		}
 	]
 }
