@@ -315,10 +315,24 @@ uint32_t FileStream::GetFileSize()
 	}
 }
 
-// RED STUB (Frost 2026-11-23): which file it has open, never known yet, so rim_test's CheckIdentity shows that failing. The next commit makes it real.
+// Which file it has open (FileStreamIdentity, FileStream.h): asked of the very handle it reads, never of a name, so a name that now leads elsewhere can't
+// change the answer. Not known when nothing is open, or when Windows won't say.
 FileStreamIdentity FileStream::Identity()
 {
-	return FileStreamIdentity();
+	FileStreamIdentity identity;
+	BY_HANDLE_FILE_INFORMATION about;
+
+	if (!isGood || fileHandle == 0 || fileHandle == INVALID_HANDLE_VALUE || !::GetFileInformationByHandle(fileHandle, &about)) {
+		return identity;
+	}
+
+	identity.known = true;
+	identity.inFastFile = fromFastFile;
+	identity.volume = about.dwVolumeSerialNumber;
+	identity.index = ((uint64_t)about.nFileIndexHigh << 32) | about.nFileIndexLow;
+	identity.offset = fromFastFile ? fileOffset : 0;
+	identity.size = fromFastFile ? fileSize : about.nFileSizeLow;   // (a loose file the game reads is under 4 GB: GetFileSize says the same)
+	return identity;
 }
 
 // Read
