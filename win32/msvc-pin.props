@@ -13,15 +13,50 @@
      (ClearDevCommandPromptEnvVars). The build FAILS, saying why, if the version is anything else (a /p:VCToolsVersion on the command line included)
      or that MSVC is not installed: it is never quietly built with another.
 
-     TO MOVE IT: change AvpxMsvcVersion here, install that MSVC on every machine that builds (Visual Studio Installer, the "MSVC v145 build tools" of
-     that version), build, and have the result scanned before anything ships. CI installs the same version from Microsoft's own installer. -->
+     THE FOLDER IS NOT ENOUGH (Frost 2026-11-22, the first CI build with the pin, editor PR #98): Microsoft re-services a toolset under the same folder
+     name. CI's Visual Studio 18.12 installed the 14.51 tools package 14.51.36263 into VC\Tools\MSVC\14.51.36231, while a Visual Studio 18.11 here
+     had 14.51.36260 in that same folder: the two compilers made other machine code from the same source (.text and the Rich header differ; imports
+     and resources were the same). So the compiler's own build is pinned too (AvpxMsvcBuild: the third number of cl.exe's and link.exe's version,
+     19.51.<build> and 14.51.<build>), and every build reads it from the two programs' own banners.
+     ON GITHUB IT FAILS, ELSEWHERE IT WARNS (the owner, 2026-11-22, through Bishop 2: "enforce on CI, warn locally"): what ships is built on GitHub
+     (GITHUB_ACTIONS is "true" there), so a build there with another compiler build stops; a machine of ours with another build (a Visual Studio
+     not updated yet: this PC's 18.11.3 serves 36260) builds on with a warning that says which build it has, so nobody's local builds, tests and
+     Hudson's runs stop until its Visual Studio is updated, on its owner's schedule. Its bytes are then not the shipped ones, and the warning says so.
+
+     TO MOVE IT: change AvpxMsvcVersion (the folder) and AvpxMsvcBuild (the build in it) here, install that MSVC on every machine that builds (Visual
+     Studio Installer, the "MSVC v145 build tools" of that version; a machine whose folder holds another build updates Visual Studio), build, and have
+     the result scanned before anything ships. CI installs the same version from Microsoft's own installer, and stops when the installer's catalog
+     serves another build (tools/install-msvc-pin.ps1). -->
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <AvpxMsvcVersion>14.51.36231</AvpxMsvcVersion>
+    <AvpxMsvcBuild>36263</AvpxMsvcBuild>
     <VCToolsVersion>$(AvpxMsvcVersion)</VCToolsVersion>
   </PropertyGroup>
   <Target Name="AvpxMsvcPinCheck" BeforeTargets="PrepareForBuild">
     <Error Condition="'$(VCToolsVersion)' != '$(AvpxMsvcVersion)'" Text="This build must use MSVC $(AvpxMsvcVersion) (msvc-pin.props), and it was asked for $(VCToolsVersion)." />
     <Error Condition="!Exists('$(VCToolsInstallDir)bin\Hostx64\x86\cl.exe') and !Exists('$(VCToolsInstallDir)bin\Hostx86\x86\cl.exe')" Text="MSVC $(AvpxMsvcVersion) is not installed here (no compiler in $(VCToolsInstallDir)): install it with the Visual Studio Installer, as msvc-pin.props says." />
+    <!-- The compiler and the linker the build uses (the host the build picks: 64-bit when this machine has it), each run once with no arguments, in
+         English (VSLANG=1033), so its first line says its version whatever the machine's language: "... Version 19.51.36263 for x86". -->
+    <PropertyGroup>
+      <AvpxMsvcBin Condition="Exists('$(VCToolsInstallDir)bin\Hostx64\x86\cl.exe')">$(VCToolsInstallDir)bin\Hostx64\x86\</AvpxMsvcBin>
+      <AvpxMsvcBin Condition="'$(AvpxMsvcBin)' == ''">$(VCToolsInstallDir)bin\Hostx86\x86\</AvpxMsvcBin>
+    </PropertyGroup>
+    <Exec Command="&quot;$(AvpxMsvcBin)cl.exe&quot;" EnvironmentVariables="VSLANG=1033" ConsoleToMSBuild="true" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true" EchoOff="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="AvpxClBanner" />
+    </Exec>
+    <Exec Command="&quot;$(AvpxMsvcBin)link.exe&quot;" EnvironmentVariables="VSLANG=1033" ConsoleToMSBuild="true" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true" EchoOff="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="AvpxLinkBanner" />
+    </Exec>
+    <!-- The third number of "Version 19.51.36263" (cl) and "Version 14.51.36263.0" (link); empty when a banner has no such words -->
+    <PropertyGroup>
+      <AvpxClBuild>$([System.Text.RegularExpressions.Regex]::Match(`$(AvpxClBanner)`, `(?&lt;=Version 19\.[0-9]+\.)[0-9]+`).Value)</AvpxClBuild>
+      <AvpxLinkBuild>$([System.Text.RegularExpressions.Regex]::Match(`$(AvpxLinkBanner)`, `(?&lt;=Version 14\.[0-9]+\.)[0-9]+`).Value)</AvpxLinkBuild>
+    </PropertyGroup>
+    <PropertyGroup>
+      <AvpxMsvcOtherBuild Condition="'$(AvpxClBuild)' != '$(AvpxMsvcBuild)' or '$(AvpxLinkBuild)' != '$(AvpxMsvcBuild)'">true</AvpxMsvcOtherBuild>
+    </PropertyGroup>
+    <Error Condition="'$(AvpxMsvcOtherBuild)' == 'true' and '$(GITHUB_ACTIONS)' == 'true'" Text="This build must use MSVC $(AvpxMsvcVersion) build $(AvpxMsvcBuild) (msvc-pin.props), and $(AvpxMsvcBin) holds compiler build '$(AvpxClBuild)' and linker build '$(AvpxLinkBuild)': Microsoft re-serviced the toolset under the same folder. What ships is built here, so this build stops: move the pin on purpose, with a scan, as msvc-pin.props says." />
+    <Warning Condition="'$(AvpxMsvcOtherBuild)' == 'true' and '$(GITHUB_ACTIONS)' != 'true'" Text="MSVC $(AvpxMsvcVersion) here is compiler build '$(AvpxClBuild)' and linker build '$(AvpxLinkBuild)', not the pinned build $(AvpxMsvcBuild) (msvc-pin.props) that GitHub builds what ships with: this build goes on, but its bytes are not the shipped ones. Update this machine's Visual Studio (its MSVC $(AvpxMsvcVersion) build tools) to build $(AvpxMsvcBuild) when you can." />
   </Target>
 </Project>

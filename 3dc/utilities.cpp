@@ -1,3 +1,5 @@
+// Modified 2026-11-22 by Melanikus for the AvP port:
+//   the window title names the build's version (tools/build-and-package.ps1 writes it), not the time the compiler ran, so the same commit makes the same bytes
 // Modified 2026-11-14 by Melanikus for the AvP port:
 //   the map editor can give the game a folder of its own to keep its files in (SaveFolder_UseThisFolder, SAVE-FOLDER-1)
 // Modified 2026-11-08 by Melanikus for the AvP port:
@@ -41,6 +43,7 @@
 #include "logString.h"
 #include "save_folder.h"
 #include <assert.h>
+#include <stdio.h>
 
 #ifdef _WIN32
 	#include <shlobj.h>
@@ -355,6 +358,18 @@ void avp_exit(int code)
 #endif
 }
 
+// The build's version, as 3dc/build_identity.cpp has it: tools/build-and-package.ps1 writes build_version.h before it builds (it isn't in the repository).
+// What comes through is one of: a release's version as tools/check-release.ps1 lets it through (three numbers, 1.0.0, or a beta of them, 1.0.0-beta.0); the
+// script's fixed words for any other build, "a test build, not a release"; or, with no build_version.h at all, the words below. The title is made by
+// snprintf into its own size, with the version as an argument and never as the format, so no version, whatever its letters, can overrun the title or
+// be read as a format.
+#if __has_include("build_version.h")
+#include "build_version.h"
+#endif
+#ifndef AVP_RELEASE_VERSION
+#define AVP_RELEASE_VERSION "not known (not built by tools/build-and-package.ps1)"
+#endif
+
 char windowTitle[256];
 
 char *GetWindowTitle()
@@ -365,8 +380,7 @@ char *GetWindowTitle()
 
 void SetWindowTitle()
 {
-	strcpy(windowTitle, "AvPx - Build Date: ");
-	strcat(windowTitle, (const char *)__DATE__);
-	strcat(windowTitle, " at ");
-	strcat(windowTitle, (const char *)__TIME__);
+	// the build's version, never the compiler's __DATE__ and __TIME__: those put the time of each build into the program, so no two builds of one commit were
+	// the same bytes, and a scan of one could not speak for another (Bishop 2026-11-22, the editor's reproducible builds)
+	snprintf(windowTitle, sizeof(windowTitle), "AvPx %s", AVP_RELEASE_VERSION);
 }

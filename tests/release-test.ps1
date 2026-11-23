@@ -3253,14 +3253,60 @@ Check ($scanJob.Contains('MaximumRedirection = 0')) 'a redirect is not followed,
 $addresses = @([regex]::Matches($scanJob, 'https?://[^\s"/]+') | ForEach-Object { $_.Value } | Sort-Object -Unique)
 Check ($addresses.Count -eq 1 -and $addresses[0] -ceq 'https://www.virustotal.com') "it asks VirusTotal and nothing else. It names: $addresses"
 Check (-not $scanJob.Contains('ConvertFrom-Json') -and -not $scanJob.Contains('Get-Content $answers') -and -not $scanJob.Contains('Get-Content "$answers')) 'it never reads an answer itself: only the checker does'
-Check-Order $scanJob "Ask-Checker @('-Package', `$zip)" "Ask-VirusTotal 'Post' 'files'" 'the zip is checked before it is sent'
-Check ($scanJob.Contains("if (`$status -eq 404) {") -and $scanJob.Contains("while (`$answer -ceq 'waiting')") -and $scanJob.Contains('$giveUp = (Get-Date).AddMinutes(25)')) 'it sends the zip only when VirusTotal does not know it, and waits for the analysis, for a while'
+Check-Order $scanJob "Ask-Checker `$fileSha @('-Package', `$path)" "Ask-VirusTotal 'Post' 'files'" 'each file (the zip, and each program in it) is checked before it is sent'
+Check ($askStep.Contains('-Sha256 $fileSha @arguments') -and -not $askStep.Contains('-Sha256 $sha @arguments')) 'and the checker is given the SHA-256 of the file it is asked about, not the zip''s'
+# Only an analysis this run started counts (2026-11-22, the editor's alpha.4 scan: VirusTotal names an analysis two ways, and never ran two of
+# the re-analyses it was asked for). Every file is always uploaded, so nothing VirusTotal said about it before is ever asked for, let alone
+# counted; the checker is given the file's own MD5 and this step's start on every question about its analysis; and an analysis VirusTotal
+# never runs is waited for 10 minutes, then that file is sent again, 3 times at most, inside one time limit for the whole step.
+Check (-not $askStep.Contains("Ask-VirusTotal 'Get' `"files/") -and -not $askStep.Contains("'-Kind', 'lookup'")) 'every file is always sent: what VirusTotal knew of it before is never asked for, so an old verdict can never count'
+Check ($askStep.Contains('Md5 = (Get-FileHash -Algorithm MD5 -LiteralPath $path).Hash.ToLowerInvariant()') -and $askStep.Contains('$notBefore = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - 60')) 'each file''s own MD5 and the step''s start, less a minute, are worked out here'
+Check-Order $scanJob $nameRule '$started[$sha] = Send-One $zip $sha' 'the zip is sent only once its name has been checked'
+Check ($askStep.Contains("'-Kind', 'analysis', '-AnalysisId', `$id, '-Md5', `$file.Md5, '-NotBefore', `"`$notBefore`"") -and $askStep.Contains("'-Kind', 'upload', '-Md5', `$file.Md5")) 'and the checker is given both on every analysis, and the MD5 on the upload'
+Check ($askStep.Contains("if (`$status -eq 404)") -and $askStep.Contains('if ($waited -lt 600) { $file.Missing = $true; continue }') -and $askStep.Contains('if ($file.Sends -ge 3) { throw')) 'an analysis VirusTotal never runs is waited for 10 minutes, then that file is sent again, 3 times at most'
+Check ($askStep.Contains('while ($done.Count -lt $started.Count)') -and $askStep.Contains('$giveUp = (Get-Date).AddMinutes(115)') -and $scanJob -match '(?m)^    timeout-minutes: 120 ') 'and every analysis is waited for inside one time limit, within the job''s'
+
+# The owner's ruling, 2026-11-22: "can we not scan the txts on virus total... just the binaries?", his written rule: zero findings on the zip and
+# on every PROGRAM inside it. The zip and each program are sent on their own; every other file is covered by the zip's scan. A program is told by
+# what it is, its first two bytes "MZ", never by its name (Tao 3: a program renamed readme.txt is still sent alone).
+Check ($askStep.Contains('$head[0] -eq 0x4D -and $head[1] -eq 0x5A') -and $askStep.Contains('if (Test-Program $entry.FullName) { $alone += ,@($entry.FullName, $shown) } else { $coveredByZip += $shown }')) 'a file is sent on its own when its first two bytes are MZ, and covered by the zip otherwise'
+Check (-not $askStep.Contains('.Extension') -and -not $askStep.Contains("-Filter '*.") -and -not $askStep.Contains('-like ''*.')) 'and never by its name: no file is picked by what it is called'
+Check ($askStep.Contains('Get-ChildItem -LiteralPath $root -Recurse -File -Force')) 'every file inside the zip is looked at, in its folders and with names that start with a dot'
+Check ($askStep.Contains('"Sent alone, as programs (their first bytes are MZ): ') -and $askStep.Contains("Covered by the zip's own scan only: ")) 'one line says which files went alone and which the zip covered, for the owner to see'
+Check-Order $askStep '$started[$sha] = Send-One $zip $sha' 'Send-One $program[0] $fileSha $program[1]' 'the zip is sent first, then the programs'
+$pickText = [regex]::Match($askStep, '(?s)function Test-Program\(\[string\]\$path\)\n {10}\{\n.*?\n {10}\}\n').Value
+Check ($pickText.Length -gt 0) 'the pick of the programs can be read'
+if ($pickText.Length -gt 0)
+{
+    # The pick itself, run here on a package of its own: the step's own words, nothing retyped
+    . ([scriptblock]::Create($pickText))
+    $pickFolder = Join-Path $temporary "release-test-pick-$([System.Guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Force $pickFolder | Out-Null
+    $programBytes = [byte[]](@(0x4D, 0x5A, 0x90, 0x00) + @(0) * 60)
+    [System.IO.File]::WriteAllBytes((Join-Path $pickFolder 'readme.txt'), $programBytes)
+    [System.IO.File]::WriteAllText((Join-Path $pickFolder 'notes.txt'), "Plain words.`n")
+    [System.IO.File]::WriteAllText((Join-Path $pickFolder 'fake.dll'), "Not a program, only named as one`n")
+    [System.IO.File]::WriteAllBytes((Join-Path $pickFolder 'one.bin'), [byte[]]@(0x4D))
+    [System.IO.File]::WriteAllBytes((Join-Path $pickFolder 'empty.ini'), [byte[]]@())
+    Check (Test-Program (Join-Path $pickFolder 'readme.txt')) 'a program named readme.txt is sent on its own'
+    Check (-not (Test-Program (Join-Path $pickFolder 'notes.txt'))) 'a plain .txt is not: the zip covers it'
+    Check (-not (Test-Program (Join-Path $pickFolder 'fake.dll'))) 'a text named fake.dll is not: it is no program'
+    Check (-not (Test-Program (Join-Path $pickFolder 'one.bin')) -and -not (Test-Program (Join-Path $pickFolder 'empty.ini'))) 'a file of one byte, or none, is no program'
+    Remove-Item -LiteralPath $pickFolder -Recurse -Force
+}
 
 $fewest = [regex]::Match($virustotalScript, '(?m)^\$fewestScanners = ([0-9]+)\r?$').Groups[1].Value
 Check ($fewest.Length -gt 0 -and $publishJob.Contains("[int]`$env:SCAN_ANSWERED -lt $fewest) { throw")) 'the draft asks for as many scanners as the checker does'
 Check ($publishJob.Contains('if ($env:SCAN_SHA256 -cne $wanted) { throw')) 'and checks the scan was of this very zip'
-Check-Order $publishJob 'gh release create' 'if ($flagged -gt 0) { throw' 'a flagged zip still gets its draft, and then the run ends red'
-Check ($publishJob.Contains('$first = if ($flagged -gt 0) { @("**$warning**", '''') }')) "and the draft's text starts by saying so"
+# The owner, 2026-11-21: a release ships only at ZERO findings, on the zip and on every program in it. That takes the place of the 2026-11-08
+# ruling that made a draft saying so (a flagged draft is how the editor's alpha.3 came to be published; Bishop 2, 2026-11-22, by Tao 1). So a
+# flagged zip, or a flagged program, makes no draft: the scan stops, naming it, and the draft's job refuses too, before it attests or drafts.
+Check ($askStep.Contains('if ($counts[0] + $counts[1] -gt 0) { throw "VirusTotal flagged the zip (') -and $askStep.Contains('if ($flagged -gt 0) { throw "VirusTotal flagged $flagged of the $($sent.Count) programs')) 'a flagged zip or a flagged program stops the scan, naming it'
+$zeroRule = 'if ([int]$env:SCAN_MALICIOUS + [int]$env:SCAN_SUSPICIOUS -gt 0) { throw'
+Check ([regex]::Matches($publishJob, [regex]::Escape($zeroRule)).Count -eq 2) 'the draft''s job refuses a flagged zip in both its steps that read the counts'
+Check-Order $publishJob $zeroRule 'attest-build-provenance' 'before the build is attested'
+Check-Order $publishJob $zeroRule 'gh release create' 'and before any draft exists'
+Check (-not $publishJob.Contains('$warning') -and -not $publishJob.Contains('$first = if')) 'no draft is ever written for a flagged zip'
 
 foreach ($other in Get-ChildItem (Join-Path $repository '.github/workflows') -Filter '*.yml' | Where-Object { $_.Name -ne 'release.yml' })
 {
