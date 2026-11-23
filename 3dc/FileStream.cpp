@@ -331,7 +331,9 @@ FileStreamIdentity FileStream::Identity()
 	identity.volume = about.dwVolumeSerialNumber;
 	identity.index = ((uint64_t)about.nFileIndexHigh << 32) | about.nFileIndexLow;
 	identity.offset = fromFastFile ? fileOffset : 0;
-	identity.size = fromFastFile ? fileSize : about.nFileSizeLow;   // (a loose file the game reads is under 4 GB: GetFileSize says the same)
+	// (the low 32 bits of a loose file's size only: FileStream's own GetFileSize reads no more, and the disk, the number and the time last written already tell
+	// any two files apart, so a file over 4 GB can't be taken for another)
+	identity.size = fromFastFile ? fileSize : about.nFileSizeLow;
 	identity.written = ((uint64_t)about.ftLastWriteTime.dwHighDateTime << 32) | about.ftLastWriteTime.dwLowDateTime;   // (a fastfile's: its archive's)
 	return identity;
 }
