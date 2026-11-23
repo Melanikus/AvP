@@ -35,6 +35,8 @@
 //   limit is reached, no more pictures are even opened
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the colour table is a list that frees itself and knows its own size, so a copy of a loader can't free it twice
+// Modified 2026-11-23 by Melanikus (Vasquez) for the AvP port:
+//   a tool's own allowance (RimLoaderToolAllowance), so a tool's pictures neither spend the open level's nor start it over
 
 #include "RimLoader.h"
 #include <algorithm>
@@ -59,6 +61,19 @@ bool RimLoader_SayLevelIsFull()
 uint64_t RimLoader_BytesThisLevel()
 {
 	return bytesThisLevel;
+}
+
+// A tool's own allowance (RimLoader.h): the level's count set aside, the tool's from nothing, and the level's put back when it ends
+RimLoaderToolAllowance::RimLoaderToolAllowance() : levelBytes(bytesThisLevel), levelSaidFull(saidLevelIsFull)
+{
+	bytesThisLevel = 0;         // the tool's own count, from nothing
+	saidLevelIsFull = false;    // and its own line for a full allowance
+}
+
+RimLoaderToolAllowance::~RimLoaderToolAllowance()
+{
+	bytesThisLevel = levelBytes;          // the level's count, exactly as it was
+	saidLevelIsFull = levelSaidFull;      // and whether it was said to be full
 }
 
 // Constructor

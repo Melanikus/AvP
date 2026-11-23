@@ -967,6 +967,98 @@ static void CheckLevelAllowance()
 	RimLoader_NewLevel();
 }
 
+// A TOOL that reads pictures while a level is open (the level editor's placement picker, 2026-11-23) has an allowance of its own: it spends nothing of the
+// level's, and it doesn't start the level's over (the level could then open twice its limit). Added 2026-11-23 by Melanikus (Vasquez).
+static void CheckToolAllowance()
+{
+	printf("A tool's own allowance:\n");
+
+	Picture large(2048, 2048, 1, 1);   // 16 MB from under 9 KB, as above
+	large.colours = CountingColours(2);
+	large.body.assign((size_t)256 * 2048 / 64, 0);
+	WriteFile(large.File());
+
+	uint64_t const largeBytes = (uint64_t)2048 * 2048 * 4;
+	uint64_t const mostBytes = (uint64_t)256 * 1024 * 1024;
+
+	RimLoader_NewLevel();
+
+	for (int i = 0; i < 10; i++)
+	{
+		OpenOnly(TestFilePath());
+	}
+
+	Check(RimLoader_BytesThisLevel() == largeBytes * 10, "the level has spent 160 MB of its 256");
+
+	{
+		RimLoaderToolAllowance tool;
+
+		Check(RimLoader_BytesThisLevel() == 0, "inside a tool's allowance nothing is spent yet: none of the level's is counted");
+
+		bool allOpened = true;
+
+		for (int i = 0; i < 16; i++)
+		{
+			allOpened = allOpened && (OpenOnly(TestFilePath()) == kRimFine);
+		}
+
+		Check(allOpened && RimLoader_BytesThisLevel() == mostBytes, "the tool opens 16 of them, the whole 256 MB, though the level had only 96 MB left");
+		Check(OpenOnly(TestFilePath()) == kRimLevelHasTooMany, "and its 17th is refused: a tool has the same limit by the same rules");
+		Check(RimLoader_SayLevelIsFull(), "its full allowance is said once, as its own");
+	}
+
+	Check(RimLoader_BytesThisLevel() == largeBytes * 10, "when it ends, the level's count is exactly as it was: nothing of the tool's in it, and not started over");
+	Check(RimLoader_SayLevelIsFull(), "and the level's own full allowance can still be said: the tool's line was the tool's");
+
+	bool sixMore = true;
+
+	for (int i = 0; i < 6; i++)
+	{
+		sixMore = sixMore && (OpenOnly(TestFilePath()) == kRimFine);
+	}
+
+	Check(sixMore && OpenOnly(TestFilePath()) == kRimLevelHasTooMany, "the level's own limit holds after the tool, as if it had never been: 6 more fit, the 7th is refused");
+
+	// one inside another: each counts apart, and each puts back what it found
+	RimLoader_NewLevel();
+	OpenOnly(TestFilePath());
+
+	{
+		RimLoaderToolAllowance outer;
+
+		OpenOnly(TestFilePath());
+		OpenOnly(TestFilePath());
+
+		{
+			RimLoaderToolAllowance inner;
+
+			Check(RimLoader_BytesThisLevel() == 0, "a tool's allowance inside another starts from nothing too");
+			OpenOnly(TestFilePath());
+		}
+
+		Check(RimLoader_BytesThisLevel() == largeBytes * 2, "and when it ends, the outer one's count is put back");
+	}
+
+	Check(RimLoader_BytesThisLevel() == largeBytes, "and the level's after both");
+
+	// a level whose full allowance was said already stays said after a tool
+	RimLoader_NewLevel();
+	RimLoader_SayLevelIsFull();
+
+	{
+		RimLoaderToolAllowance tool;
+
+		Check(RimLoader_SayLevelIsFull(), "a tool can say its own full allowance, though the level said its");
+	}
+
+	Check(!RimLoader_SayLevelIsFull(), "and the level, which said it already, doesn't say it again");
+
+	std::string const header = ReadSourceFile("3dc/RimLoader.h");
+	Check(header.find("must not call it: that would start the level's allowance over") != std::string::npos, "RimLoader_NewLevel's words tell a tool inside an open level not to call it");
+
+	RimLoader_NewLevel();
+}
+
 static void CheckDamagedPictures()
 {
 	printf("Damaged pictures:\n");
@@ -1229,6 +1321,7 @@ int main()
 	CheckBadPixels();
 	CheckLongFiles();
 	CheckLevelAllowance();
+	CheckToolAllowance();
 	CheckDamagedPictures();
 	CheckInsideAFastFile();
 	CheckLetterWidths();
