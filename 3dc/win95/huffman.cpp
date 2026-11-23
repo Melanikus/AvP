@@ -430,15 +430,21 @@ static int HuffmanDecode(unsigned char *dest, const int *source, const int *sour
 	bytes, header included. Everything in a package can be crafted, so there is no decoder that trusts one.
 	Returns NULL when the package cannot be decoded safely and completely:
 	- it is smaller than its header;
+	- it isn't exactly its header plus CompressedDataSize bytes long (CompressedDataSize negative, or the sum not
+	  packageSize; the sum is worked out in 64 bits, so no CompressedDataSize can make it wrap). A package cut short
+	  used to be decoded with zero bits for what was gone, and those can decode to the right number of bytes: bytes
+	  the file never held (Frost's find, 2026-11-23). A package written by HuffmanCompression is exactly that long,
+	  and so is every file this reads (measured 2026-11-23: the 63 stock levels, the 23 HUD files, language.txt and
+	  AvPx's own saves, each exactly 316 + CompressedDataSize);
 	- UncompressedDataSize is negative or larger than the data could hold (every code is at least one bit long,
 	  so n bytes of data decode to at most 8 * n bytes);
 	- the code lengths are negative or do not fill the code space (sum of CodelengthCount[n] << (MAX_DEPTH-1-n)
 	  below 1 << MAX_DEPTH): MakeHuffmanDecodeTable would then run past CodelengthCount and past DecodeTable;
 	- the data decodes to fewer than UncompressedDataSize bytes (it reaches a code with no symbol first): the rest
 	  of the buffer would be uninitialised, so it is freed.
-	The first three are checked before anything is changed. After them DecodeTable has been rebuilt, which is
+	The first four are checked before anything is changed. After them DecodeTable has been rebuilt, which is
 	harmless (every decode rebuilds it first); nothing else outlives a NULL result.
-	A package written by HuffmanCompression passes all four (its code is a complete Huffman code, and its data holds
+	A package written by HuffmanCompression passes all five (its code is a complete Huffman code, and its data holds
 	every symbol). The decoder never reads past the end of the package (it reads zero bits there, which only ever
 	fill the look-ahead after the last code).
 */
@@ -449,6 +455,12 @@ extern char *HuffmanDecompressChecked(const HuffmanPackage *inpackage, int packa
 	long long dataBytes;
 
 	if (!inpackage || packageSize < (int)sizeof(HuffmanPackage))
+	{
+		return NULL;
+	}
+
+	// exactly its header plus CompressedDataSize bytes, the sum in 64 bits (see above): never a package cut short or with bytes after it
+	if (inpackage->CompressedDataSize < 0 || (long long)sizeof(HuffmanPackage) + (long long)inpackage->CompressedDataSize != (long long)packageSize)
 	{
 		return NULL;
 	}
