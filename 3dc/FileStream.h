@@ -52,8 +52,9 @@
 // WHICH FILE A STREAM HAS OPEN (added 2026-11-23 by Melanikus (Frost) for the AvP port; Bishop 2's rule for the editor's placement picker, which keeps each
 // picture it has read for the sitting: "key each entry by the judged file itself, its path as judged plus its identity, never by the name alone"). The disk's
 // serial number and the file's own number on that disk, asked of the very handle the stream reads (GetFileInformationByHandle), and, for a file inside a
-// fastfile, where in the archive it starts and how long it is. Two streams on the same file give the same; two different files never do, even with the same
-// bytes or the same name. known is false for a stream that has nothing open, or when Windows won't say.
+// fastfile, where in the archive it starts and how long it is, and the time the file (or the archive) was last written, so the same file written again in
+// place is another. Two streams on the same file give the same; two different files never do, even with the same bytes or the same name. known is false for
+// a stream that has nothing open, or when Windows won't say.
 struct FileStreamIdentity
 {
 	bool known = false;
@@ -62,11 +63,12 @@ struct FileStreamIdentity
 	uint64_t index = 0;     // the file's own number on it (an archive's, for a file inside one)
 	uint32_t offset = 0;    // inside a fastfile: where it starts in the archive; else 0
 	uint32_t size = 0;      // its size in bytes
+	uint64_t written = 0;   // when it was last written, as Windows keeps it (100-nanosecond steps): a file saved again in place, even at the same size, is another
 
 	bool operator==(FileStreamIdentity const &other) const
 	{
 		return known == other.known && inFastFile == other.inFastFile && volume == other.volume && index == other.index && offset == other.offset &&
-			size == other.size;
+			size == other.size && written == other.written;
 	}
 
 	bool operator!=(FileStreamIdentity const &other) const { return !(*this == other); }

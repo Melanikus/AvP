@@ -332,6 +332,7 @@ FileStreamIdentity FileStream::Identity()
 	identity.index = ((uint64_t)about.nFileIndexHigh << 32) | about.nFileIndexLow;
 	identity.offset = fromFastFile ? fileOffset : 0;
 	identity.size = fromFastFile ? fileSize : about.nFileSizeLow;   // (a loose file the game reads is under 4 GB: GetFileSize says the same)
+	identity.written = ((uint64_t)about.ftLastWriteTime.dwHighDateTime << 32) | about.ftLastWriteTime.dwLowDateTime;   // (a fastfile's: its archive's)
 	return identity;
 }
 
