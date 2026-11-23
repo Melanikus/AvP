@@ -1163,6 +1163,46 @@
 					"to": "if (newRim.Problem() != kRimNoFile)"
 				}
 			]
+		},
+		{
+			"name": "OLD: a tool spends the open level's allowance",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "bytesThisLevel = 0;         // the tool's own count, from nothing",
+					"to": "// (taken out: the level's count left as it was, so the tool spends it)"
+				}
+			]
+		},
+		{
+			"name": "OLD: a tool starts the level's allowance over (RimLoader_NewLevel)",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "bytesThisLevel = levelBytes;          // the level's count, exactly as it was",
+					"to": "bytesThisLevel = 0;   // (taken out: the level's count started over)"
+				}
+			]
+		},
+		{
+			"name": "OLD: a tool's full allowance is taken for the level's",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "saidLevelIsFull = levelSaidFull;      // and whether it was said to be full",
+					"to": "// (taken out: the line for a full level not put back)"
+				}
+			]
+		},
+		{
+			"name": "OLD: a level begun inside a tool's allowance gets the old level's count put back",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (levelsStarted == levelNumber)   // no level began inside it (Drake's review of a45bc636: else the old count would let the new level past its limit)",
+					"to": "if (true)   // (taken out: the old level's count put over a level that began inside)"
+				}
+			]
 		}
 	]
 }
