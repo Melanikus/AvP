@@ -17,6 +17,10 @@
       "changes": [{ "file": "3dc/log_files.h", "from": "&& what.nNumberOfLinks == 1;", "to": "&& what.nNumberOfLinks >= 1;" }] },
     { "name": "LINKS, GitHub only: adding to the log follows a link, and takes whatever it opens",
       "changes": [{ "file": "3dc/log_files.h", "from": "NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);\n\n\tif (file != INVALID_HANDLE_VALUE && !LogFiles_HandleIsPlainFile(file))", "to": "NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);\n\n\tif (false)" }] },
+    { "name": "LINKS, GitHub only: emptying the log follows a link (FILE_FLAG_OPEN_REPARSE_POINT alone taken out)",
+      "changes": [{ "file": "3dc/log_files.h", "from": "GENERIC_WRITE | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,\n\t\tNULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);", "to": "GENERIC_WRITE | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,\n\t\tNULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);" }] },
+    { "name": "LINKS, GitHub only: adding to the log follows a link (FILE_FLAG_OPEN_REPARSE_POINT alone taken out)",
+      "changes": [{ "file": "3dc/log_files.h", "from": "FILE_APPEND_DATA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,\n\t\tNULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);", "to": "FILE_APPEND_DATA | FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,\n\t\tNULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);" }] },
 
     { "name": "a crash place is written with its folder",
       "changes": [{ "file": "3dc/log_files.h", "from": "\t\t\tname = c + 1;\n", "to": "\t\t\tname = path;\n" }] },

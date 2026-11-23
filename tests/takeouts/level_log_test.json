@@ -140,6 +140,16 @@
 			]
 		},
 		{
+			"name": "LINKS, GitHub only: a link is followed (FILE_FLAG_OPEN_REPARSE_POINT alone taken out)",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);",
+					"to": "FILE_ATTRIBUTE_NORMAL, NULL);"
+				}
+			]
+		},
+		{
 			"name": "a shorter log leaves the end of the one before",
 			"changes": [
 				{

@@ -38,6 +38,16 @@ static void Check(bool passed, const char *what)
 	}
 }
 
+// The whole path of a name in the folder the test runs in. A symbolic link's target is given as one: a relative target is read from the
+// link's own folder, so "<test folder>/target.txt" pointed at <test folder>/<test folder>/target.txt, which isn't there, and a check that a link
+// isn't written through passed whether or not the code followed it (Drake, 2026-11-23, card 6: found by plain_write_test's red run on GitHub).
+static std::string WholePath(const std::string &name)
+{
+	char whole[MAX_PATH];
+	DWORD const length = ::GetFullPathNameA(name.c_str(), MAX_PATH, whole, NULL);
+	return length > 0 && length < MAX_PATH ? std::string(whole) : name;
+}
+
 static std::string ReadWholeFile(const std::string &name)
 {
 	std::ifstream file(name.c_str(), std::ios::binary);
@@ -215,8 +225,9 @@ static void TestTheWriter()
 		// where it can't, this says so and isn't counted either way.
 		WriteWholeFile(target, first);
 
-		if (::CreateSymbolicLinkA(symlink.c_str(), target.c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
+		if (::CreateSymbolicLinkA(symlink.c_str(), WholePath(target).c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
 		{
+			Check(ReadWholeFile(symlink) == first, "(the link leads to the file it was made for)");
 			Check(LevelLog_WriteFile(symlink, second) == kLevelLogNotAPlainFile, "a link is refused, even to a file that looks like a log");
 			Check(ReadWholeFile(target) == first, "and what it points to is left just as it was");
 		}
