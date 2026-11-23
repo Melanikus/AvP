@@ -24,6 +24,8 @@
 
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   adds RanOutOfData, which says that a read reached the end of the file
+// Modified 2026-11-23 by Melanikus (Frost) for the AvP port:
+//   adds ReadsMade, how many reads the stream has asked Windows for (rim_test counts the reads a picture takes)
 
 #ifndef _FileStream_h_
 #define _FileStream_h_
@@ -92,6 +94,10 @@ class FileStream
 		bool RanOutOfData();
 
 		DWORD ReadBytes(uint8_t *buffer, size_t nBytes);
+
+		// How many reads this stream has asked Windows for, one a ReadBytes: each is a call into the system, so a reader that takes one byte at a time
+		// pays one for each byte (rim_test counts the reads a picture takes)
+		size_t ReadsMade() const { return readsMade; }
 		bool WriteBytes(const uint8_t *buffer, size_t nBytes);
 
 		uint8_t  GetByte();
@@ -126,6 +132,7 @@ class FileStream
 		HANDLE fileHandle;
 		bool isGood;
 		bool ranOutOfData;
+		size_t readsMade = 0;
 
 		// fast file specific stuff
 		bool fromFastFile;

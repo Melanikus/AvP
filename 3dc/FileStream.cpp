@@ -27,6 +27,8 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a file inside a fastfile stops at the end of its own bytes, whoever reads it
 //   RanOutOfData says a read came up short, and PeekByte steps back only after it really read a byte
+// Modified 2026-11-23 by Melanikus (Frost) for the AvP port:
+//   ReadBytes counts its reads (ReadsMade)
 
 #include "FileStream.h"
 #include "FastFile.h"
@@ -253,6 +255,8 @@ bool FileStream::WriteBytes(const uint8_t *buffer, size_t nBytes)
 DWORD FileStream::ReadBytes(uint8_t *buffer, size_t nBytes)
 {
 	DWORD nBytesRead = 0;
+
+	readsMade++;
 
 	// What was asked for, before the limit below. Reaching the end of a file inside a fastfile counts as running out,
 	// and the limit would hide that, because at the end of the file it's 0, and nothing would ever look short.

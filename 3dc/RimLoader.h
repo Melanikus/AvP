@@ -31,6 +31,8 @@
 //   the colour table is a list that frees itself and knows its own size, so a copy of a loader can't free it twice
 // Modified 2026-11-23 by Melanikus (Vasquez) for the AvP port:
 //   a tool's own allowance (RimLoaderToolAllowance), so a tool's pictures neither spend the open level's nor start it over
+// Modified 2026-11-23 by Melanikus (Frost) for the AvP port:
+//   ReadsMade, the reads a picture has taken; the packed data read kRimBodyRead at a time and the colour table in one read, never one byte a read
 
 #pragma once
 
@@ -89,6 +91,11 @@ const uint64_t kMostRimBytesPerLevel = 256 * 1024 * 1024;
 // takes time to find and open, and each one kept makes the search for the next one longer. So a level gets 4,096 at most.
 // The game has 1,028 in all, and only 32 of them are small enough to pay this, so they come to 74.0 MB instead of 72.9.
 const uint64_t kLeastRimChargeBytes = 64 * 1024;
+
+// A picture's packed data is read this much at a time, never one byte a read (each read is a call into Windows: one a byte made a 128 x 128 picture 17,174 of
+// them, about 28 ms) and never past the data's own end. 64 KB holds the whole of a stock picture's data, so each of those takes one. Added 2026-11-23 by Melanikus
+// (Frost) for the AvP port (rim_test CheckFewReads)
+const size_t kRimBodyRead = 64 * 1024;
 
 // Called as each level starts loading, and as the menus load, which gives each the whole allowance: what one level spent mustn't stop the menus having their pictures. A tool that reads many pictures calls it before each one, because its work isn't a level.
 // (A tool that reads pictures WHILE A LEVEL IS OPEN must not call it: that would start the level's allowance over. It reads them inside a RimLoaderToolAllowance, below.)
@@ -175,6 +182,7 @@ class RimLoader
 		bool Decode(uint8_t *dest, uint32_t destPitch);
 		void GetDimensions(uint32_t &width, uint32_t &height);
 		RimProblem Problem() const;     // why Open or Decode said no
+		size_t ReadsMade() const { return file.ReadsMade(); }   // the reads its file has taken so far (rim_test: a picture in a few, never one a byte)
 
 	private:
 		bool Refuse(RimProblem why);
@@ -207,6 +215,8 @@ class RimLoader
 
 		std::vector<uint8_t> destRow;
 		uint64_t bodyLeft;      // how much of the picture's data is still to be read
+		std::vector<uint8_t> bodyRead;   // the packed data's bytes read so far and not yet taken (at most kRimBodyRead), and where the next is
+		size_t bodyReadAt;
 		bool ranOut;            // whether it ran out before the picture was finished
 		RimProblem problem;
 		uint32_t destRowIndex;
