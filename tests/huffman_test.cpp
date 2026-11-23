@@ -163,6 +163,8 @@ static bool Refused(HuffmanPackage const * original, void (*damage)(HuffmanPacka
 static void SizeNegative(HuffmanPackage * package)      { package->UncompressedDataSize = -16; }
 static void SizeHuge(HuffmanPackage * package)          { package->UncompressedDataSize = 0x7fffffff; }
 static void SizeTooBigForData(HuffmanPackage * package) { package->UncompressedDataSize = package->CompressedDataSize * 8 + 1; }
+static void CompressedSizeNegative(HuffmanPackage * package) { package->CompressedDataSize = -4; }
+static void CompressedSizeHuge(HuffmanPackage * package)     { package->CompressedDataSize = 0x7fffffff; }
 static void LengthNegative(HuffmanPackage * package)    { package->CodelengthCount[3] = -1; }
 static void NoCodes(HuffmanPackage * package)           { memset(package->CodelengthCount, 0, sizeof(package->CodelengthCount)); }
 
@@ -220,10 +222,22 @@ static void TestDamagedPackages()
 	Check(Refused(package, 0, 8), "a package too small to hold its own sizes is refused without reading them");
 	Check(Refused(package, 0, headerBytes + 16), "a package with most of its data gone is refused");
 
-	// Cut in half, the decoder still needs what's gone, and it reads zero bits instead. Those can decode to the right number of bytes, so all this
-	// asks is that it stays inside its package: going past the wall would stop this test.
-	Refused(package, 0, headerBytes + package->CompressedDataSize / 2);
-	Check(true, "a package cut in half isn't read past its end");
+	// THE PACKAGE'S OWN LENGTH (Frost's find, 2026-11-23; Bishop 2's order, Tao 1/3): a package is exactly its header plus CompressedDataSize bytes, as
+	// HuffmanCompression makes it and as every file the decoder reads holds it (measured: the 63 stock levels, the 23 HUD files, language.txt and AvPx's own
+	// saves). Cut short, the decoder used to read zero bits for what's gone, and those can decode to the right number of bytes: bytes the file never held.
+	// So any other length is refused, before anything is decoded.
+	Check(Refused(package, 0, headerBytes + package->CompressedDataSize / 2), "a package cut in half is refused");
+	Check(Refused(package, 0, packageSize - 1), "a package one byte short is refused");
+	{
+		// one byte long: the package, then one more byte, in a block of its own (copying a byte past the package itself would read past its memory)
+		HuffmanPackage * longer = (HuffmanPackage *)calloc((size_t)packageSize + 1, 1);
+
+		memcpy(longer, package, (size_t)packageSize);
+		Check(Refused(longer, 0, packageSize + 1), "a package one byte long is refused");
+		free(longer);
+	}
+	Check(Refused(package, CompressedSizeNegative, packageSize), "a negative CompressedDataSize is refused");
+	Check(Refused(package, CompressedSizeHuge, packageSize), "a CompressedDataSize whose sum with the header would overflow is refused");
 
 	// A level's chunks can read past the end of the data, so the decoder leaves zeros there. The block is made dirty first, so zeros there aren't luck.
 	void * dirty = malloc((size_t)package->UncompressedDataSize + HUFFMAN_SPARE_BYTES);
