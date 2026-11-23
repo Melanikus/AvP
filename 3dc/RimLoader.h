@@ -29,6 +29,8 @@
 //   says the most bytes of pictures one level can open, and the least any picture costs of them
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the colour table is a list that frees itself and knows its own size, so a copy of a loader can't free it twice
+// Modified 2026-11-23 by Melanikus (Vasquez) for the AvP port:
+//   a tool's own allowance (RimLoaderToolAllowance), so a tool's pictures neither spend the open level's nor start it over
 
 #pragma once
 
@@ -89,8 +91,35 @@ const uint64_t kMostRimBytesPerLevel = 256 * 1024 * 1024;
 const uint64_t kLeastRimChargeBytes = 64 * 1024;
 
 // Called as each level starts loading, and as the menus load, which gives each the whole allowance: what one level spent mustn't stop the menus having their pictures. A tool that reads many pictures calls it before each one, because its work isn't a level.
+// (A tool that reads pictures WHILE A LEVEL IS OPEN must not call it: that would start the level's allowance over. It reads them inside a RimLoaderToolAllowance, below.)
 void RimLoader_NewLevel();
 uint64_t RimLoader_BytesThisLevel();
+
+// A TOOL'S OWN ALLOWANCE (added 2026-11-23 by Melanikus (Vasquez) for the level editor's placement picker, which draws each shape file's pictures small
+// while a level is open): a tool's pictures must neither spend the open level's allowance (the level's own pictures would then be refused), nor start
+// it over (the level could then open twice its limit, and nothing would say so). While one of these lives, every picture opened is counted on an
+// allowance of its own, from nothing, of the same size and by the same rules; when it ends, the level's count, and whether the level was said to be
+// full, are put back exactly as they were. Inside another one it counts apart from it too, and puts back what it found.
+// A LEVEL THAT BEGINS while one lives (RimLoader_NewLevel: an Open with reached from a frame that holds it) keeps its own count when it ends: everything opened
+// since that level began is counted on it, and the old level's count is never put over it (Drake's review, 2026-11-23: a lower old count would let the new
+// level past its limit).
+// WHAT BOUNDS A TOOL is the one allowance it holds: a tool holds ONE for all the pictures it opens in one use (the placement picker: one for a whole visit,
+// from its opening to its closing), never one a picture, or its pictures would have no limit in all.
+// The counts are plain numbers with no lock, as the level's always were: one is made and ended on THE SAME THREAD AS THE LEVEL'S LOADING, never another.
+class RimLoaderToolAllowance
+{
+	public:
+		RimLoaderToolAllowance();
+		~RimLoaderToolAllowance();
+
+	private:
+		uint64_t levelBytes;    // the count it found, put back when it ends
+		bool levelSaidFull;     // and whether the full level had been said in the log
+		uint64_t levelNumber;   // how many allowances had begun then: another since means a level began inside it, and its count stands
+
+		RimLoaderToolAllowance(RimLoaderToolAllowance const &) = delete;
+		RimLoaderToolAllowance &operator=(RimLoaderToolAllowance const &) = delete;
+};
 
 // True the first time it's asked since the allowance began, and false after that, so that a level naming a million pictures
 // past its limit makes one line in the log and not a million.

@@ -262,6 +262,9 @@ jobs:
     # Only when the libraries are scanned in full (above). Skipped otherwise, which a release refuses: tools/check-release.ps1 asks for
     # this job to have passed on the release's commit, so a release always has a full library scan behind it.
     if: needs.vcpkg-changes.outputs.full == 'yes'
+    # A build that hangs fails here, not after GitHub's 6 hours. MEASURED (two runs, 2026-11-23): 10 to 12 minutes, installing the one compiler
+    # included; 45 leaves room for a slow install (once 12.5 minutes on its own, in Tests).
+    timeout-minutes: 45
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
     steps:
       - name: Check out the repository

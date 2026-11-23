@@ -35,6 +35,8 @@
 //   limit is reached, no more pictures are even opened
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the colour table is a list that frees itself and knows its own size, so a copy of a loader can't free it twice
+// Modified 2026-11-23 by Melanikus (Vasquez) for the AvP port:
+//   a tool's own allowance (RimLoaderToolAllowance), so a tool's pictures neither spend the open level's nor start it over
 
 #include "RimLoader.h"
 #include <algorithm>
@@ -42,11 +44,13 @@
 // How many bytes of pictures have been opened since the level started. See kMostRimBytesPerLevel.
 static uint64_t bytesThisLevel = 0;
 static bool saidLevelIsFull = false;
+static uint64_t levelsStarted = 0;   // one more each time an allowance begins: a tool's allowance knows whether a level began while it lived
 
 void RimLoader_NewLevel()
 {
 	bytesThisLevel = 0;
 	saidLevelIsFull = false;
+	levelsStarted++;
 }
 
 bool RimLoader_SayLevelIsFull()
@@ -59,6 +63,23 @@ bool RimLoader_SayLevelIsFull()
 uint64_t RimLoader_BytesThisLevel()
 {
 	return bytesThisLevel;
+}
+
+// A tool's own allowance (RimLoader.h): the level's count set aside, the tool's from nothing, and the level's put back when it ends; but when a level BEGAN
+// while it lived, that level's count is the one that stands (everything opened since it began counted on it), never the old level's put over it
+RimLoaderToolAllowance::RimLoaderToolAllowance() : levelBytes(bytesThisLevel), levelSaidFull(saidLevelIsFull), levelNumber(levelsStarted)
+{
+	bytesThisLevel = 0;         // the tool's own count, from nothing
+	saidLevelIsFull = false;    // and its own line for a full allowance
+}
+
+RimLoaderToolAllowance::~RimLoaderToolAllowance()
+{
+	if (levelsStarted == levelNumber)   // no level began inside it (Drake's review of a45bc636: else the old count would let the new level past its limit)
+	{
+		bytesThisLevel = levelBytes;          // the level's count, exactly as it was
+		saidLevelIsFull = levelSaidFull;      // and whether it was said to be full
+	}
 }
 
 // Constructor
