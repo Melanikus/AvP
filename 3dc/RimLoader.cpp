@@ -37,6 +37,9 @@
 //   the colour table is a list that frees itself and knows its own size, so a copy of a loader can't free it twice
 // Modified 2026-11-23 by Melanikus (Vasquez) for the AvP port:
 //   a tool's own allowance (RimLoaderToolAllowance), so a tool's pictures neither spend the open level's nor start it over
+// Modified 2026-11-23 by Melanikus (Frost) for the AvP port:
+//   the packed data read kRimBodyRead bytes at a time (NextBodyByte) and the colour table in one read (HandleCMAP), never one byte a read: a 128 x 128
+//   picture took 17,174 reads, each a call into Windows, about 28 ms in the editor's placement picker (rim_test CheckFewReads)
 
 #include "RimLoader.h"
 #include <algorithm>
@@ -95,6 +98,7 @@ RimLoader::RimLoader()
 	rowBytes = 0;
 	destRowIndex = 0;
 	bodyLeft = 0;
+	bodyReadAt = 0;
 	ranOut = false;
 	problem = kRimFine;
 
@@ -247,12 +251,19 @@ bool RimLoader::HandleCMAP()
 	ColourRegister const black = { 0, 0, 0 };
 	colourMap.assign(nEntries, black);
 
-	// read the values in
+	// read the values in, all in one read (the check above saw the file has them); a read that came up short leaves black, as a byte at a time did
+	std::vector<uint8_t> values((size_t)nEntries * 3, 0);
+
+	if (!values.empty())
+	{
+		file.ReadBytes(values.data(), values.size());
+	}
+
 	for (uint32_t i = 0; i < nEntries; i++)
 	{
-		colourMap[i].red   = file.GetByte();
-		colourMap[i].green = file.GetByte();
-		colourMap[i].blue  = file.GetByte();
+		colourMap[i].red   = values[(size_t)i * 3];
+		colourMap[i].green = values[(size_t)i * 3 + 1];
+		colourMap[i].blue  = values[(size_t)i * 3 + 2];
 	}
 
 	return true;
@@ -371,6 +382,8 @@ bool RimLoader::BodyCanHoldThePicture()
 	}
 
 	bodyLeft = (std::min)((uint64_t)chunkSize, MostBodyBytes());
+	bodyRead.clear();
+	bodyReadAt = 0;
 	ranOut = false;
 	return true;
 }
@@ -399,7 +412,9 @@ uint64_t RimLoader::MostBodyBytes() const
 	return (uint64_t)rowBytes * header.nPlanes * header.height * 2;
 }
 
-// The next byte of the picture's data, or 0 and a note that there's none left. Nothing reads past this.
+// The next byte of the picture's data, or 0 and a note that there's none left. Nothing reads past this. The data is read kRimBodyRead bytes at a time, never
+// more than bodyLeft (so never past the data's own end, which BodyCanHoldThePicture saw inside the file); a read that comes up short leaves zeros, as a byte
+// at a time did (FileStream's RanOutOfData says it came up short)
 uint8_t RimLoader::NextBodyByte()
 {
 	if (bodyLeft == 0)
@@ -409,8 +424,15 @@ uint8_t RimLoader::NextBodyByte()
 		return 0;
 	}
 
+	if (bodyReadAt >= bodyRead.size())
+	{
+		bodyRead.assign((size_t)(std::min)(bodyLeft, (uint64_t)kRimBodyRead), 0);
+		file.ReadBytes(bodyRead.data(), bodyRead.size());
+		bodyReadAt = 0;
+	}
+
 	bodyLeft--;
-	return file.GetByte();
+	return bodyRead[bodyReadAt++];
 }
 
 // do the byterun1 decompression here
