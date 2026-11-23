@@ -315,6 +315,12 @@ uint32_t FileStream::GetFileSize()
 	}
 }
 
+// RED STUB (Frost 2026-11-23): which file it has open, never known yet, so rim_test's CheckIdentity shows that failing. The next commit makes it real.
+FileStreamIdentity FileStream::Identity()
+{
+	return FileStreamIdentity();
+}
+
 // Read
 uint8_t FileStream::GetByte()
 {
