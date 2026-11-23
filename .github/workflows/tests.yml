@@ -17,8 +17,12 @@ permissions:
 jobs:
   unit-tests:
     name: Unit tests
-    # A test that hangs fails here. Without a limit, it would hold up a runner for 6 hours.
-    timeout-minutes: 30
+    # A test that hangs fails here. Without a limit, it would hold up a runner for 6 hours. MEASURED (Drake, 2026-11-23, six runs from 11-22 to
+    # 11-23): the job takes 25 to 29 minutes: installing the one compiler 4 to 5 of them (once 12.5: 747 s, #293's first attempt), building
+    # the tests about 5, running them about 4, and "Test the release checks" about 11.5 (676 s before #292; on avpx_main e346e38f it was still
+    # going at 699 s). So 30 cancelled two good runs (e346e38f's, and #293's first). 60 is half again the slowest measured (about 40), so only
+    # a hang reaches it.
+    timeout-minutes: 60
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
     steps:
       - name: Check out the repository
@@ -209,8 +213,9 @@ jobs:
   # shorter and no test is ever left out.
   sanitizer:
     name: Tests under the address sanitizer, part ${{ matrix.part }} of ${{ strategy.job-total }}
-    # A test that hangs fails here, as above
-    timeout-minutes: 30
+    # A test that hangs fails here, as above. MEASURED (the same runs): each part takes 8 to 16 minutes, once 21 when installing the compiler
+    # took 13 of them; 45 is twice the slowest.
+    timeout-minutes: 45
     runs-on: windows-2025-vs2026   # pinned: the same machine as the Unit tests job
     strategy:
       fail-fast: false   # one part failing doesn't stop the others, so a run shows every test that needs work
