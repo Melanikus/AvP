@@ -22,6 +22,9 @@ permissions:
 jobs:
   build:
     name: Make a test build
+    # A build that hangs fails here, not after GitHub's 6 hours: 120, as game-build.yml's and release.yml's builds of the same package
+    # (tools/build-and-package.ps1: the one compiler installed, the libraries built from source), measured there at 15 to 18 minutes (2026-11-23).
+    timeout-minutes: 120
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
     # No right to record provenance here: this job runs vcpkg, which runs each library's own build scripts, and anything a step can reach
     # they could ask for. The package's and the libraries' provenance is recorded by the next job, which builds nothing.
