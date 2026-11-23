@@ -248,6 +248,14 @@ static void TestBadPlans()
 	Refused("-hudson level=a frames=1 dieat=0", kHudsonRefusedDieAtNotANumber);
 	Refused("-hudson level=a frames=1 dieat=3601", kHudsonRefusedDieAtNotANumber);
 	Refused("-hudson level=a frames=1 dieat=x", kHudsonRefusedDieAtNotANumber);
+	Refused("-hudson level=a frames=1 save=0", kHudsonRefusedSaveNotANumber);
+	Refused("-hudson level=a frames=1 save=3601", kHudsonRefusedSaveNotANumber);
+	Refused("-hudson level=a frames=1 save=x", kHudsonRefusedSaveNotANumber);
+	Refused("-hudson level=a frames=1 save=-5", kHudsonRefusedSaveNotANumber);
+	Refused("-hudson level=a frames=1 save=5 save=5", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=invasion frames=5 machine=shared net=host save=5", kHudsonRefusedSaveInANetGame);
+	Refused("-hudson level=invasion frames=5 machine=shared net=join save=5", kHudsonRefusedSaveInANetGame);
+	Refused("-hudson level=derelict frames=5 custommap=My_map save=5", kHudsonRefusedSaveOnACustomMap);
 	Refused("-hudson level=a frames=1 levelfilms=no", kHudsonRefusedLevelFilmsNotYes);
 	Refused("-hudson level=a frames=1 levelfilms=yes levelfilms=yes", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 levelfilms=yes filmskip=0", kHudsonRefusedFilmSkipNotANumber);
@@ -493,6 +501,12 @@ static void TestBadPlans()
 		Check(HudsonPlan_Read("-hudson level=a frames=1 difficulty=medium", &plan) == 0 && plan.difficulty == 1, "medium is 1");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 difficulty=hard", &plan) == 0 && plan.difficulty == 2, "hard is 2");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 dieat=12", &plan) == 0 && plan.dieAtSeconds == 12, "dieat= is read");
+		// save= (Frost 2026-11-23, Bishop 2's card for #294's Hudson round): the game saved as the console's QUICKSAVE saves it, that many seconds in
+		Check(HudsonPlan_Read("-hudson level=a frames=1", &plan) == 0 && plan.saveAtSeconds == 0, "a run saves nothing unless asked");
+		Check(HudsonPlan_Read("-hudson level=a frames=1 save=5", &plan) == 0 && plan.saveAtSeconds == 5, "save= is read");
+		Check(HudsonPlan_Read("-hudson level=a frames=1 save=1", &plan) == 0 && plan.saveAtSeconds == 1, "save= from 1 second");
+		Check(HudsonPlan_Read("-hudson level=a frames=1 save=3600", &plan) == 0 && plan.saveAtSeconds == 3600, "save= to an hour");
+		Check(HudsonPlan_Read("-hudson level=a frames=1 save=5 dieat=12", &plan) == 0 && plan.saveAtSeconds == 5 && plan.dieAtSeconds == 12, "save= goes with dieat=");
 		Check(HudsonPlan_Read("-hudson level=a frames=1", &plan) == 0 && !plan.levelFilms && plan.filmSkipSeconds == 0, "a run skips a level's films unless asked");
 		Check(HudsonPlan_Read("-hudson level=a frames=1 levelfilms=yes filmskip=7", &plan) == 0 && plan.levelFilms && plan.filmSkipSeconds == 7, "levelfilms= and filmskip= are read");
 		Check(HudsonPlan_Read("-hudson level=a frames=1", &plan) == 0 && !plan.lookAllTheTime, "a run that isn't a pair doesn't go on looking");
@@ -1490,6 +1504,16 @@ static void TestTheRealGame()
 		Check(Has(watchCode, "int const lampSize = (int)(ShoulderLamp_SpotSize() * 100.0 + 0.5);"), "SOURCE: and the result says the size the lamp really had, in hundredths, the same in any language");
 		Check(Has(watchCode, "\tDieIfItIsTime();\n\tFollowTheNamedThing();"), "SOURCE: follow= is looked at every frame");
 		Check(Has(Between(watchCode, "static void FollowTheNamedThing()", "\n}\n"), "if (lastSaid != 0 && now - lastSaid < 1000)"), "SOURCE: and said once a second");
+		// save= (Frost 2026-11-23): looked at every frame; the save asked for as the console's QUICKSAVE asks, carried out by the game's own frame,
+		// and then read back from the slot's file; the script asks for it and keeps the save file with the run
+		std::string const saveCode = Between(watchCode, "static void SaveIfItIsTime()", "\n}\n");
+		Check(Has(watchCode, "\tSayWhereHeIsAgainIfItIsTime();\n\tSaveIfItIsTime();"), "SOURCE: save= is looked at every frame");
+		Check(Has(saveCode, "QuickSave();"), "SOURCE: and the game is asked to save as the console's QUICKSAVE asks");
+		Check(Has(saveCode, "if (SaveGameRequest != SAVELOAD_REQUEST_NONE)"), "SOURCE: and the answer is read only once the game has carried the request out");
+		Check(Has(saveCode, "std::string(path) + \".new\""), "SOURCE: and a save is written only when no <file>.new is left beside it (save_file_write.h makes that first)");
+		Check(Has(watchCode, "fprintf(file, \"save=%s save_file=%s\\n\", saveSaid, saveFileName[0] ? saveFileName : \"none\");"), "SOURCE: the result says what came of it");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($SaveAt -gt 0) { $arguments += \" save=$SaveAt\" }"), "SOURCE: the script can ask for save=");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "Copy-Item -LiteralPath $save.FullName -Destination $kept"), "SOURCE: and keeps the save file with the run");
 		Check(Has(Between(watchCode, "static void FollowTheNamedThing()", "\n}\n"), "STRATEGYBLOCK const *const thing = HudsonStrategies_Find(plan.follow);"), "SOURCE: and found afresh each time, because a restart makes it again");
 		Check(Has(Between(watchCode, "static void FollowTheNamedThing()", "\n}\n"), "\n\tSTRATEGYBLOCK const *const thing = HudsonStrategies_Find(plan.follow);"), "SOURCE: and found afresh each time, never kept from the first");
 		Check(Has(watchCode, "if (HudsonRunIsOn && plan.walkSaid && !levelHasEnded)\n\t{\n\t\tWalkHim((PLAYER_STATUS *)playerStatus);"), "SOURCE: a walk is the player's own input");

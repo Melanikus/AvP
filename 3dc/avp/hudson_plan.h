@@ -275,6 +275,8 @@ struct HudsonPlan
 	bool levelFilms;      // levelfilms=yes: a level's own films play, which a run otherwise skips, to prove a network game stays up under one
 	int filmSkipSeconds;  // filmskip=: a film stops this many seconds in, as if a key had been pressed. Needs levelfilms=yes
 	int dieAtSeconds;     // dieat=: he dies this many seconds in, once in the run, and three seconds later "presses a key", for trying what dying does
+	int saveAtSeconds;    // save=: this many seconds in, once in the run, the game is saved as the console's QUICKSAVE saves it (1 to 3600), for trying
+	                      // what saving writes on the real game (Frost 2026-11-23, Bishop 2's card for #294's Hudson round). 0: nothing is saved
 	int difficulty;       // difficulty=: the game's number for it. Medium unless asked.
 	bool windowOnMainScreen; // screen=main: the window stays on the main screen. Otherwise, or with screen=second, it goes on the first screen that isn't the main one, if there is one
 	int windowSlot;       // windowslot=: which part of that screen this game's window has, when several run together, counted from 0
@@ -585,6 +587,9 @@ extern const char *const kHudsonRefusedMeetsNotYes;
 extern const char *const kHudsonRefusedMeetsAgainNotANumber;
 extern const char *const kHudsonRefusedMeetsAgainWithoutMeets;
 extern const char *const kHudsonRefusedDieAtNotANumber;
+extern const char *const kHudsonRefusedSaveNotANumber;
+extern const char *const kHudsonRefusedSaveInANetGame;
+extern const char *const kHudsonRefusedSaveOnACustomMap;
 extern const char *const kHudsonRefusedLevelFilmsNotYes;
 extern const char *const kHudsonRefusedScreenWord;
 extern const char *const kHudsonRefusedWindowSlot;
