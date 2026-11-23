@@ -183,6 +183,7 @@ extern int InGameMenusAreRunning(void);                             // menus.cpp
 #include "alien_ways.h"   // AlienWays_PlaceOf, for the per-alien lines (added 2026-11-11, Third)
 #include "floor_is_lava.h"   // floorislava=off: the console's own FLOORISLAVA OFF (added 2026-11-11, Third)
 #include "stock_flags.h"     // stock=yes, and every flag's state in the log (added 2026-11-20, Vasquez)
+#include "savegame.h"        // save=: SaveGameRequest, the save the console's QUICKSAVE asks for (added 2026-11-23, Frost)
 #include "debug_view.h"      // normals=yes, wireframe=yes: the debug views, render only (added 2026-11-20, Drake)
 
 extern int WireFrameMode;      // d3d_render.cpp: Rebellion's own WIREFRAMEMODE (1 the environment, 2 the objects, 3 both)
@@ -373,6 +374,9 @@ static VECTORCH toldToFaceFrom = { 0, 0, 0 };   // where he was when he was last
 static DWORD holdStartedAt = 0;
 static bool pictureTakenThisHold = false;
 static long flaresThrown = 0;
+// save= (SaveIfItIsTime): what came of the save, and the save file's name (its last part only: the folders are the player's), for the result
+static const char *saveSaid = "not-asked";
+static char saveFileName[MAX_PATH] = { 0 };
 static int wantedX = 0;
 static int wantedZ = 0;
 static int framesInThisStage = 0;
@@ -653,6 +657,12 @@ static void WriteResult(const char *howItEnded, int code)
 		fprintf(file, "lamp=%s lamp_kind=%s lamp_at=%s lamp_frames=%ld lamp_real_frames=%ld lamp_size=%d.%02d\n", plan.lampOn ? "on" : plan.lampBlink ? "blink" : "off", plan.lampReal ? "real" : "painted", plan.lampWide ? "wide" : "shoulder", ShoulderLamp_FramesDrawn(), ShoulderLamp_FramesAsARealLight(),
 			lampSize / 100, lampSize % 100);
 		fprintf(file, "flares_thrown=%ld\n", flaresThrown);
+
+		// save=: whether the game wrote its save (SaveIfItIsTime says each answer), only in a run that asked for one
+		if (plan.saveAtSeconds != 0)
+		{
+			fprintf(file, "save=%s save_file=%s\n", saveSaid, saveFileName[0] ? saveFileName : "none");
+		}
 
 		// Always, like the lamp's. shadow_light_frames says whether it means anything: with shadows off, the shadow pass never ran.
 		char shadowLights[320] = { 0 };
@@ -6025,6 +6035,93 @@ static void DieIfItIsTime()
 	}
 }
 
+// save= (added 2026-11-23 by Melanikus (Frost) for the AvP port, Bishop 2's card for #294's Hudson round): that many seconds in, once in the
+// run, the game is asked to save the way the console's QUICKSAVE asks (game_commands.cpp: a request for the first slot), and the game's own
+// frame carries it out (SaveGame, with every check of SaveGameAllowed: a run's level is started as the menus start one, so a save is allowed,
+// unless he's dead or held by a facehugger). Once the request is carried out, whether it saved or refused, there is no request any more; then
+// the slot's file is looked at. The answers:
+//   written       the file is there, written after the request, and no "<file>.new" is left beside it (save_file_write.h writes the new
+//                 file first and then puts it in the old one's place)
+//   new-file-left a "<file>.new" is still there: the new file was made but never put in place
+//   not-written   the file isn't there, or is older than the request: the game refused or couldn't write it (its log and the screen say which)
+//   no-file-name  the slot has no file name the game can use (GetFilenameForSaveSlot), so nothing could be written
+//   asked         asked, and the run ended before the game carried it out
+extern void QuickSave();
+extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
+
+static void SaveIfItIsTime()
+{
+	static DWORD started = 0;
+	static FILETIME askedAt = { 0, 0 };
+	static int stage = 0;   // 0: waiting for its time; 1: asked, and the game hasn't carried it out yet; 2: said what came of it
+
+	if (plan.saveAtSeconds == 0 || stage == 2)
+	{
+		return;
+	}
+
+	DWORD const now = GetTickCount();
+
+	if (started == 0)
+	{
+		started = now;
+	}
+
+	if (stage == 0)
+	{
+		if (now - started < (DWORD)plan.saveAtSeconds * 1000)
+		{
+			return;
+		}
+
+		GetSystemTimeAsFileTime(&askedAt);
+		QuickSave();
+		stage = 1;
+		saveSaid = "asked";
+		LogString("hudson: save: the game is asked to save now, as the console's QUICKSAVE asks (save=)");
+		return;
+	}
+
+	if (SaveGameRequest != SAVELOAD_REQUEST_NONE)
+	{
+		return;
+	}
+
+	stage = 2;
+
+	char path[MAX_PATH] = { 0 };
+
+	if (!GetFilenameForSaveSlot(0, path) || path[0] == 0)
+	{
+		saveSaid = "no-file-name";
+		LogString("hudson: save: no-file-name, the slot has no file name the game can use, so nothing was written");
+		return;
+	}
+
+	const char *const lastPart = strrchr(path, '\\');
+	strncpy(saveFileName, lastPart ? lastPart + 1 : path, sizeof(saveFileName) - 1);
+
+	// The name holds the profile's, which comes from language.txt's "New Profile" in a run's empty folder: game data, so outside input. It goes
+	// into the result's key=value line and the log only as letters, digits, '.', '-' and '_', anything else (a space included) as '_'
+	for (char *letter = saveFileName; *letter; letter++)
+	{
+		unsigned char const c = (unsigned char)*letter;
+
+		if (!(isalnum(c) && c < 128) && c != '.' && c != '-' && c != '_')
+		{
+			*letter = '_';
+		}
+	}
+
+	WIN32_FILE_ATTRIBUTE_DATA about;
+	bool const there = GetFileAttributesExA(path, GetFileExInfoStandard, &about) != 0;
+	bool const afterTheRequest = there && CompareFileTime(&about.ftLastWriteTime, &askedAt) >= 0;
+	bool const newFileLeft = GetFileAttributesA((std::string(path) + ".new").c_str()) != INVALID_FILE_ATTRIBUTES;
+
+	saveSaid = newFileLeft ? "new-file-left" : afterTheRequest ? "written" : "not-written";
+	LogString(std::string("hudson: save: ") + saveSaid + ", " + saveFileName);
+}
+
 // meetsagain=: with meets=yes, where he is and the room he's in are said a second time, that many seconds after the first frame's
 // reading, once in the run. The first reading is on the first frame, where the level put him down; this one is where he stands once he
 // has had time to fall, so a start placed in the air or over nothing reads differently. For the mapper's journey: a start placed in the
@@ -6578,6 +6675,7 @@ void Hudson_EndOfFrame()
 	FollowTheNamedThing();
 	ReachTheEndIfItIsTime();
 	SayWhereHeIsAgainIfItIsTime();
+	SaveIfItIsTime();
 
 	// After dying, in single player or in the mode that plays like it: the same lines, for comparing with the first
 	if (levelStartedAgain)

@@ -28,6 +28,8 @@ A run has the marine's shoulder lamp off unless it says -Lamp on (the user's wor
 every second and a half. -LampKind real makes it a real light with real shadows, in the three per-pixel lighting modes, with -LampAt wide to sit it further out.
 
 -Flare has him throw a flare as each hold starts, on a run that looks round and doesn't compare what's on the screen. Give it a -HoldSeconds long enough for the flare to land. hudson-result.txt says how many really went.
+
+-SaveAt 20 saves the game 20 seconds in, once in the run, as the console's QUICKSAVE does. hudson-result.txt's save= line says what came of it (written, new-file-left, not-written, no-file-name, or asked if the run ended first), and the save file is kept with the run. The game saves nothing in a network game or on a custom map, so Hudson refuses save= there, saying why.
 -Net host or -Net join makes this one of two games on this machine, on its own address only. tools\hudson\run-net-pair.ps1 runs both, and that's the way to use it. -NetPartner is the other game's folder: it's the only other game this will start alongside.
 
 Asking the relays' list for access, as a player does, in a run of its own with no -Net: it stays at the menus, presses the Online access page, saves a picture of it, and ends there. -Access request, -Access check (with -AccessWait, seconds to wait first, 61 or more) or -Access newid. It needs -Relay and -ServersLine for the server it asks, and -SecondCopy for the second copy's own identity. The host of a pair can answer a player asking to join with -Answer letin or no (-AnswerAfter, its seconds), and the joiner can find the host through Find Games with -FindGames; run-net-pair.ps1 passes those as -HostAnswer and -JoinFindGames:
@@ -172,6 +174,7 @@ param(
     [int]$Gun = 0,
     [string]$Species = '',
     [int]$DieAt = 0,       # he dies this many seconds in, once in the run, and "presses a key" three seconds later
+    [int]$SaveAt = 0,      # save=: this many seconds in (1 to 3600), once in the run, the game is saved as the console's QUICKSAVE saves it; the result's save= line says what came of it, and the save file is kept with the run (added 2026-11-23 by Melanikus (Frost))
     [string]$Difficulty = '', # easy, medium or hard, in single player or for a campaign
     [switch]$Meets,        # the log says what the player meets when the level starts, for comparing runs
     [switch]$LevelFilms,   # a level's own films play, which a run otherwise skips
@@ -478,6 +481,7 @@ if ($Flare) { $arguments += " flare=yes" }
 if ($Gun -gt 0) { $arguments += " gun=$Gun" }
 if ($Species) { $arguments += " species=$Species" }
 if ($DieAt -gt 0) { $arguments += " dieat=$DieAt" }
+if ($SaveAt -gt 0) { $arguments += " save=$SaveAt" }
 if ($Difficulty) { $arguments += " difficulty=$Difficulty" }
 if ($Meets) { $arguments += " meets=yes" }
 if ($LevelFilms) { $arguments += " levelfilms=yes" }
@@ -699,6 +703,17 @@ if (Test-Path -LiteralPath $windowNotes) { Copy-Item -LiteralPath $windowNotes -
 # lanes=yes: the lane probe's line a frame and its verdict (3dc/avp/hudson_lanes.cpp, kLanesFileName). Added 2026-11-19 by Melanikus (Frost)
 $laneNotes = Join-Path $saves 'hudson-lanes.txt'
 if (Test-Path -LiteralPath $laneNotes) { Copy-Item -LiteralPath $laneNotes -Destination $kept }
+
+# save=: the save file the run made (User_Profiles\<profile>_1.sav in the run's folder), kept with the run, because the next run's clear takes it
+# away. Added 2026-11-23 by Melanikus (Frost)
+$profiles = Join-Path $saves 'User_Profiles'
+if ($SaveAt -gt 0 -and (Test-Path -LiteralPath $profiles -PathType Container))
+{
+    foreach ($save in @(Get-ChildItem -LiteralPath $profiles -File -Filter '*.sav'))
+    {
+        Copy-Item -LiteralPath $save.FullName -Destination $kept
+    }
+}
 
 $result = Join-Path $kept 'hudson-result.txt'
 
