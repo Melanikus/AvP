@@ -375,7 +375,7 @@ static DWORD holdStartedAt = 0;
 static bool pictureTakenThisHold = false;
 static long flaresThrown = 0;
 // save= (SaveIfItIsTime): what came of the save, and the save file's name (its last part only: the folders are the player's), for the result
-static const char *saveSaid = "not-asked";
+static const char *saveSaid = "not-yet";
 static char saveFileName[MAX_PATH] = { 0 };
 static int wantedX = 0;
 static int wantedZ = 0;
@@ -6039,20 +6039,23 @@ static void DieIfItIsTime()
 // run, the game is asked to save the way the console's QUICKSAVE asks (game_commands.cpp: a request for the first slot), and the game's own
 // frame carries it out (SaveGame, with every check of SaveGameAllowed: a run's level is started as the menus start one, so a save is allowed,
 // unless he's dead or held by a facehugger). Once the request is carried out, whether it saved or refused, there is no request any more; then
-// the slot's file is looked at. The answers:
-//   written       the file is there, written after the request, and no "<file>.new" is left beside it (save_file_write.h writes the new
-//                 file first and then puts it in the old one's place)
+// the slot's file is looked at, and its first block read and checked as the game's own loader checks a save slot (menus.cpp: the main
+// header's type and size, and "AVPSAVE0", as SaveLevelHeader makes it). No clock is compared: the run's clear empties User_Profiles first
+// (clear-run-folder.ps1), so a save there is this run's (Drake's review, the nit). The answers:
+//   written       the file is there, its first block is the game's own, and no "<file>.new" is left beside it (save_file_write.h writes the
+//                 new file first and then puts it in the old one's place)
+//   not-a-save    a file is there, but its first block isn't the game's
 //   new-file-left a "<file>.new" is still there: the new file was made but never put in place
-//   not-written   the file isn't there, or is older than the request: the game refused or couldn't write it (its log and the screen say which)
+//   not-written   no file there: the game refused or couldn't write it (its log and the screen say which)
 //   no-file-name  the slot has no file name the game can use (GetFilenameForSaveSlot), so nothing could be written
 //   asked         asked, and the run ended before the game carried it out
+//   not-yet       the run ended before save='s time (Drake's review, SHOULD 1)
 extern void QuickSave();
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
 
 static void SaveIfItIsTime()
 {
 	static DWORD started = 0;
-	static FILETIME askedAt = { 0, 0 };
 	static int stage = 0;   // 0: waiting for its time; 1: asked, and the game hasn't carried it out yet; 2: said what came of it
 
 	if (plan.saveAtSeconds == 0 || stage == 2)
@@ -6074,7 +6077,6 @@ static void SaveIfItIsTime()
 			return;
 		}
 
-		GetSystemTimeAsFileTime(&askedAt);
 		QuickSave();
 		stage = 1;
 		saveSaid = "asked";
@@ -6113,12 +6115,24 @@ static void SaveIfItIsTime()
 		}
 	}
 
-	WIN32_FILE_ATTRIBUTE_DATA about;
-	bool const there = GetFileAttributesExA(path, GetFileExInfoStandard, &about) != 0;
-	bool const afterTheRequest = there && CompareFileTime(&about.ftLastWriteTime, &askedAt) >= 0;
+	// Its first block, read as itself (a link put at the name is read as the link, never followed), and checked as the loader checks it
+	bool there = false, theGamesOwn = false;
+	HANDLE const saved = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+
+	if (saved != INVALID_HANDLE_VALUE)
+	{
+		LEVEL_SAVE_BLOCK block;
+		DWORD got = 0;
+
+		there = true;
+		theGamesOwn = ReadFile(saved, &block, sizeof(block), &got, NULL) && got == sizeof(block) &&
+			block.header.type == SaveBlock_MainHeader && block.header.size == sizeof(block) && strncmp(block.AvP_Save_String, "AVPSAVE0", 8) == 0;
+		CloseHandle(saved);
+	}
+
 	bool const newFileLeft = GetFileAttributesA((std::string(path) + ".new").c_str()) != INVALID_FILE_ATTRIBUTES;
 
-	saveSaid = newFileLeft ? "new-file-left" : afterTheRequest ? "written" : "not-written";
+	saveSaid = newFileLeft ? "new-file-left" : !there ? "not-written" : theGamesOwn ? "written" : "not-a-save";
 	LogString(std::string("hudson: save: ") + saveSaid + ", " + saveFileName);
 }
 

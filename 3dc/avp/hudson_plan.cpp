@@ -3180,6 +3180,13 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedSaveOnACustomMap;
 	}
 
+	// class= and listplace= start a skirmish, which the game plays as a network game of one (InitAVPNetGameForHost: AvP.Network = I_Host), so
+	// it saves none there either (Drake's review, MUST 1)
+	if (plan->saveAtSeconds != 0 && (plan->classSlider != 0 || plan->listPlaceAsked))
+	{
+		return kHudsonRefusedSaveInASkirmish;
+	}
+
 	// The lamp is off in every run unless it asks with lamp=on or lamp=blink. The user, 2026-11-08: "Hudson tests weirdly show the marine shoulder lamp all the time,
 	// turn it off". The painted lamp is drawn from wherever the camera is, so in a run whose camera follows something else it lit that instead. A run that compares
 	// what's on the screen can't ask for it, because it would quietly spoil the comparison.
