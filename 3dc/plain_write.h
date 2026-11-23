@@ -20,6 +20,9 @@
 //      the path again from its top, so a folder ABOVE the one held, swapped for a junction between the two opens, would lead elsewhere;
 //      that open is refused (and a new file it made there is taken away again). (Frost's review of #294, MUST 1.)
 //   4. Everything is written through that one handle.
+//      A NEW file is held with DELETE access too until it is closed (so that one made in the wrong place, step 3, can be taken away through
+//      its own handle): another program may read it meanwhile only if it asks to share deleting (FILE_SHARE_DELETE). Notepad and PowerShell's
+//      Get-Content don't, so they can't open such a file until the game closes it (Frost's nit on d42cc944).
 //
 // WHAT IS GUARDED, AND WHAT ISN'T (Bishop 2 and Frost, 2026-11-23): the folder a file goes in, and the file itself, are judged; the folders
 // above them are followed as they are. That is on purpose: a player may have their Documents moved by a junction, or kept in OneDrive,
@@ -119,11 +122,12 @@ inline std::string PlainWrite_Error(const char *what, DWORD error)
 	return std::string(what) + " (Windows error " + std::to_string((unsigned long long)error) + ")";
 }
 
-// An open file's or folder's final path, as Windows has it (every link on the way followed, the names as they are on the disk), asked of
-// the handle itself, never of a name. The room grows to what Windows says it needs, so a long path is never cut short. False if it can't.
-inline bool PlainWrite_FinalPath(HANDLE handle, std::wstring *path)
+// An open file's or folder's final path, as Windows has it (every link on the way followed), asked of the handle itself, never of a name.
+// how: FILE_NAME_NORMALIZED (the names as they are on the disk, which reads each folder above) or FILE_NAME_OPENED (as they were opened),
+// with VOLUME_NAME_DOS. The room grows to what Windows says it needs, so a long path is never cut short. False if it can't, Windows' last
+// error set.
+inline bool PlainWrite_FinalPath(HANDLE handle, std::wstring *path, DWORD how = FILE_NAME_NORMALIZED | VOLUME_NAME_DOS)
 {
-	DWORD const how = FILE_NAME_NORMALIZED | VOLUME_NAME_DOS;
 	std::wstring room(MAX_PATH, L'\0');
 
 	for (int tries = 0; tries < 3; tries++)
@@ -150,19 +154,32 @@ inline bool PlainWrite_FinalPath(HANDLE handle, std::wstring *path)
 // Does the open file lie in the open folder? The file's final path, its last name taken off, must be the folder's final path: the whole
 // of it (so C:\a\b is never taken for C:\a\bc), in any capitals as NTFS compares names (CompareStringOrdinal, which knows every letter, not
 // only a to z, so a Documents path with accents compares right). Asked of the two handles, never of names (plain_write.h, step 3).
-inline bool PlainWrite_SameFolder(HANDLE folder, HANDLE file)
+// The names as they are on the disk are asked first; where Windows can't give those (normalizing reads each folder above, and a share
+// may not let the player list one), both are asked again as they were opened, which is still the path after every link, so the compare
+// stays sound (Frost's SHOULD 1 on d42cc944). why (when it isn't): either words that Windows couldn't say where they are, with its error,
+// or that the file isn't in the folder.
+inline bool PlainWrite_SameFolder(HANDLE folder, HANDLE file, std::string *why = NULL)
 {
+	std::string ignored;
+	std::string &whyNot = why ? *why : ignored;
 	std::wstring folderPath, filePath;
 
 	if (!PlainWrite_FinalPath(folder, &folderPath) || !PlainWrite_FinalPath(file, &filePath))
 	{
-		return false;
+		DWORD const how = FILE_NAME_OPENED | VOLUME_NAME_DOS;
+
+		if (!PlainWrite_FinalPath(folder, &folderPath, how) || !PlainWrite_FinalPath(file, &filePath, how))
+		{
+			whyNot = PlainWrite_Error("Windows can't say where the file or its folder is, so it can't be shown to be in the folder held", ::GetLastError());
+			return false;
+		}
 	}
 
 	size_t const slash = filePath.find_last_of(L'\\');
 
 	if (slash == std::wstring::npos)
 	{
+		whyNot = "Windows gave the file no folder";
 		return false;
 	}
 
@@ -174,7 +191,13 @@ inline bool PlainWrite_SameFolder(HANDLE folder, HANDLE file)
 		folderPath.pop_back();
 	}
 
-	return ::CompareStringOrdinal(fileFolder.c_str(), (int)fileFolder.size(), folderPath.c_str(), (int)folderPath.size(), TRUE) == CSTR_EQUAL;
+	if (::CompareStringOrdinal(fileFolder.c_str(), (int)fileFolder.size(), folderPath.c_str(), (int)folderPath.size(), TRUE) != CSTR_EQUAL)
+	{
+		whyNot = "it isn't in the folder held (a folder above was swapped while it was being opened)";
+		return false;
+	}
+
+	return true;
 }
 
 // Opens path to write it, as the top of this file says. access, share and flags are CreateFile's (flags: its attributes and FILE_FLAG_s
@@ -265,9 +288,9 @@ inline HANDLE PlainWrite_Open(const std::string &path, DWORD access, DWORD share
 					whyNot = PlainWrite_FileWhy(file, &what);
 
 					// 3. the file made lies in the folder held
-					if (whyNot.empty() && !PlainWrite_SameFolder(folder, file))
+					if (whyNot.empty())
 					{
-						whyNot = "it was made somewhere else than the folder held (a folder above was swapped while it was being made)";
+						PlainWrite_SameFolder(folder, file, &whyNot);   // (its own words when it isn't: where, or why Windows can't say)
 					}
 				}
 			}
@@ -308,9 +331,9 @@ inline HANDLE PlainWrite_Open(const std::string &path, DWORD access, DWORD share
 					}
 
 					// 3. the file opened lies in the folder held
-					if (whyNot.empty() && !PlainWrite_SameFolder(folder, file))
+					if (whyNot.empty())
 					{
-						whyNot = "it isn't in the folder held (a folder above was swapped while it was being opened)";
+						PlainWrite_SameFolder(folder, file, &whyNot);   // (its own words when it isn't: where, or why Windows can't say)
 					}
 
 					// Only now, the very file judged above, is it emptied

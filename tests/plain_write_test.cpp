@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <initializer_list>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -281,6 +282,18 @@ static void TestSameFolder(const std::string &base)
 	// any capitals: the folder's name written in other capitals is the same folder (the final paths are compared as NTFS does, CompareStringOrdinal)
 	HANDLE const heldUpper = OpenFolder(base + "\\B");
 	Check(heldUpper != INVALID_HANDLE_VALUE && PlainWrite_SameFolder(heldUpper, inA), "the same folder named in other capitals is the same folder");
+
+	// the fallback (Frost's SHOULD 1 on d42cc944): where Windows can't give the names as they are on the disk, both are asked as they were
+	// opened. That form must tell the two apart as well: the file in b's folder is b's, the file in bc's isn't
+	std::wstring heldOpened, inAOpened, inBOpened;
+	DWORD const howOpened = FILE_NAME_OPENED | VOLUME_NAME_DOS;
+	bool const asOpened = heldA != INVALID_HANDLE_VALUE && PlainWrite_FinalPath(heldA, &heldOpened, howOpened) && PlainWrite_FinalPath(inA, &inAOpened, howOpened)
+		&& PlainWrite_FinalPath(inB, &inBOpened, howOpened);
+	std::wstring const parentA = inAOpened.substr(0, inAOpened.find_last_of(L'\\'));
+	std::wstring const parentB = inBOpened.substr(0, inBOpened.find_last_of(L'\\'));
+	Check(asOpened && ::CompareStringOrdinal(parentA.c_str(), (int)parentA.size(), heldOpened.c_str(), (int)heldOpened.size(), TRUE) == CSTR_EQUAL
+		&& ::CompareStringOrdinal(parentB.c_str(), (int)parentB.size(), heldOpened.c_str(), (int)heldOpened.size(), TRUE) != CSTR_EQUAL,
+		"asked as they were opened (the fallback), the folders still tell the file in b from the file in bc");
 
 	for (HANDLE h : { heldA, inA, inB, heldUpper })
 	{
@@ -637,8 +650,9 @@ static bool IsJudgedItself(const std::string &name)
 }
 
 // The code alone, as the compiler for Windows reads it: every // and /* */ comment blanked (so a comment that names fopen isn't taken for a
-// call), every #include line, and every line of an "#ifdef _XBOX" part (the Xbox build is never made). Its line breaks are kept, so a line number
-// found in it is the file's own.
+// call), every #include line, and every line of an Xbox part (the Xbox build is never made): "#ifdef _XBOX" or "#if defined(_XBOX)" to its
+// #else, #elif or #endif, an "#elif" naming _XBOX to the next, and an "#ifndef _XBOX"'s #else part. Its line breaks are kept, so a line
+// number found in it is the file's own.
 static std::string CodeOnly(const std::string &text)
 {
 	std::string code = text;
@@ -684,25 +698,33 @@ static std::string CodeOnly(const std::string &text)
 		}
 	}
 
-	// "#ifdef _XBOX" (or "#if defined(_XBOX)") parts: blanked to their #else or #endif; the nesting of other #if's inside them is followed
-	std::vector<int> stack;   // 1: inside an _XBOX part, 0: any other #if
+	// the #if parts: 1 inside an Xbox part, 0 another, 2 an "#ifndef _XBOX" (whose #else part is the Xbox one)
+	std::vector<int> stack;
 	size_t lineStart = 0;
 
 	while (lineStart < code.size())
 	{
 		size_t lineEnd = code.find('\n', lineStart);
 		lineEnd = lineEnd == std::string::npos ? code.size() : lineEnd;
-		size_t first = code.find_first_not_of(" \t", lineStart);
+		size_t const first = code.find_first_not_of(" \t", lineStart);
 		std::string const line = first != std::string::npos && first < lineEnd ? code.substr(first, lineEnd - first) : std::string();
-		bool const xboxIf = line.compare(0, 12, "#ifdef _XBOX") == 0 || line.compare(0, 18, "#if defined(_XBOX)") == 0;
+		bool const namesXbox = line.find("_XBOX") != std::string::npos;
 
-		if (line.compare(0, 3, "#if") == 0)
+		if (line.compare(0, 7, "#ifndef") == 0)
 		{
-			stack.push_back(xboxIf ? 1 : 0);
+			stack.push_back(namesXbox ? 2 : 0);
 		}
-		else if (line.compare(0, 5, "#else") == 0 && !stack.empty() && stack.back() == 1)
+		else if (line.compare(0, 3, "#if") == 0)
 		{
-			stack.back() = 0;
+			stack.push_back(namesXbox && line.find('!') == std::string::npos ? 1 : 0);
+		}
+		else if (line.compare(0, 5, "#elif") == 0 && !stack.empty())
+		{
+			stack.back() = namesXbox && line.find('!') == std::string::npos ? 1 : 0;
+		}
+		else if (line.compare(0, 5, "#else") == 0 && !stack.empty())
+		{
+			stack.back() = stack.back() == 1 ? 0 : stack.back() == 2 ? 1 : 0;
 		}
 		else if (line.compare(0, 6, "#endif") == 0 && !stack.empty())
 		{
@@ -722,63 +744,223 @@ static std::string CodeOnly(const std::string &text)
 	return code;
 }
 
-// The lines in text that write a file without plain_write.h: a plain fopen in a writing mode, a plain CreateFile asking to write, any
-// std::ofstream or std::fstream, a D3DX picture saved straight to a file (D3DXSave...ToFile, never ...ToFileInMemory), a CopyFile, and a
-// freopen (but of the console, CONOUT$ or CONIN$, which is a device, not a file)
+// How a call or a type is told to write a file
+enum class WriteRule
+{
+	Mode,        // fopen and its kin: a mode in a string with w, a or +
+	Reopen,      // freopen and its kin: as Mode, but the console (CONOUT$, CONIN$) is a device, not a file
+	OpenFlags,   // _open and its kin: an _O_ flag that writes or makes (_O_WRONLY, _O_RDWR, _O_CREAT, _O_TRUNC, _O_APPEND)
+	Access,      // CreateFile and its kin: an access that writes or changes the file, or a way that makes or empties one
+	OpenFile,    // OpenFile: OF_CREATE, OF_WRITE, OF_READWRITE or OF_DELETE
+	Always       // a write whatever its words: a stream that writes, a copy, _creat, CreateFile2
+};
+
+struct WriteName
+{
+	const char *name;
+	WriteRule rule;
+};
+
+// Every way the C library, C++ and Windows give to open a file to write it, by its whole name (a name only part of another, avp_fopen or
+// ifstream say, is another name). D3DX's pictures saved straight to a file are found by their names' own form, below.
+static const WriteName kWriteNames[] =
+{
+	{ "fopen", WriteRule::Mode }, { "_wfopen", WriteRule::Mode }, { "fopen_s", WriteRule::Mode }, { "_wfopen_s", WriteRule::Mode },
+	{ "_fsopen", WriteRule::Mode }, { "_wfsopen", WriteRule::Mode },
+	{ "freopen", WriteRule::Reopen }, { "_wfreopen", WriteRule::Reopen }, { "freopen_s", WriteRule::Reopen }, { "_wfreopen_s", WriteRule::Reopen },
+	{ "_open", WriteRule::OpenFlags }, { "_wopen", WriteRule::OpenFlags }, { "_sopen", WriteRule::OpenFlags }, { "_wsopen", WriteRule::OpenFlags },
+	{ "_sopen_s", WriteRule::OpenFlags }, { "_wsopen_s", WriteRule::OpenFlags },
+	{ "_creat", WriteRule::Always }, { "_wcreat", WriteRule::Always },
+	{ "OpenFile", WriteRule::OpenFile },
+	{ "CreateFile", WriteRule::Access }, { "CreateFileA", WriteRule::Access }, { "CreateFileW", WriteRule::Access },
+	{ "CreateFileTransacted", WriteRule::Access }, { "CreateFileTransactedA", WriteRule::Access }, { "CreateFileTransactedW", WriteRule::Access },
+	{ "CreateFile2", WriteRule::Always },
+	{ "CopyFile", WriteRule::Always }, { "CopyFileA", WriteRule::Always }, { "CopyFileW", WriteRule::Always }, { "CopyFileEx", WriteRule::Always },
+	{ "CopyFileExA", WriteRule::Always }, { "CopyFileExW", WriteRule::Always }, { "CopyFile2", WriteRule::Always },
+	{ "CopyFileTransactedA", WriteRule::Always }, { "CopyFileTransactedW", WriteRule::Always },
+	{ "ofstream", WriteRule::Always }, { "wofstream", WriteRule::Always }, { "basic_ofstream", WriteRule::Always },
+	{ "fstream", WriteRule::Always }, { "wfstream", WriteRule::Always }, { "basic_fstream", WriteRule::Always },
+};
+
+static bool IsNameLetter(char c)
+{
+	return c == '_' || isalnum((unsigned char)c);
+}
+
+// The whole names (letters, digits and _) in a stretch of code, each once
+static std::vector<std::string> NamesIn(const std::string &code)
+{
+	std::vector<std::string> names;
+
+	for (size_t i = 0; i < code.size();)
+	{
+		if (IsNameLetter(code[i]))
+		{
+			size_t const start = i;
+
+			while (i < code.size() && IsNameLetter(code[i]))
+			{
+				i++;
+			}
+
+			names.push_back(code.substr(start, i - start));
+		}
+		else
+		{
+			i++;
+		}
+	}
+
+	return names;
+}
+
+static bool Holds(const std::vector<std::string> &names, std::initializer_list<const char *> any)
+{
+	for (const char *one : any)
+	{
+		if (std::find(names.begin(), names.end(), one) != names.end())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// The lines in text that write a file without plain_write.h (kWriteNames, each by its rule, and a D3DX picture saved straight to a file:
+// D3DXSave...ToFile, never ...ToFileInMemory)
 static std::vector<size_t> RawWrites(const std::string &text)
 {
 	std::string const code = CodeOnly(text);
 	std::vector<size_t> lines;
-	const char *const kinds[] = { "fopen(", "CreateFile(", "CreateFile (", "CreateFileA(", "CreateFileA (", "CreateFileW(", "CreateFileW (", "CreateFile2(",
-		"ofstream", "fstream", "D3DXSave", "CopyFile", "freopen(" };
 
-	for (const char *kind : kinds)
+	for (size_t at = 0; at < code.size();)
 	{
-		std::string const k = kind;
-
-		for (size_t at = code.find(k); at != std::string::npos; at = code.find(k, at + 1))
+		if (!IsNameLetter(code[at]) || (at > 0 && IsNameLetter(code[at - 1])))
 		{
-			// a name of its own: not avp_fopen, _wfopen, avp_CreateFile, ifstream and the like (a letter or _ before it makes it another name)
-			if (at > 0 && (code[at - 1] == '_' || isalnum((unsigned char)code[at - 1])))
-			{
-				continue;
-			}
+			at++;
+			continue;
+		}
 
-			size_t const statementEnd = code.find(';', at);
-			std::string const call = code.substr(at, statementEnd == std::string::npos ? std::string::npos : statementEnd - at);
-			bool writes = false;
+		size_t end = at;
 
-			if (k == "fopen(")
-			{
-				writes = call.find("\"w") != std::string::npos || call.find("\"a") != std::string::npos || call.find("+\"") != std::string::npos;
-			}
-			else if (k.compare(0, 10, "CreateFile") == 0)
-			{
-				writes = k == "CreateFile2(" || call.find("GENERIC_WRITE") != std::string::npos || call.find("FILE_WRITE_DATA") != std::string::npos
-					|| call.find("FILE_APPEND_DATA") != std::string::npos || call.find("GENERIC_ALL") != std::string::npos;
-			}
-			else if (k == "D3DXSave")
-			{
-				size_t const open = code.find('(', at);
-				writes = open != std::string::npos && code.substr(at, open - at).find("InMemory") == std::string::npos;
-			}
-			else if (k == "freopen(")
-			{
-				writes = call.find("CONOUT$") == std::string::npos && call.find("CONIN$") == std::string::npos;
-			}
-			else
-			{
-				writes = true;   // ofstream, fstream, CopyFile: a write whatever its words
-			}
+		while (end < code.size() && IsNameLetter(code[end]))
+		{
+			end++;
+		}
 
-			if (writes)
+		std::string const name = code.substr(at, end - at);
+		size_t const statementEnd = code.find(';', end);
+		std::string const call = code.substr(end, statementEnd == std::string::npos ? std::string::npos : statementEnd - end);
+		std::vector<std::string> const words = NamesIn(call);
+		bool writes = false;
+
+		if (name.compare(0, 8, "D3DXSave") == 0)
+		{
+			writes = name.find("ToFile") != std::string::npos && name.find("InMemory") == std::string::npos;
+		}
+		else
+		{
+			for (const WriteName &one : kWriteNames)
 			{
-				lines.push_back((size_t)std::count(code.begin(), code.begin() + at, '\n') + 1);
+				if (name != one.name)
+				{
+					continue;
+				}
+
+				bool const modeWrites = call.find("\"w") != std::string::npos || call.find("\"a") != std::string::npos || call.find("+\"") != std::string::npos;
+
+				switch (one.rule)
+				{
+				case WriteRule::Mode: writes = modeWrites; break;
+				case WriteRule::Reopen: writes = modeWrites && call.find("CONOUT$") == std::string::npos && call.find("CONIN$") == std::string::npos; break;
+				case WriteRule::OpenFlags: writes = Holds(words, { "_O_WRONLY", "_O_RDWR", "_O_CREAT", "_O_TRUNC", "_O_APPEND", "O_WRONLY", "O_RDWR", "O_CREAT",
+					"O_TRUNC", "O_APPEND" }); break;
+				case WriteRule::Access: writes = Holds(words, { "GENERIC_WRITE", "GENERIC_ALL", "FILE_WRITE_DATA", "FILE_APPEND_DATA", "FILE_WRITE_ATTRIBUTES",
+					"FILE_WRITE_EA", "DELETE", "WRITE_DAC", "WRITE_OWNER", "MAXIMUM_ALLOWED", "CREATE_ALWAYS", "CREATE_NEW", "OPEN_ALWAYS", "TRUNCATE_EXISTING" }); break;
+				case WriteRule::OpenFile: writes = Holds(words, { "OF_CREATE", "OF_WRITE", "OF_READWRITE", "OF_DELETE" }); break;
+				case WriteRule::Always: writes = true; break;
+				}
 			}
 		}
+
+		if (writes)
+		{
+			lines.push_back((size_t)std::count(code.begin(), code.begin() + at, '\n') + 1);
+		}
+
+		at = end;
 	}
 
 	return lines;
+}
+
+// The sweep itself, on code made up here (Frost's SHOULD 2 on d42cc944): each way of writing a file it must find, and each way it must
+// not take for one. None of the first kind is in the game today, so this is how the sweep is shown to catch the next one.
+static void TestTheSweepItself()
+{
+	puts("the sweep itself, on made-up code");
+
+	const char *const writes[] =
+	{
+		"_wfopen(L\"x.txt\", L\"w\");",
+		"fopen_s(&f, \"x.txt\", \"wb\");",
+		"_wfopen_s(&f, L\"x\", L\"a\");",
+		"_fsopen(\"x\", \"w\", _SH_DENYNO);",
+		"int d = _open(\"x\", _O_WRONLY | _O_CREAT);",
+		"int d = _wopen(L\"x\", _O_RDWR);",
+		"_sopen_s(&d, \"x\", _O_CREAT | _O_WRONLY, _SH_DENYNO, 0);",
+		"int d = _creat(\"x\", 0);",
+		"OpenFile(\"x\", &of, OF_CREATE);",
+		"CreateFileTransactedA(\"x\", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL, tx, NULL, NULL);",
+		"std::wofstream f(L\"x\");",
+		"std::basic_ofstream<char> f(\"x\");",
+		"HANDLE h = CreateFileA(\"x\", GENERIC_READ, 0, NULL, CREATE_ALWAYS, 0, NULL);",
+		"#ifdef _XBOX\nint a;\n#elif defined(X)\nFILE *f = fopen(\"x\", \"w\");\n#endif\n",
+	};
+
+	const char *const notWrites[] =
+	{
+		"avp_fopen(\"x\", \"w\");",
+		"std::ifstream f(\"x\");",
+		"FILE *f = fopen(\"x\", \"rb\");",
+		"int d = _open(\"x\", _O_RDONLY);",
+		"HANDLE h = CreateFileA(\"x\", GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);",
+		"// fopen(\"x\", \"w\");",
+		"#ifdef _XBOX\nFILE *f = fopen(\"x\", \"w\");\n#endif\n",
+		"D3DXSaveSurfaceToFileInMemory(&b, D3DXIFF_PNG, s, NULL, NULL);",
+		"freopen(\"CONOUT$\", \"wb\", stdout);",
+		"MoveFileExA(\"a\", \"b\", 0);",
+	};
+
+	int caught = 0, missed = 0;
+
+	for (const char *code : writes)
+	{
+		bool const found = !RawWrites(code).empty();
+		caught += found ? 1 : 0;
+
+		if (!found)
+		{
+			missed++;
+			printf("    not found: %s\n", code);
+		}
+	}
+
+	Check(missed == 0, (std::to_string(caught) + " of " + std::to_string(sizeof(writes) / sizeof(writes[0])) + " ways of writing found (each one missed is named above)").c_str());
+
+	int wrong = 0;
+
+	for (const char *code : notWrites)
+	{
+		if (!RawWrites(code).empty())
+		{
+			wrong++;
+			printf("    taken for a write: %s\n", code);
+		}
+	}
+
+	Check(wrong == 0, "and none of the ways that don't write is taken for one (each one is named above)");
 }
 
 static void TestTheGameUsesIt()
@@ -853,6 +1035,7 @@ int main()
 	TestExclusiveMode(base);
 	TestFileStream(base);
 	TestLinks(base);
+	TestTheSweepItself();
 	TestTheGameUsesIt();
 
 	::RemoveDirectoryA(base.c_str());
