@@ -31,6 +31,8 @@
 //   the colour table is a list that frees itself and knows its own size, so a copy of a loader can't free it twice
 // Modified 2026-11-23 by Melanikus (Vasquez) for the AvP port:
 //   a tool's own allowance (RimLoaderToolAllowance), so a tool's pictures neither spend the open level's nor start it over
+// Modified 2026-11-23 by Melanikus (Frost) for the AvP port:
+//   ReadsMade, the reads a picture has taken
 
 #pragma once
 
@@ -175,6 +177,7 @@ class RimLoader
 		bool Decode(uint8_t *dest, uint32_t destPitch);
 		void GetDimensions(uint32_t &width, uint32_t &height);
 		RimProblem Problem() const;     // why Open or Decode said no
+		size_t ReadsMade() const { return file.ReadsMade(); }   // the reads its file has taken so far (rim_test: a picture in a few, never one a byte)
 
 	private:
 		bool Refuse(RimProblem why);

@@ -1349,9 +1349,96 @@ static void CheckFontSum()
 	Check(CountOf(menu, "GiveEveryLetterOneWidth();") == 3, "a font that's missing, too small or laid out wrong gets letters that take up room");
 }
 
+// A PICTURE IN A FEW READS (Frost 2026-11-23, Bishop 2's order on the placement picker's measure: a 64 KB picture took about 28 ms there, one ::ReadFile for
+// each byte of its packed data, AvP-docs tools/frost/pickertime/REPORT-20261123.md). A picture of a stock picture's size, 128 x 128 in 8 planes with 256
+// colours, plain and packed, is opened and decoded in at most kFewReads reads in all (each part's header a few, its colour table and its body as few as their
+// size allows), every pixel right. Each pixel's colour is worked out from its place, so a byte out of its place shows.
+static size_t const kFewReads = 64;
+
+static int FewReadsColour(uint32_t x, uint32_t y)
+{
+	return (int)((x + 3 * y) & 255);
+}
+
+// Each row's 8 plane rows of 16 bytes (plane k holds bit k of each pixel, the first pixel in the top bit); packed, each plane row as one plain run of 16
+static Bytes FewReadsBody(bool packed)
+{
+	Bytes body;
+
+	for (uint32_t y = 0; y < 128; y++)
+	{
+		for (int k = 0; k < 8; k++)
+		{
+			if (packed)
+			{
+				body.push_back(15);   // a run of 16 plain bytes
+			}
+
+			for (uint32_t b = 0; b < 16; b++)
+			{
+				uint8_t byte = 0;
+
+				for (uint32_t bit = 0; bit < 8; bit++)
+				{
+					byte |= (uint8_t)(((FewReadsColour(b * 8 + bit, y) >> k) & 1) << (7 - bit));
+				}
+
+				body.push_back(byte);
+			}
+		}
+	}
+
+	return body;
+}
+
+static void CheckFewReads()
+{
+	printf("A picture in a few reads:\n");
+
+	for (int packed = 0; packed < 2; packed++)
+	{
+		std::string const kind = packed ? "packed" : "plain";
+		Picture p(128, 128, 8, packed ? 1 : 0);
+
+		p.colours = CountingColours(256);
+		p.body = FewReadsBody(packed != 0);
+		WriteFile(p.File());
+		RimLoader_NewLevel();
+
+		RimLoader picture;
+		bool const opened = picture.Open(TestFilePath());
+		uint32_t width = 0, height = 0;
+
+		picture.GetDimensions(width, height);
+
+		std::vector<uint8_t> pixels((size_t)width * height * 4, 0);
+		bool const decoded = opened && width == 128 && height == 128 && picture.Decode(pixels.data(), width * 4);
+		size_t const reads = picture.ReadsMade();
+		bool right = decoded;
+
+		for (uint32_t y = 0; right && y < 128; y++)
+		{
+			for (uint32_t x = 0; right && x < 128; x++)
+			{
+				int const n = FewReadsColour(x, y);
+				size_t const at = ((size_t)y * 128 + x) * 4;
+
+				right = pixels[at] == ((n + 2) & 255) && pixels[at + 1] == ((n + 1) & 255) && pixels[at + 2] == (n & 255) && pixels[at + 3] == 255;
+			}
+		}
+
+		std::string const readsWords = kind + ": and it takes at most " + std::to_string((unsigned long long)kFewReads) + " reads in all (it took " +
+			std::to_string((unsigned long long)reads) + ")";
+
+		Check(right, kind + ": a 128 x 128 picture in 8 planes and 256 colours opens and comes out right, every pixel");
+		Check(reads <= kFewReads, readsWords);
+	}
+}
+
 int main()
 {
 	CheckGoodPictures();
+	CheckFewReads();
 	CheckRefusals();
 	CheckBadPixels();
 	CheckLongFiles();
