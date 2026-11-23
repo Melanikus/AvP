@@ -72,6 +72,14 @@ static void WriteWholeFile(const std::string &name, const std::string &bytes)
 	file << bytes;
 }
 
+// The whole path of a name in the folder the test runs in, as a link's target must be given (see TestLinks)
+static std::string WholePath(const std::string &name)
+{
+	char whole[MAX_PATH];
+	DWORD const length = ::GetFullPathNameA(name.c_str(), MAX_PATH, whole, NULL);
+	return length > 0 && length < MAX_PATH ? std::string(whole) : name;
+}
+
 static bool IsThere(const std::string &name)
 {
 	return ::GetFileAttributesA(name.c_str()) != INVALID_FILE_ATTRIBUTES;
@@ -218,6 +226,11 @@ static void TestFOpen(const std::string &base)
 
 	file = PlainWrite_FOpen(name, "rb", &why);
 	Check(!file && !why.empty(), "a mode that only reads is refused: that's fopen's job");
+
+	if (file)
+	{
+		fclose(file);
+	}
 
 	file = PlainWrite_FOpen(base + "\\NUL", "w", &why);
 	Check(!file, "\"w\" on a device's name (NUL) is refused");
@@ -378,12 +391,16 @@ static void TestLinks(const std::string &base)
 		Check(false, "a second name for a file can be made on this disk, so that it can be tried");
 	}
 
+	// A symbolic link's target is given as a WHOLE path: a relative one is read from the link's own folder, so "<test folder>\target.txt" would point at
+	// <test folder>\<test folder>\target.txt, a file that isn't there, and a plain CreateFile would fail on it too, so the check would prove nothing (the
+	// first red run on GitHub's machine, 2026-11-23, passed both symbolic link checks on the old code that way). Each link is first shown to lead where meant.
 	std::string const link = base + "\\link.cfg";
 	std::string const target = base + "\\target.txt";
 	WriteWholeFile(target, "what a link points to");
 
-	if (::CreateSymbolicLinkA(link.c_str(), target.c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
+	if (::CreateSymbolicLinkA(link.c_str(), WholePath(target).c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
 	{
+		Check(ReadWholeFile(link) == "what a link points to", "(the symbolic link leads to the file)");
 		Check(EveryWayRefuses(link), "a symbolic link to a file is refused, every way");
 		Check(ReadWholeFile(target) == "what a link points to", "and what it points to is just as it was");
 		::DeleteFileA(link.c_str());
@@ -396,8 +413,13 @@ static void TestLinks(const std::string &base)
 	std::string const dangling = base + "\\dangling.cfg";
 	std::string const nothing = base + "\\nothing yet.txt";
 
-	if (::CreateSymbolicLinkA(dangling.c_str(), nothing.c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
+	if (::CreateSymbolicLinkA(dangling.c_str(), WholePath(nothing).c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
 	{
+		// shown to lead there: a file put there for a moment is read through it, then taken away, so the link points at nothing
+		WriteWholeFile(nothing, "for a moment");
+		Check(ReadWholeFile(dangling) == "for a moment", "(the symbolic link leads to the name it was made for)");
+		::DeleteFileA(nothing.c_str());
+		Check(!IsThere(nothing), "(and nothing is there now)");
 		Check(EveryWayRefuses(dangling), "a symbolic link to nothing is refused, every way");
 		Check(!IsThere(nothing), "and nothing is made where it points (a plain CreateFile made it)");
 		::DeleteFileA(dangling.c_str());
