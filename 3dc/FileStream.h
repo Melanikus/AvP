@@ -54,7 +54,7 @@
 // serial number and the file's own number on that disk, asked of the very handle the stream reads (GetFileInformationByHandle), and, for a file inside a
 // fastfile, where in the archive it starts and how long it is, and the time the file (or the archive) was last written, so the same file written again in
 // place is another. Two streams on the same file give the same; two different files never do, even with the same bytes or the same name. known is false for
-// a stream that has nothing open, or when Windows won't say.
+// a stream that has nothing open, or when Windows won't say, and one that isn't known equals none, not even itself: it says nothing about which file it is.
 struct FileStreamIdentity
 {
 	bool known = false;
@@ -67,7 +67,7 @@ struct FileStreamIdentity
 
 	bool operator==(FileStreamIdentity const &other) const
 	{
-		return known == other.known && inFastFile == other.inFastFile && volume == other.volume && index == other.index && offset == other.offset &&
+		return known && other.known && inFastFile == other.inFastFile && volume == other.volume && index == other.index && offset == other.offset &&
 			size == other.size && written == other.written;
 	}
 
