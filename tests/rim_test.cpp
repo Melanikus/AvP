@@ -1473,6 +1473,13 @@ static void CheckIdentity()
 		Check(ic.known && ia != ic, "another file with the very same bytes gives another (its own number on the disk)");
 		Check(!none.Identity().known, "a stream with nothing open has none");
 
+		// one that isn't known says nothing about which file it is, so it must never match (Dietrich on 16c8b639): else a cache keyed by a path and its identity
+		// would fall back to the name alone for any file Windows won't describe
+		FileStream alsoNone;
+		FileStreamIdentity const unknown = none.Identity(), alsoUnknown = alsoNone.Identity();
+		Check(!(unknown == alsoUnknown) && unknown != alsoUnknown && !(unknown == unknown) && !(unknown == ia) && !(ia == unknown),
+			"an identity that isn't known equals none: not another that isn't known, not itself, not a known one");
+
 		RimLoader_NewLevel();
 		RimLoader picture;
 		bool const opened = picture.Open(TestFilePath());
