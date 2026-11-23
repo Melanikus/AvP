@@ -1479,6 +1479,46 @@ static void CheckIdentity()
 		Check(opened && picture.FileIdentity() == ia, "the picture loader gives the identity of the file it opened");
 	}
 
+	// THE SAME FILE WRITTEN AGAIN IN PLACE (a picture a modder saves again while the editor is open): the same disk, the same number and here the same size, so
+	// only the time it was last written can tell them apart. That time is set here to an hour earlier, so the check never rests on how fast the clock ticks.
+	{
+		FileStreamIdentity was;
+
+		{
+			FileStream before;
+			before.Open(TestFilePath(), FileStream::FileRead);
+			was = before.Identity();
+		}
+
+		Bytes changed = bytes;
+		changed.back() ^= 0xFF;
+		WriteFile(changed);
+
+		HANDLE const touch = CreateFileA(TestFilePath().c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+		FILETIME written = {};
+		bool timeSet = false;
+
+		if (touch != INVALID_HANDLE_VALUE)
+		{
+			if (GetFileTime(touch, NULL, NULL, &written))
+			{
+				uint64_t const hourEarlier = ((uint64_t)written.dwHighDateTime << 32 | written.dwLowDateTime) - 36000000000ull;   // 100-nanosecond steps
+				written.dwLowDateTime = (DWORD)hourEarlier;
+				written.dwHighDateTime = (DWORD)(hourEarlier >> 32);
+				timeSet = SetFileTime(touch, NULL, NULL, &written) != 0;
+			}
+
+			CloseHandle(touch);
+		}
+
+		FileStream after;
+		after.Open(TestFilePath(), FileStream::FileRead);
+		FileStreamIdentity const now = after.Identity();
+
+		Check(timeSet && was.known && now.known && was.volume == now.volume && was.index == now.index && was.size == now.size && was != now,
+			"the same file written again in place, at the same size: another (only its time last written tells)");
+	}
+
 	// two files inside one fastfile, each at its own place in it
 	containerName = TestFilePath() + ".ffl";
 	memberName = "member.rim";
