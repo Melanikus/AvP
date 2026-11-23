@@ -1,5 +1,6 @@
 // See hudson_nav_save.h. Written 2026-11-05 by Melanikus for the AvP port.
 #include "hudson_nav_save.h"
+#include "plain_write.h"   // a file is written only through PlainWrite_FOpen, never through a link (card 6, Tao 1)
 
 #include <stdarg.h>
 #include <string.h>
@@ -20,7 +21,7 @@ bool HudsonNavSaveFile::Open(const char *path, long mostBytes)
 	bytes = 0;
 	most = mostBytes;
 	why = 0;
-	file = fopen(path, "w");
+	file = PlainWrite_FOpen(path, "w");
 
 	if (!file)
 	{

@@ -219,6 +219,11 @@ static void TestFOpen(const std::string &base)
 	file = PlainWrite_FOpen(name, "rb", &why);
 	Check(!file && !why.empty(), "a mode that only reads is refused: that's fopen's job");
 
+	if (file)
+	{
+		fclose(file);
+	}
+
 	file = PlainWrite_FOpen(base + "\\NUL", "w", &why);
 	Check(!file, "\"w\" on a device's name (NUL) is refused");
 

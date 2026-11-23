@@ -7,6 +7,7 @@
 // (Vasquez, 2026-11-19), whose line numbers are at 71638d0d.
 
 #include "3dc.h"
+#include "plain_write.h"   // a file is written only through PlainWrite_FOpen, never through a link (card 6, Tao 1)
 #include "inline.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -1809,7 +1810,7 @@ bool HudsonLanes_EndOfFrame(long frame, const char **howItEnded, int *exitCode)
 		char const *const folder = GetSaveFolderPath();
 		std::string const path = std::string(folder ? folder : "") + kLanesFileName;
 
-		file = fopen(path.c_str(), "w");
+		file = PlainWrite_FOpen(path.c_str(), "w");
 
 		// THE MODE FIRST (probe v3, Bishop 11-20: "the run's first log line states the mode, and a run that isn't in stock mode stops itself"): every flag of
 		// stock_flags.h as the game has it now, and the level's own alien-ways switch (alien_ways.cpp, set at the level's start)
@@ -2312,7 +2313,7 @@ void HudsonLanes_SayMarksFrame()
 		char const *const folder = GetSaveFolderPath();
 		std::string const path = std::string(folder ? folder : "") + "say-marks.txt";
 
-		file = fopen(path.c_str(), "a");
+		file = PlainWrite_FOpen(path.c_str(), "a");
 	}
 
 	int const env = AvP.CurrentEnv;

@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-23 by Melanikus (Drake) for the AvP port (card 6, Tao 1 and 3):
+//   a level file is written only through plain_write.h (PlainWrite_Open, or avp_CreateFile, which uses it), never through a link
 // Modified 2026-11-17 by Melanikus for the AvP port:
 //   the file's SHA-256 is worked out from the same reads as its MD5 (level_file_sum.h, sha256_stream.h), for the level editor's proof
 //   that the loader read exactly the bytes it wrote; the game's MD5 and its log line are as they were
@@ -40,6 +42,7 @@
 #include "md5.h"
 #include "sha256_stream.h"
 #include "logstring.h"
+#include "plain_write.h"
 
 // Class Lockable_Chunk_With_Children functions
 
@@ -438,8 +441,8 @@ BOOL File_Chunk::write_file (const char * fname)
 	#else
 	size_chunk();
 	
-	rif_file = CreateFileA (temp_name, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 
-					FILE_FLAG_RANDOM_ACCESS, 0);
+	// made only as a plain file with one name, its folder not a link (plain_write.h): never through a link put at the name
+	rif_file = PlainWrite_Open (temp_name, GENERIC_WRITE, 0, CREATE_ALWAYS, FILE_FLAG_RANDOM_ACCESS, NULL);
 
 	if (rif_file == INVALID_HANDLE_VALUE) {
 		delete[] temp_name;

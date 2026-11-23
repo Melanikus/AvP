@@ -27,9 +27,14 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a file inside a fastfile stops at the end of its own bytes, whoever reads it
 //   RanOutOfData says a read came up short, and PeekByte steps back only after it really read a byte
+// Modified 2026-11-23 by Melanikus (Drake) for the AvP port (card 6, Tao 1 and 3):
+//   a file opened to be written is opened through PlainWrite_Open (plain_write.h), so it never writes through a link, into a
+//   second name of another file, or to a device; WhyNotOpened says why one was refused. FileReadWrite opens the named file
+//   itself, as FileWrite does, never a fast file archive in its place.
 
 #include "FileStream.h"
 #include "FastFile.h"
+#include "plain_write.h"
 #include "utilities.h"
 #include <algorithm>
 
@@ -71,9 +76,10 @@ bool FileStream::Open(const std::string &fileName, eAccess accessType, eFastFile
 	std::string realFileName;
 
 	ranOutOfData = false;
+	whyNotOpened.clear();
 
-	// handle write mode
-	if (accessType == FileStream::FileWrite) {
+	// handle write mode: the named file itself, never a fast file archive found in its place (which CREATE_ALWAYS would empty)
+	if (accessType == FileStream::FileWrite || accessType == FileStream::FileReadWrite) {
 		if (!OpenActual(fileName, accessType)) {
 			fileHandle = 0;
 			return false;
@@ -163,9 +169,15 @@ bool FileStream::OpenActual(const std::string &fileName, eAccess accessType)
 	// try open the file. A file opened only for reading lets other readers in (FILE_SHARE_READ): editors run side by side read the same fast files (.FFL), and with no
 	// sharing the second reader's open failed and that fast file's textures were missing. A file opened for writing keeps share mode 0: nobody else may read it while it is
 	// written. (Added 2026-11-16 by Melanikus for the AvP port.)
-	DWORD const shareMode = desiredAccess == GENERIC_READ ? FILE_SHARE_READ : 0;
-
-	fileHandle = ::CreateFile(fileName.c_str(), desiredAccess, shareMode, NULL, creationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (desiredAccess == GENERIC_READ)
+	{
+		fileHandle = ::CreateFile(fileName.c_str(), desiredAccess, FILE_SHARE_READ, NULL, creationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
+	}
+	else
+	{
+		// Written only as a plain file with one name, judged on its own handle, its folder not a link (plain_write.h says how and why)
+		fileHandle = PlainWrite_Open(fileName, desiredAccess, 0, creationDisposition, FILE_ATTRIBUTE_NORMAL, &whyNotOpened);
+	}
 #endif
 
 	if (INVALID_HANDLE_VALUE == fileHandle)

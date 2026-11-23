@@ -1,3 +1,6 @@
+// Modified 2026-11-23 by Melanikus (Drake) for the AvP port (card 6, Tao 1 and 3):
+//   avp_open_userfile, avp_fopen and avp_CreateFile write only through plain_write.h: never through a link, into a second name of
+//   another file, or to a device. Reading is as it was.
 // Modified 2026-11-22 by Melanikus for the AvP port:
 //   the window title names the build's version (tools/build-and-package.ps1 writes it), not the time the compiler ran, so the same commit makes the same bytes
 // Modified 2026-11-14 by Melanikus for the AvP port:
@@ -37,6 +40,7 @@
 //   what went wrong finding the save folder is kept for the log to say, because the log asks for that folder first
 #include "utilities.h"
 #include "hudson.h"
+#include "plain_write.h"
 #include <string>
 #include <algorithm>
 #include "configFile.h"
@@ -256,7 +260,13 @@ FILE *avp_open_userfile(const char *fileName, const char *mode)
 	}
 	else {
 		finalPath = savePath + sFileName;
-	}	
+	}
+
+	// a writing mode ("w", "a", or any with "+") only through PlainWrite_FOpen: never through a link (plain_write.h says why)
+	if (PlainWrite_ModeWrites(mode))
+	{
+		return PlainWrite_FOpen(finalPath, mode);
+	}
 
 	return fopen(finalPath.c_str(), mode);
 #endif
@@ -279,6 +289,12 @@ FILE *avp_fopen(const char *fileName, const char *mode)
 #ifdef _WIN32
 
 	finalPath += fileName;
+
+	// a writing mode ("w", "a", or any with "+") only through PlainWrite_FOpen: never through a link (plain_write.h says why)
+	if (PlainWrite_ModeWrites(mode))
+	{
+		return PlainWrite_FOpen(finalPath, mode);
+	}
 
 	return fopen(finalPath.c_str(), mode);
 #endif
@@ -319,6 +335,16 @@ HANDLE avp_CreateFile(LPCTSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMo
 
 #endif
 #ifdef _WIN32
+	// Asked to write (or to make or empty a file): only through PlainWrite_Open, never through a link (plain_write.h says why). Every
+	// caller gives no security attributes and no template file, so the open is the same but for that.
+	DWORD const writes = GENERIC_WRITE | GENERIC_ALL | FILE_WRITE_DATA | FILE_APPEND_DATA;
+
+	if ((dwDesiredAccess & writes) != 0 || dwCreationDisposition == CREATE_ALWAYS || dwCreationDisposition == CREATE_NEW
+		|| dwCreationDisposition == TRUNCATE_EXISTING)
+	{
+		return PlainWrite_Open(lpFileName, dwDesiredAccess, dwShareMode, dwCreationDisposition, dwFlagsAndAttributes, NULL);
+	}
+
 	return CreateFile(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 #endif
 }

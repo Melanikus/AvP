@@ -7,6 +7,7 @@
   Source for AVP Pheromone system
   -----------------------------------------------------------------*/
 #include "3dc.h"
+#include "plain_write.h"   // a file is written only through PlainWrite_FOpen, never through a link (card 6, Tao 1)
 #include "inline.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -546,7 +547,7 @@ static void LogModuleAdjacencies(void)
 	ScenePtr = Global_ModulePtr[Global_Scene];
 	ModuleListPointer = ScenePtr->sm_marray;
 
-	logFile = fopen("D:/PATRICK/MODADJ.TXT","w");
+	logFile = PlainWrite_FOpen("D:/PATRICK/MODADJ.TXT","w");
 
 	if(logFile)
 	{
@@ -598,7 +599,7 @@ static void LogModuleAdjacencies(void)
 
 	/* also, initialise pheromone value file */
 
-	logFile = fopen("D:/PATRICK/MODPPHER.TXT","w");
+	logFile = PlainWrite_FOpen("D:/PATRICK/MODPPHER.TXT","w");
 	
 	if(logFile) 
 	{
@@ -616,7 +617,7 @@ static void LogPlayerPherValues(void)
 	FILE *logFile;
 	int i;
 
-	logFile = fopen("D:/PATRICK/MODPPHER.TXT","a");
+	logFile = PlainWrite_FOpen("D:/PATRICK/MODPPHER.TXT","a");
 	if (!logFile) return;
 
 	fprintf(logFile, "\n ***************************** \n");
