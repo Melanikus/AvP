@@ -1435,10 +1435,146 @@ static void CheckFewReads()
 	}
 }
 
+// WHICH FILE A STREAM HAS OPEN (Frost 2026-11-23, Bishop 2's rule for the editor's picture cache: "the judged file itself, its path as judged plus its
+// identity, never by the name alone"). Two loose files with the same bytes, a stream with nothing open, the picture loader's own, and two files inside one
+// fastfile (rim_test's own stand-in FF_Find, as CheckInsideAFastFile has it).
+static void CheckIdentity()
+{
+	printf("Which file a stream has open:\n");
+
+	Picture p(2, 1, 8, 0);
+	p.colours = CountingColours(4);
+	uint8_t const body[8] = { 0x80, 0x40, 0, 0, 0, 0, 0, 0 };
+	p.body.assign(body, body + 8);
+	Bytes const bytes = p.File();
+	std::string const second = TestFilePath() + "-second";
+
+	WriteFile(bytes);
+
+	{
+		FILE *file = fopen(second.c_str(), "wb");
+
+		if (file)
+		{
+			fwrite(&bytes[0], 1, bytes.size(), file);
+			fclose(file);
+		}
+	}
+
+	{
+		FileStream a, b, c, none;
+		a.Open(TestFilePath(), FileStream::FileRead);
+		b.Open(TestFilePath(), FileStream::FileRead);
+		c.Open(second, FileStream::FileRead);
+
+		FileStreamIdentity const ia = a.Identity(), ib = b.Identity(), ic = c.Identity();
+		Check(ia.known && !ia.inFastFile && ia.offset == 0 && ia.size == (uint32_t)bytes.size(), "a loose file's is known, at 0, with its size");
+		Check(ia == ib, "two streams on the same file give the same");
+		Check(ic.known && ia != ic, "another file with the very same bytes gives another (its own number on the disk)");
+		Check(!none.Identity().known, "a stream with nothing open has none");
+
+		// one that isn't known says nothing about which file it is, so it must never match (Dietrich on 16c8b639): else a cache keyed by a path and its identity
+		// would fall back to the name alone for any file Windows won't describe
+		FileStream alsoNone;
+		FileStreamIdentity const unknown = none.Identity(), alsoUnknown = alsoNone.Identity();
+		Check(!(unknown == alsoUnknown) && unknown != alsoUnknown && !(unknown == unknown) && !(unknown == ia) && !(ia == unknown),
+			"an identity that isn't known equals none: not another that isn't known, not itself, not a known one");
+
+		RimLoader_NewLevel();
+		RimLoader picture;
+		bool const opened = picture.Open(TestFilePath());
+		Check(opened && picture.FileIdentity() == ia, "the picture loader gives the identity of the file it opened");
+	}
+
+	// THE SAME FILE WRITTEN AGAIN IN PLACE (a picture a modder saves again while the editor is open): the same disk, the same number and here the same size, so
+	// only the time it was last written can tell them apart. That time is set here to an hour earlier, so the check never rests on how fast the clock ticks.
+	{
+		FileStreamIdentity was;
+
+		{
+			FileStream before;
+			before.Open(TestFilePath(), FileStream::FileRead);
+			was = before.Identity();
+		}
+
+		Bytes changed = bytes;
+		changed.back() ^= 0xFF;
+		WriteFile(changed);
+
+		HANDLE const touch = CreateFileA(TestFilePath().c_str(), FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+		FILETIME written = {};
+		bool timeSet = false;
+
+		if (touch != INVALID_HANDLE_VALUE)
+		{
+			if (GetFileTime(touch, NULL, NULL, &written))
+			{
+				uint64_t const hourEarlier = ((uint64_t)written.dwHighDateTime << 32 | written.dwLowDateTime) - 36000000000ull;   // 100-nanosecond steps
+				written.dwLowDateTime = (DWORD)hourEarlier;
+				written.dwHighDateTime = (DWORD)(hourEarlier >> 32);
+				timeSet = SetFileTime(touch, NULL, NULL, &written) != 0;
+			}
+
+			CloseHandle(touch);
+		}
+
+		FileStream after;
+		after.Open(TestFilePath(), FileStream::FileRead);
+		FileStreamIdentity const now = after.Identity();
+
+		Check(timeSet && was.known && now.known && was.volume == now.volume && was.index == now.index && was.size == now.size && was != now,
+			"the same file written again in place, at the same size: another (only its time last written tells)");
+	}
+
+	// two files inside one fastfile, each at its own place in it
+	containerName = TestFilePath() + ".ffl";
+	memberName = "member.rim";
+	Bytes container(100, 0x77);
+	container.insert(container.end(), bytes.begin(), bytes.end());
+	container.insert(container.end(), bytes.begin(), bytes.end());
+
+	{
+		FILE *file = fopen(containerName.c_str(), "wb");
+
+		if (file)
+		{
+			fwrite(&container[0], 1, container.size(), file);
+			fclose(file);
+		}
+	}
+
+	{
+		memberHandle.fastFileIndex = 0;
+		memberHandle.fileOffset = 100;
+		memberHandle.fileSize = (uint32_t)bytes.size();
+		FileStream first;
+		first.Open(memberName, FileStream::FileRead);
+		FileStreamIdentity const i1 = first.Identity();
+
+		memberHandle.fileOffset = 100 + (uint32_t)bytes.size();
+		FileStream other;
+		other.Open(memberName, FileStream::FileRead);
+		FileStreamIdentity const i2 = other.Identity();
+
+		FileStream loose;
+		loose.Open(containerName, FileStream::FileRead);
+		FileStreamIdentity const archive = loose.Identity();
+
+		Check(i1.known && i1.inFastFile && i1.offset == 100 && i1.size == (uint32_t)bytes.size(), "a file inside a fastfile: where it starts in it, and its size");
+		Check(i1.volume == archive.volume && i1.index == archive.index, "and the archive's own disk and number");
+		Check(i2.known && i1 != i2, "two files in one archive aren't the same file");
+	}
+
+	memberName.clear();
+	remove(containerName.c_str());
+	remove(second.c_str());
+}
+
 int main()
 {
 	CheckGoodPictures();
 	CheckFewReads();
+	CheckIdentity();
 	CheckRefusals();
 	CheckBadPixels();
 	CheckLongFiles();
