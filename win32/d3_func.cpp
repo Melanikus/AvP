@@ -56,6 +56,7 @@
 //   its panels as a quad, and at 2560 x 1440 they filled the 4096 the game had, so letters and boxes were left out. The game draws as it did.
 #include "d3_func.h"
 #include "plain_write_picture.h"   // a picture is written only through plain_write.h, never through a link (card 6, Tao 1)
+#include "device_reset_hooks.h"   // what else lives on the card alone, let go in ReleaseVolatileResources
 #include "hudson.h"
 #include "window_slot.h"
 #include "surface_normals.h"
@@ -296,6 +297,10 @@ uint32_t R_GetScreenWidth()
 
 bool ReleaseVolatileResources()
 {
+	// first, what parts of the program outside the game keep on the card alone (device_reset_hooks.h: the level editor's live picker panes' depth surface and
+	// state block), before the game's own textures they may hold are let go: a reset with any of it held is refused
+	DeviceReset_ReleaseAll();
+
 	extern void ReleaseEditorGroupQueries();
 	ReleaseEditorGroupQueries();   // the editor's occlusion queries (R_SetEditorWorldTriangles groups): default-pool, outstanding between frames
 	FrameTiming_Release();
@@ -2121,6 +2126,21 @@ bool R_CreateTexture(uint32_t width, uint32_t height, uint32_t bitsPerPixel, enu
 			textureUsage = D3DUSAGE_DYNAMIC;
 			break;
 		}
+		// A PICTURE DRAWN INTO ON THE CARD (TextureManager.h; added 2026-11-23 by Melanikus (Frost) for the level editor's live picker panes): on the card alone,
+		// so the texture manager releases it for a reset of the device and makes it again after; 32 bits a pixel with its see-through kept (below)
+		case TextureUsage_RenderTarget:
+		{
+			texturePool  = D3DPOOL_DEFAULT;
+			textureUsage = D3DUSAGE_RENDERTARGET;
+
+			if (bitsPerPixel != 32)
+			{
+				Con_PrintError("A texture drawn into (" + texture.name + ") is 32 bits a pixel only, so it's left out");
+				return false;
+			}
+
+			break;
+		}
 		default:
 		{
 			Con_PrintError("Invalid texture usageType value in R_CreateTexture()");
@@ -2156,6 +2176,14 @@ bool R_CreateTexture(uint32_t width, uint32_t height, uint32_t bitsPerPixel, enu
 	uint32_t realHeight = height;
 
 	D3DXCheckTextureRequirements(d3d.lpD3DDevice, &realWidth, &realHeight, NULL, textureUsage, &textureFormat, texturePool);
+
+	// A picture drawn into keeps its see-through, or its owner's drawing would cover what lies under it: a card that offers another format for it
+	// (D3DXCheckTextureRequirements changes the format to one it can make) can't make one, and says so
+	if (usageType == TextureUsage_RenderTarget && textureFormat != D3DFMT_A8R8G8B8)
+	{
+		Con_PrintError("This graphics card can't draw into a picture with see-through (" + texture.name + "), so it's left out");
+		return false;
+	}
 
 	// That can answer with less than was asked for, and whoever asked is going to write the size they asked for. See texture_size_check.h
 	if (!TextureSize_IsEnough(width, height, bitsPerPixel, realWidth, realHeight, TextureSize_BitsPerPixel(textureFormat)))

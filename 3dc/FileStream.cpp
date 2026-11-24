@@ -31,6 +31,8 @@
 //   a file opened to be written is opened through PlainWrite_Open (plain_write.h), so it never writes through a link, into a
 //   second name of another file, or to a device; WhyNotOpened says why one was refused. FileReadWrite opens the named file
 //   itself, as FileWrite does, never a fast file archive in its place.
+// Modified 2026-11-23 by Melanikus (Frost) for the AvP port:
+//   ReadBytes counts its reads (ReadsMade)
 
 #include "FileStream.h"
 #include "FastFile.h"
@@ -266,6 +268,8 @@ DWORD FileStream::ReadBytes(uint8_t *buffer, size_t nBytes)
 {
 	DWORD nBytesRead = 0;
 
+	readsMade++;
+
 	// What was asked for, before the limit below. Reaching the end of a file inside a fastfile counts as running out,
 	// and the limit would hide that, because at the end of the file it's 0, and nothing would ever look short.
 	size_t const nBytesAsked = nBytes;
@@ -321,6 +325,29 @@ uint32_t FileStream::GetFileSize()
 	else {
 		return ::GetFileSize(fileHandle, NULL);
 	}
+}
+
+// Which file it has open (FileStreamIdentity, FileStream.h): asked of the very handle it reads, never of a name, so a name that now leads elsewhere can't
+// change the answer. Not known when nothing is open, or when Windows won't say.
+FileStreamIdentity FileStream::Identity()
+{
+	FileStreamIdentity identity;
+	BY_HANDLE_FILE_INFORMATION about;
+
+	if (!isGood || fileHandle == 0 || fileHandle == INVALID_HANDLE_VALUE || !::GetFileInformationByHandle(fileHandle, &about)) {
+		return identity;
+	}
+
+	identity.known = true;
+	identity.inFastFile = fromFastFile;
+	identity.volume = about.dwVolumeSerialNumber;
+	identity.index = ((uint64_t)about.nFileIndexHigh << 32) | about.nFileIndexLow;
+	identity.offset = fromFastFile ? fileOffset : 0;
+	// (the low 32 bits of a loose file's size only: FileStream's own GetFileSize reads no more, and the disk, the number and the time last written already tell
+	// any two files apart, so a file over 4 GB can't be taken for another)
+	identity.size = fromFastFile ? fileSize : about.nFileSizeLow;
+	identity.written = ((uint64_t)about.ftLastWriteTime.dwHighDateTime << 32) | about.ftLastWriteTime.dwLowDateTime;   // (a fastfile's: its archive's)
+	return identity;
 }
 
 // Read

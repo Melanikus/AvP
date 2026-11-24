@@ -42,6 +42,10 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a picture that ends before it should isn't kept, and one that's refused says why;
 //   letting a texture go also lets go of its relief pictures, so a number used again doesn't bring them with it
+// Modified 2026-11-23 by Melanikus (Frost) for the AvP port:
+//   a texture number never comes to mean another texture across a lost device (tests/texture_manager_test.cpp): a slot released only for the reset is kept
+//   apart from a free one (Texture::heldForReset), never given to another texture, and made again only while its owner keeps it; the reset makes every
+//   such texture again even when one of them can't be
 
 #include <sstream>
 #include "renderer.h"
@@ -61,6 +65,13 @@ void Tex_CheckMemoryUsage();
 
 bool Tex_Lock(texID_t textureID, uint8_t **data, uint32_t *pitch, enum TextureLock lockType)
 {
+	// a texture drawn into on the card is never locked: the card draws into it, nothing is written into it from here (and one on the card alone can't be)
+	if (textureList[textureID].usage == TextureUsage_RenderTarget)
+	{
+		*data = 0;
+		return false;
+	}
+
 	// return if texture isn't valid
 	if (textureList[textureID].isValid == false)
 	{
@@ -109,7 +120,8 @@ static texID_t Tex_GetFreeID()
 {
 	for (size_t i = 0; i < textureList.size(); i++)
 	{
-		if (textureList[i].isValid == false)
+		// a slot with no texture is free, unless its texture was released only for a reset of the device: that one is still its owner's
+		if (textureList[i].isValid == false && textureList[i].heldForReset == false)
 		{
 			return i; // this slot has no texture, return the ID so we can reuse it
 		}
@@ -564,23 +576,29 @@ const Texture& Tex_GetTextureDetails(texID_t textureID)
 	return (textureList[textureID]);
 }
 
+// Before the device is reset: every texture that lives on the card alone (a Dynamic one, and one drawn into: TextureUsage_RenderTarget) is released, its
+// slot held for its owner (Texture::heldForReset)
 void Tex_ReleaseDynamicTextures()
 {
 	for (texIt = textureList.begin(); texIt != textureList.end(); ++texIt)
 	{
-		if ((texIt->isValid) && (texIt->usage == TextureUsage_Dynamic))
+		if ((texIt->isValid) && (texIt->usage == TextureUsage_Dynamic || texIt->usage == TextureUsage_RenderTarget))
 		{
 			R_ReleaseTexture(*texIt);
 			texIt->isValid = false;
+			texIt->heldForReset = true;
 		}
 	}
 }
 
+// After the reset: each held texture made again. One that can't be (the card is out of memory, say) is said, and stays held and not valid, so its
+// owner's number still means only it (a lock or a draw of it is refused, as of any texture not valid), and the next reset tries it again; the others are
+// made all the same.
 void Tex_ReloadDynamicTextures()
 {
 	for (texIt = textureList.begin(); texIt != textureList.end(); ++texIt)
 	{
-		if (texIt->usage == TextureUsage_Dynamic)
+		if (texIt->heldForReset)
 		{
 			assert(texIt->isValid == false);
 
@@ -588,11 +606,12 @@ void Tex_ReloadDynamicTextures()
 			{
 				Con_PrintError("Couldn't reload texture " + texIt->name);
 				texIt->isValid = false;
-				return;
+				continue;
 			}
 
-			// set as valid
+			// set as valid, its own again
 			texIt->isValid = true;
+			texIt->heldForReset = false;
 
 			std::stringstream ss;
 			ss << "reloaded texture with name " << texIt->name << " width: " << texIt->width << " height: " << texIt->height << std::endl;
@@ -674,9 +693,11 @@ void Tex_Release(texID_t textureID)
 		return;
 	}
 
-	// only release a valid texture
-	if (textureList.at(textureID).isValid)
+	// only release a valid texture, or one held for a reset of the device (it has nothing on the card: R_ReleaseTexture lets go of nothing then), whose slot
+	// is freed now, so the reset doesn't make it again
+	if (textureList.at(textureID).isValid || textureList[textureID].heldForReset)
 	{
+		textureList[textureID].heldForReset = false;
 		R_ReleaseTexture(textureList[textureID]);
 		R_UnsetTexture(textureID);
 /*

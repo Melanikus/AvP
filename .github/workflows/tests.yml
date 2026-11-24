@@ -15,13 +15,15 @@ permissions:
   contents: read
 
 jobs:
-  unit-tests:
-    name: Unit tests
-    # A test that hangs fails here. Without a limit, it would hold up a runner for 6 hours. MEASURED (Drake, 2026-11-23, six runs from 11-22 to
-    # 11-23): the job takes 25 to 29 minutes: installing the one compiler 4 to 5 of them (once 12.5: 747 s, #293's first attempt), building
-    # the tests about 5, running them about 4, and "Test the release checks" about 11.5 (676 s before #292; on avpx_main e346e38f it was still
-    # going at 699 s). So 30 cancelled two good runs (e346e38f's, and #293's first). 60 is half again the slowest measured (about 40), so only
-    # a hang reaches it.
+  # THE UNIT TESTS, IN PARTS SIDE BY SIDE (Drake, 2026-11-23; the owner: "You obviously need to paralelize the tests"). Until then this was one job,
+  # "Unit tests", the longest of every pull request: 25 to 29 minutes MEASURED (six runs, 11-22 to 11-23: installing the one compiler 4 to 5 of them,
+  # once 12.5; building the tests about 5; running them about 4; "Test the release checks" about 11.5). Now three kinds of job run at once: the
+  # checks before the tests (unit-tests-checks), the tests in parts (unit-tests-part), and the release checks (unit-tests-release-checks). The job
+  # named "Unit tests" after them, the required check, passes only when every one of them passed (tests/release-test.ps1 checks it is so).
+  unit-tests-checks:
+    name: Unit tests, the checks
+    # A job that hangs fails here. Without a limit, it would hold up a runner for 6 hours. 60, as the one job had (half again its slowest, about
+    # 40, measured): only a hang reaches it.
     timeout-minutes: 60
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
     steps:
@@ -30,15 +32,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # THE ONE COMPILER (win32/msvc-pin.props), from Microsoft's own installer, before anything is built: vcpkg's triplet asks for it (#282 run 2:
-      # without it here, vcpkg found "no valid Visual Studio instance" for the libraries the tests link)
+      # THE ONE COMPILER (win32/msvc-pin.props), from Microsoft's own installer, first, as the one job had it: the checks below that compile
+      # (build.ps1's refusals, which set the compiler up as build.ps1 does) use it
       - name: Install the one compiler (MSVC, as win32/msvc-pin.props pins it)
         shell: pwsh
         run: ./tools/install-msvc-pin.ps1
 
       # Hudson is the team's test bot. Since 2026-11-09 it's in the game (the owner: "Hudson goes into avpx_main"), and this proves a player's
-      # game can never run any of it: every way in does nothing unless -dev and -hudson asked for a run. It comes first, before anything is
-      # built, so that a way in left awake fails the pull request that brings it. Until 2026-11-09 this was check-no-hudson.ps1.
+      # game can never run any of it: every way in does nothing unless -dev and -hudson asked for a run. The required Unit tests check needs
+      # this job, so a way in left awake fails the pull request that brings it. Until 2026-11-09 this was check-no-hudson.ps1.
       - name: Refuse any way a player's game could run Hudson
         shell: pwsh
         run: ./tools/check-hudson-asleep.ps1
@@ -62,15 +64,6 @@ jobs:
       - name: Compile every shader
         shell: pwsh
         run: ./tests/compile-shaders.ps1
-
-      # Some tests use the game's own libraries, and only those: this job doesn't build the game. The shader test compiles with the
-      # library the game does, the network tests link the game's ENet, and the post-quantum tests (pq_mlkem_test, pq_mldsa_test) link
-      # mlkem-native and mldsa-native, so all of them come before the tests are built. The action says how they're made, the same way as
-      # a real build, and the Take-outs check uses it too.
-      - name: Fetch the game's shader compiler, ENet and the post-quantum libraries
-        uses: ./.github/actions/fetch-test-libraries
-        with:
-          ports: dxsdk-d3dx enet mldsa-native mlkem-native
 
       # net_relay_test reads the relay's test vectors, a file the relay's repository makes from its own code (AVPx-Dedicated-Server,
       # test-vectors/relay-v1.json at 26d0580). The copy here has to be that file byte for byte: a copy changed to suit the game's code would
@@ -118,31 +111,10 @@ jobs:
           if ($extra.Count -gt 0) { throw "tests/vectors/crypto-kat has files SHA256SUMS doesn't list: $($extra -join ', ')" }
           "$($listed.Count) copied known-answer files are the relay's own (crypto-kat-java 0c4755cf)"
 
-      - name: Build the tests
-        shell: pwsh
-        run: ./tests/build.ps1
-
-      # With no tests at all this fails, so a broken build script can't pass as "every test passed".
-      - name: Run every test
-        shell: pwsh
-        run: |
-          $tests = @(Get-ChildItem "$env:RUNNER_TEMP\avp-tests\*.exe")
-          if ($tests.Count -eq 0) { throw 'No tests were built' }
-          foreach ($test in $tests) {
-            "Running $($test.Name)"
-            & $test.FullName
-            if ($LASTEXITCODE -ne 0) { exit 1 }
-          }
-
-      # Not a program like the others: it runs the release checks on made-up folders, and reads the release workflow.
-      - name: Test the release checks
-        shell: pwsh
-        run: ./tests/release-test.ps1
-
       # Every test is built with the standard library's own bounds checks, and tests/build.ps1 refuses one whose settings leave them out,
       # turn them off again, or leave out the guard that won't compile a test without them (card STL-HARDEN-1, #140, added 2026-11-08 by
-      # Melanikus for the AvP port). This makes it refuse, from a copy of a test's settings, and checks each reason. It's last in this job,
-      # and builds into a folder of its own, because build.ps1 empties its folder before it builds.
+      # Melanikus for the AvP port). This makes it refuse, from a copy of a test's settings, and checks each reason. It builds into a folder
+      # of its own, because build.ps1 empties its folder before it builds.
       - name: Make build.ps1 refuse a test without the bounds checks, and check each reason
         shell: pwsh
         run: |
@@ -203,6 +175,131 @@ jobs:
           if ($failed.Count -gt 0) { throw "build.ps1 didn't refuse as it should: $($failed -join '; ')" }
           'build.ps1 refused each way, with each reason'
           exit 0
+
+      # tests/build.ps1 builds one part of the tests for the parts below (-Part, -Parts), and refuses a part's number that makes no sense before it
+      # empties or makes any folder, never reading it as "every test" or "none". Each must be refused, with its reason, and no folder made. Added
+      # 2026-11-23 by Melanikus (Drake) for the AvP port. -Command, so a number below 0 is read as a number.
+      - name: Make build.ps1 refuse a part that makes no sense, and check each reason
+        shell: pwsh
+        run: |
+          $failed = [System.Collections.Generic.List[string]]::new()
+          $pwsh = Join-Path $PSHOME 'pwsh.exe'
+          $env:RUNNER_TEMP = Join-Path $env:RUNNER_TEMP 'part-refusal-probe'
+          $cases = @(
+            @{ Asked = '-Part 4 -Parts 4'; What = 'a part past the last' },
+            @{ Asked = '-Part -1 -Parts 4'; What = 'a part below 0' },
+            @{ Asked = '-Part 1'; What = 'a part with no number of parts' },
+            @{ Asked = '-Parts -1'; What = 'a number of parts below 0' },
+            @{ Asked = '-Part 0 -Parts 4 -Only glint_test'; What = 'one test by name, and a part as well' }
+          )
+          foreach ($case in $cases) {
+            $said = & $pwsh -NoProfile -NonInteractive -Command "& ./tests/build.ps1 $($case.Asked); exit `$LASTEXITCODE" 2>&1 | Out-String
+            $code = $LASTEXITCODE
+            $said
+            $what = "$($case.What) (build.ps1 $($case.Asked))"
+            if ($code -eq 1 -and $said -cmatch 'A part is a number from 0 to one less than -Parts') { "ok      $what is refused, and told why" } else { "FAILED  $what"; $failed.Add($what) }
+            if (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'avp-tests')) { "FAILED  ${what}, a folder was made first"; $failed.Add("${what}, a folder was made first") }
+          }
+          if ($failed.Count -gt 0) { throw "build.ps1 didn't refuse as it should: $($failed -join '; ')" }
+          "build.ps1 refused each of the $($cases.Count) parts that make no sense, with its reason, before it made any folder"
+          exit 0
+
+  # The tests, a part on each machine, shared out as the sanitizer job below shares them: in name order, compared letter by letter, the first
+  # test to part 1, the second to part 2, and so on, round again (tests/build.ps1 -Part, -Parts). GitHub numbers the parts and counts them
+  # (strategy.job-index and job-total), so the list of parts can be made longer or shorter and no test is ever left out; a new test joins a part
+  # with no change to this file. Each part says its list in its log.
+  unit-tests-part:
+    name: Unit tests, part ${{ matrix.part }} of ${{ strategy.job-total }}
+    # A test that hangs fails here, as above
+    timeout-minutes: 60
+    runs-on: windows-2025-vs2026   # pinned: the same machine as the checks above
+    strategy:
+      fail-fast: false   # one part failing doesn't stop the others, so a run shows every test that needs work
+      matrix:
+        part: [1, 2, 3, 4]   # only the parts' names on the page: the tests are shared out by GitHub's own count, as above
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # THE ONE COMPILER (win32/msvc-pin.props), before vcpkg builds the libraries with it (its triplet asks for it): without it, vcpkg found
+      # "no valid Visual Studio instance" for the libraries the tests link (#282 run 2)
+      - name: Install the one compiler (MSVC, as win32/msvc-pin.props pins it)
+        shell: pwsh
+        run: ./tools/install-msvc-pin.ps1
+
+      # Some tests use the game's own libraries, and only those: this job doesn't build the game. The shader test compiles with the
+      # library the game does, the network tests link the game's ENet, and the post-quantum tests (pq_mlkem_test, pq_mldsa_test) link
+      # mlkem-native and mldsa-native, so all of them come before the tests are built. The action says how they're made, the same way as
+      # a real build, and the Take-outs check uses it too.
+      - name: Fetch the game's shader compiler, ENet and the post-quantum libraries
+        uses: ./.github/actions/fetch-test-libraries
+        with:
+          ports: dxsdk-d3dx enet mldsa-native mlkem-native
+
+      - name: Build this part's tests
+        shell: pwsh
+        env:
+          # Which part this is, counted from 0, and how many parts there are, both from GitHub, so they always agree with the list above
+          PART: ${{ strategy.job-index }}
+          PARTS: ${{ strategy.job-total }}
+        run: ./tests/build.ps1 -Part $env:PART -Parts $env:PARTS
+
+      # Exactly the tests build.ps1 built (its built.txt), each by name. With none at all this fails, so a broken build script can't pass as
+      # "every test passed", and so does a test built with no program to run.
+      - name: Run this part's tests
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'avp-tests'
+          $built = @(Get-Content -LiteralPath (Join-Path $folder 'built.txt') | Where-Object { $_ })
+          if ($built.Count -eq 0) { throw 'No tests were built' }
+          foreach ($name in $built) {
+            $program = Join-Path $folder "$name.exe"
+            if (-not (Test-Path -LiteralPath $program)) { throw "$name was built, but its program isn't there" }
+            "Running $name.exe"
+            & $program
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          "All $($built.Count) of this part's tests passed: $($built -join ', ')"
+
+  # Not a program like the others: it runs the release checks on made-up folders, and reads the release workflow. About 11.5 minutes, on a
+  # machine of its own beside the parts. Nothing built is needed.
+  unit-tests-release-checks:
+    name: Unit tests, the release checks
+    timeout-minutes: 60   # as above: only a hang reaches it
+    runs-on: windows-2025-vs2026   # pinned: the machine it always ran on, in the one job
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the release checks
+        shell: pwsh
+        run: ./tests/release-test.ps1
+
+  # THE REQUIRED CHECK, by this name (the branch protection, release.yml's check job and tools/check-release.ps1 ask for "Unit tests"). It passes
+  # only if the checks, every part of the tests and the release checks passed. "if: always()": GitHub counts a required check that was skipped as
+  # passed, so this one is never skipped; it runs, and fails, when one of them failed.
+  unit-tests:
+    name: Unit tests
+    needs: [unit-tests-checks, unit-tests-part, unit-tests-release-checks]
+    if: always()
+    runs-on: ubuntu-24.04   # pinned, as the sanitizer's result below
+    timeout-minutes: 5
+    steps:
+      - name: Say how it went
+        env:
+          CHECKS: ${{ needs.unit-tests-checks.result }}
+          PARTS: ${{ needs.unit-tests-part.result }}
+          RELEASE: ${{ needs.unit-tests-release-checks.result }}
+        run: |
+          echo "The checks before the tests: $CHECKS. The tests, every part: $PARTS. The release checks: $RELEASE."
+          if [ "$CHECKS" != "success" ]; then echo "One of the checks before the tests failed. That job, Unit tests, the checks, says which."; exit 1; fi
+          if [ "$PARTS" != "success" ]; then echo "At least one test failed or didn't build. The failed part's own job says which, and why."; exit 1; fi
+          if [ "$RELEASE" != "success" ]; then echo "The release checks failed. That job, Unit tests, the release checks, says which."; exit 1; fi
+          echo "Every unit test passed, with every check before them and the release checks"
 
   # Every test again, built with the address sanitizer by tests/takeouts/sanitize.ps1 (card SANITIZE-RUN-1, added 2026-11-08 by Melanikus
   # for the AvP port). The sanitizer watches every read and write, and stops a test at the first one outside what it was given, so it finds
