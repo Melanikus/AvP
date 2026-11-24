@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the list of visible level parts has room for one more than its limit, so 401 parts still draw without
 //   writing past the list
+// Modified 2026-11-23 by Melanikus (Drake) for the AvP port:
+//   a module the level editor hides has its water left out too, as its shape is (DrawTheModulesWater)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -26,6 +28,23 @@ extern int DrawingAReflection;
 extern int ToyShadowsInMirror;
 extern DISPLAYBLOCK *OnScreenBlockList[];
 extern DISPLAYBLOCK *Player;
+extern int EditorHiddenCount;                               // d3d_render.cpp: how many things the level editor hides (always none in the game)
+extern bool EditorBlockIsHidden(const DISPLAYBLOCK *block);   // d3d_render.cpp: whether the level editor hides this one
+
+// A MODULE'S WATER, drawn only when the module itself is. The game draws a level's water right after a module's own shape (D3D_DrawWaterTest:
+// genshd1's pool, for its module "05"). The level editor can hide a module (R_SetEditorHiddenBlocks), and AddShape then leaves the module's shape
+// out; here its water is left out too. Before 2026-11-23 the water was drawn for a hidden module as well: the editor's plot preview, which hides
+// every module but the one being planned, showed genshd1's pool on its own, as a flat grey speckled patch over that module (the owner's "grey
+// square"). The game hides nothing, so in the game the water is drawn exactly as before.
+static void DrawTheModulesWater(DISPLAYBLOCK *moduleBlock, MODULE *modulePtr)
+{
+	if (EditorHiddenCount && EditorBlockIsHidden(moduleBlock))
+	{
+		return;
+	}
+
+	D3D_DrawWaterTest(modulePtr);
+}
 
 struct KItem KItemList[maxpolyptrs];
 
@@ -515,7 +534,7 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 					}
 				}
 
-				D3D_DrawWaterTest(modulePtr);
+				DrawTheModulesWater(SortedModules[numMods].DispPtr, modulePtr);
 			}
 		}
 		else
@@ -572,7 +591,7 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 					}
 				}
 
-		 		D3D_DrawWaterTest(modulePtr);
+				DrawTheModulesWater(SortedModules[numMods].DispPtr, modulePtr);
 			}
 		}
 //	 			OutputTranslucentPolyList();
