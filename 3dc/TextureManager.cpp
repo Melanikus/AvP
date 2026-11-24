@@ -65,6 +65,13 @@ void Tex_CheckMemoryUsage();
 
 bool Tex_Lock(texID_t textureID, uint8_t **data, uint32_t *pitch, enum TextureLock lockType)
 {
+	// a texture drawn into on the card is never locked: the card draws into it, nothing is written into it from here (and one on the card alone can't be)
+	if (textureList[textureID].usage == TextureUsage_RenderTarget)
+	{
+		*data = 0;
+		return false;
+	}
+
 	// return if texture isn't valid
 	if (textureList[textureID].isValid == false)
 	{
@@ -569,12 +576,13 @@ const Texture& Tex_GetTextureDetails(texID_t textureID)
 	return (textureList[textureID]);
 }
 
-// Before the device is reset: every texture that lives on the card alone is released, its slot held for its owner (Texture::heldForReset)
+// Before the device is reset: every texture that lives on the card alone (a Dynamic one, and one drawn into: TextureUsage_RenderTarget) is released, its
+// slot held for its owner (Texture::heldForReset)
 void Tex_ReleaseDynamicTextures()
 {
 	for (texIt = textureList.begin(); texIt != textureList.end(); ++texIt)
 	{
-		if ((texIt->isValid) && (texIt->usage == TextureUsage_Dynamic))
+		if ((texIt->isValid) && (texIt->usage == TextureUsage_Dynamic || texIt->usage == TextureUsage_RenderTarget))
 		{
 			R_ReleaseTexture(*texIt);
 			texIt->isValid = false;
