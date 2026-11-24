@@ -24,6 +24,8 @@
 
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a square picture with all its smaller copies
+// Modified 2026-11-23 by Melanikus (Frost) for the AvP port:
+//   heldForReset: a texture released only so the device can be reset keeps its slot, apart from a free one (tests/texture_manager_test.cpp)
 
 #ifndef _TextureManager_h_
 #define _TextureManager_h_
@@ -51,6 +53,11 @@ struct Texture
 	TextureUsage	usage;
 	bool			isValid;
 
+	// RELEASED ONLY FOR A RESET OF THE DEVICE: a texture that lives on the card alone (TextureUsage_Dynamic) is released before the device can be reset, and
+	// made again after (Tex_ReleaseDynamicTextures, Tex_ReloadDynamicTextures). All that while its owner keeps its number, so its slot is still its owner's:
+	// never given to another texture, and made again by the reset only while this is true. Its owner releasing it (Tex_Release) frees the slot then.
+	bool			heldForReset;
+
 	// width and height of textures before adjustment (eg 640x480)
 	uint16_t		width;
 	uint16_t		height;
@@ -67,6 +74,7 @@ struct Texture
 	{
 		usage = TextureUsage_Normal;
 		isValid = false;
+		heldForReset = false;
 		width  = 0;
 		height = 0;
 		realWidth  = 1;
