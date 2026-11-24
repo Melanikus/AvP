@@ -1,5 +1,7 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a sound's name from a level file has to pass the check in level_file_name.h before it's opened
+// Modified 2026-11-24 by Melanikus (Vasquez) for the AvP port:
+//   LoseAllNonCommonSounds counts each time it runs (LoadedSounds_Teardowns), so whoever holds a sound can tell it has been freed
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -16,6 +18,9 @@ extern int SoundSwitchedOn;
 // Pat sets this up
 
 List <LOADED_SOUND *> loaded_sounds;
+
+// How many times LoseAllNonCommonSounds has run (jsndsup.h says why a holder needs it)
+static unsigned long long teardowns = 0;
 
 void LoseSound (LOADED_SOUND const * ls)
 {
@@ -52,8 +57,17 @@ void LoseSound (LOADED_SOUND const * ls)
 	}
 }
 
+unsigned long long LoadedSounds_Teardowns()
+{
+	return teardowns;
+}
+
+// Lets go of EVERY loaded sound, however many holders each still has (a level closing: projload.cpp DeallocateSoundsAndPoolAllocatedMemory).
+// Counted first, so that from here on no holder can take a sound it got before this for one that is still there.
 void LoseAllNonCommonSounds()
 {
+	teardowns++;
+
 	LOADED_SOUND* ls;
 	while (loaded_sounds.size())
 	{

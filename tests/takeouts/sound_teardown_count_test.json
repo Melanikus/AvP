@@ -1,0 +1,48 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a teardown is not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\tteardowns++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "the count is never given",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\treturn teardowns;",
+					"to": "\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "a holder giving its sound back is counted as a teardown",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\tLOADED_SOUND * ucls = *ucls_p;\n",
+					"to": "\tLOADED_SOUND * ucls = *ucls_p;\n\tteardowns++;\n"
+				}
+			]
+		},
+		{
+			"name": "an empty teardown is not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\tteardowns++;\n",
+					"to": "\tif (loaded_sounds.size()) teardowns++;\n"
+				}
+			]
+		}
+	]
+}
