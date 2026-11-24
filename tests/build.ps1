@@ -13,6 +13,7 @@
 # The .args file comes last on the compiler's line, so it can end with /link and settings for the linker.
 # Run it from anywhere, in PowerShell:  tests/build.ps1
 # To build only one test:  tests/build.ps1 -Only name
+# To build only part 0 of 4 (counted from 0), as the Unit tests check does:  tests/build.ps1 -Part 0 -Parts 4
 # The programs land in $env:RUNNER_TEMP\avp-tests. Outside the automatic checks, they land in AvP-test-out\tests\<this copy's folder name>,
 # next to the repository: a folder of this copy's own, so a build here never empties another copy's (modified 2026-11-21, below). Not the
 # temp folder: antivirus programs distrust new programs that appear there.
@@ -32,13 +33,27 @@
 #   another's tests, take-out copies and sanitizer builds while they ran (2026-11-04, 2026-11-21). The tests\ part keeps the name apart from
 #   the folders the take-outs and the sanitizer use there. It is emptied by -LiteralPath, so a [ in a copy's name can never make it empty
 #   another copy's folder that the name would match as a pattern.
+#
+# Modified 2026-11-23 by Melanikus (Drake) for the AvP port (the owner: "You obviously need to paralelize the tests"):
+#   -Part and -Parts build one part of the tests, so the Unit tests check runs its parts side by side (.github/workflows/tests.yml). They are
+#   shared out as the sanitizer job shares them: in name order, compared letter by letter, the first test to part 0, the second to part 1, and so
+#   on, round again, so every test is in exactly one part and a new one joins a part with no change anywhere. A part's number that makes no sense is
+#   refused, never read as "every test" or "none". The names of the tests built are written to built.txt beside them, one to a line, so the step
+#   that runs them runs exactly those.
 
-param([string]$Only = '')
+param([string]$Only = '', [int]$Part = 0, [int]$Parts = 0)
 
 $ErrorActionPreference = 'Stop'
 
 # Any error at all that stops this script ends up here, so the exit code always tells the truth
 trap { Write-Host "Could not build the tests: $_"; exit 1 }
+
+# A part's number that makes no sense is refused first, before any folder is emptied or anything is set up
+if ($Parts -lt 0 -or ($Parts -eq 0 -and $Part -ne 0) -or ($Parts -gt 0 -and ($Part -lt 0 -or $Part -ge $Parts -or $Only)))
+{
+    Write-Host "A part is a number from 0 to one less than -Parts, -Parts is at least 1, and -Only goes without them (asked for part $Part of $Parts, -Only '$Only')"
+    exit 1
+}
 
 $repository = Split-Path -Parent $PSScriptRoot
 $outputDir  = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-tests' } else { Join-Path (Split-Path -Parent $repository) "AvP-test-out\tests\$(Split-Path -Leaf $repository)" }
@@ -86,6 +101,16 @@ function Invoke-Tool([string]$program, [string]$arguments, [string]$folder, [str
 }
 
 $tests = @(Get-ChildItem -Path (Join-Path $PSScriptRoot '*.args') | Where-Object { -not $Only -or $_.BaseName -ceq $Only })
+
+if ($Parts -gt 0)
+{
+    $names = [string[]]@($tests | ForEach-Object { $_.BaseName })
+    [Array]::Sort($names, [StringComparer]::Ordinal)
+    $mine = @(for ($i = $Part; $i -lt $names.Count; $i += $Parts) { $names[$i] })
+    Write-Host "Part $($Part + 1) of ${Parts}: $($mine.Count) of the $($names.Count) tests: $($mine -join ', ')"
+    $tests = @($tests | Where-Object { $mine -ccontains $_.BaseName })
+}
+
 if ($tests.Count -eq 0) { Write-Error 'No tests found to build' }
 
 foreach ($test in $tests)
@@ -147,6 +172,9 @@ foreach ($test in $tests)
         exit 1
     }
 }
+
+# The names of the tests built, one to a line, for the step that runs them (it runs exactly these, and fails on one with no program)
+[System.IO.File]::WriteAllLines((Join-Path $outputDir 'built.txt'), [string[]]@($tests | ForEach-Object { $_.BaseName }))
 
 Write-Host "Built $($tests.Count) test(s) into $outputDir"
 exit 0
