@@ -182,6 +182,7 @@ class RimLoader
 		bool Decode(uint8_t *dest, uint32_t destPitch);
 		void GetDimensions(uint32_t &width, uint32_t &height);
 		RimProblem Problem() const;     // why Open or Decode said no
+		FileStreamIdentity FileIdentity() { return file.Identity(); }   // which file the picture was opened from (FileStreamIdentity): the editor's picker keys by it
 		size_t ReadsMade() const { return file.ReadsMade(); }   // the reads its file has taken so far (rim_test: a picture in a few, never one a byte)
 
 	private:

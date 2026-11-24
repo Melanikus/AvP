@@ -315,6 +315,29 @@ uint32_t FileStream::GetFileSize()
 	}
 }
 
+// Which file it has open (FileStreamIdentity, FileStream.h): asked of the very handle it reads, never of a name, so a name that now leads elsewhere can't
+// change the answer. Not known when nothing is open, or when Windows won't say.
+FileStreamIdentity FileStream::Identity()
+{
+	FileStreamIdentity identity;
+	BY_HANDLE_FILE_INFORMATION about;
+
+	if (!isGood || fileHandle == 0 || fileHandle == INVALID_HANDLE_VALUE || !::GetFileInformationByHandle(fileHandle, &about)) {
+		return identity;
+	}
+
+	identity.known = true;
+	identity.inFastFile = fromFastFile;
+	identity.volume = about.dwVolumeSerialNumber;
+	identity.index = ((uint64_t)about.nFileIndexHigh << 32) | about.nFileIndexLow;
+	identity.offset = fromFastFile ? fileOffset : 0;
+	// (the low 32 bits of a loose file's size only: FileStream's own GetFileSize reads no more, and the disk, the number and the time last written already tell
+	// any two files apart, so a file over 4 GB can't be taken for another)
+	identity.size = fromFastFile ? fileSize : about.nFileSizeLow;
+	identity.written = ((uint64_t)about.ftLastWriteTime.dwHighDateTime << 32) | about.ftLastWriteTime.dwLowDateTime;   // (a fastfile's: its archive's)
+	return identity;
+}
+
 // Read
 uint8_t FileStream::GetByte()
 {
