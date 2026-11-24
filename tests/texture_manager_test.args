@@ -1,0 +1,8 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /FC /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/Itests/texture_manager_test_stubs /FIgame_stand_ins.h
+/I3dc /Iwin32 /I3dc/avp/win95/frontend
+tests/texture_manager_test.cpp
+3dc/TextureManager.cpp
+3dc/RimLoader.cpp
+3dc/FileStream.cpp
