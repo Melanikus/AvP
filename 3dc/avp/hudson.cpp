@@ -128,6 +128,8 @@
 // Only two small places here touch the shadow code: Hudson_SetTheMode, and what reads the mode back. Leave those out, and a run can be added to a local build of an older branch, to compare with.
 
 #include "3dc.h"
+#include "plain_write_picture.h"   // a picture is written only through plain_write.h, never through a link (card 6, Tao 1)
+#include "plain_write.h"   // a file is written only through PlainWrite_FOpen, never through a link (card 6, Tao 1)
 #include "inline.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -584,7 +586,7 @@ static void WriteResult(const char *howItEnded, int code)
 		WaitForTheResultToBeOnDisk();
 		_snprintf(line, sizeof(line) - 1, "and_then=%s exit=%d", howItEnded, code);
 
-		FILE *const laterFile = fopen(path.c_str(), "a");
+		FILE *const laterFile = PlainWrite_FOpen(path.c_str(), "a");
 
 		if (laterFile)
 		{
@@ -621,7 +623,7 @@ static void WriteResult(const char *howItEnded, int code)
 	_snprintf(line, sizeof(line) - 1, "commit=%s level=%s frames_asked=%d frames_done=%ld seconds=%.1f rooms_asked=%d rooms_reached=%ld views_done=%ld pictures=%ld%s lighting=%s shadows=%s static_frames=%ld/%ld size=%ux%u vsync=%s focus_frames=%ld mouse=%s sound=%s machine=%s touched=%s ended=%s exit=%d", AVP_BUILD_COMMIT, plan.level, plan.frames, framesDone,
 		(double)(GetTickCount() - startedAt) / 1000.0, plan.rooms, roomsReached, viewsDone, picturesSaved, fight, WordForLightingDrawn(), WordForShadowsDrawn(), staticFramesWithWalls, staticFramesAsked, d3d.d3dpp.BackBufferWidth, d3d.d3dpp.BackBufferHeight, WhetherItWaitsForTheScreen(), framesWithTheFocus, WhereTheMouseIs(), SoundSys_IsOn() ? "on" : "off", plan.machineShared ? "shared" : "alone", machineWasTouched ? "yes" : "no", howItEnded, code);
 
-	FILE *const file = fopen(path.c_str(), "w");
+	FILE *const file = PlainWrite_FOpen(path.c_str(), "w");
 
 	if (file)
 	{
@@ -1060,7 +1062,7 @@ int Hudson_CheckBeforeStarting()
 
 	// So that the last run's result can't be taken for this one's, however this one ends. A run that ends properly writes over this.
 	char const *const resultFolder = GetSaveFolderPath();
-	FILE *const startingFile = fopen((std::string(resultFolder ? resultFolder : "") + kResultFileName).c_str(), "w");
+	FILE *const startingFile = PlainWrite_FOpen((std::string(resultFolder ? resultFolder : "") + kResultFileName).c_str(), "w");
 
 	if (startingFile)
 	{
@@ -1311,7 +1313,7 @@ static void SayWhereTheWindowIs(LONG frame)
 	LogString(line);
 
 	char const *const folder = GetSaveFolderPath();
-	FILE *const file = fopen((std::string(folder ? folder : "") + kWindowFileName).c_str(), frame == 1 ? "w" : "a");
+	FILE *const file = PlainWrite_FOpen((std::string(folder ? folder : "") + kWindowFileName).c_str(), frame == 1 ? "w" : "a");
 
 	if (file)
 	{
@@ -1510,7 +1512,7 @@ void Hudson_SaveLampCompareScreen(const char *stage)
 	{
 		if (SUCCEEDED(screen->GetDesc(&size)) && SUCCEEDED(device->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL)))
 		{
-			saved = SUCCEEDED(device->GetRenderTargetData(screen, copy)) && SUCCEEDED(D3DXSaveSurfaceToFileA((pictures + name).c_str(), D3DXIFF_PNG, copy, NULL, NULL));
+			saved = SUCCEEDED(device->GetRenderTargetData(screen, copy)) && PlainWrite_SurfaceToFile(pictures + name, D3DXIFF_PNG, copy, NULL);
 			copy->Release();
 		}
 
@@ -1540,7 +1542,7 @@ void Hudson_SaveLampCompareSurface(struct IDirect3DTexture9 *surface)
 	{
 		LogString(std::string("hudson: no surface picture this frame, for ") + name);
 	}
-	else if (FAILED(D3DXSaveTextureToFileA((pictures + name).c_str(), D3DXIFF_PNG, surface, NULL)))
+	else if (!PlainWrite_TextureToFile(pictures + name, D3DXIFF_PNG, surface, NULL))
 	{
 		LogErrorString(std::string("hudson: couldn't save ") + name);
 	}
@@ -5299,7 +5301,7 @@ static void SayTheHostIsReady()
 	Hudson_NetSay("the host is in its level, and answering");
 
 	char const *const folder = GetSaveFolderPath();
-	FILE *const file = fopen((std::string(folder ? folder : "") + "hudson-net-ready.txt").c_str(), "w");
+	FILE *const file = PlainWrite_FOpen((std::string(folder ? folder : "") + "hudson-net-ready.txt").c_str(), "w");
 
 	if (file)
 	{
@@ -5321,7 +5323,7 @@ static bool SaveTheScreen(std::string const &path)
 	{
 		if (SUCCEEDED(screen->GetDesc(&size)) && SUCCEEDED(device->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL)))
 		{
-			saved = SUCCEEDED(device->GetRenderTargetData(screen, copy)) && SUCCEEDED(D3DXSaveSurfaceToFileA(path.c_str(), D3DXIFF_PNG, copy, NULL, NULL));
+			saved = SUCCEEDED(device->GetRenderTargetData(screen, copy)) && PlainWrite_SurfaceToFile(path, D3DXIFF_PNG, copy, NULL);
 			copy->Release();
 		}
 
@@ -11665,7 +11667,7 @@ int Hudson_LastThingBeforeExit()
 	// a second line, only here if everything shut down: the result was written before that started
 	char const *folder = GetSaveFolderPath();
 	std::string const path = std::string(folder ? folder : "") + kResultFileName;
-	FILE *const file = fopen(path.c_str(), "a");
+	FILE *const file = PlainWrite_FOpen(path.c_str(), "a");
 
 	if (file)
 	{

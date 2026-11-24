@@ -55,6 +55,7 @@
 //   the screen list's buffers hold 65536 corners, 16384 quads, the most its 16-bit index numbers reach: the level editor draws every letter of
 //   its panels as a quad, and at 2560 x 1440 they filled the 4096 the game had, so letters and boxes were left out. The game draws as it did.
 #include "d3_func.h"
+#include "plain_write_picture.h"   // a picture is written only through plain_write.h, never through a link (card 6, Tao 1)
 #include "device_reset_hooks.h"   // what else lives on the card alone, let go in ReleaseVolatileResources
 #include "hudson.h"
 #include "window_slot.h"
@@ -1177,7 +1178,8 @@ void CreateScreenShotImage()
 	}
 
 	// save surface to image file
-	if (FAILED(D3DXSaveSurfaceToFile(fileName.str().c_str(), D3DXIFF_JPG, frontBuffer, NULL, NULL)))
+	// made in memory and written through plain_write.h, never through a link put at its name (a date and time, a name anyone can guess)
+	if (!PlainWrite_SurfaceToFile(fileName.str(), D3DXIFF_JPG, frontBuffer, NULL))
 	{
 		LogDxError(LastError, __LINE__, kThisFile);
 		LogErrorString("Save Surface to file failed");

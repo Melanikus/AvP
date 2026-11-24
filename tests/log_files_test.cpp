@@ -37,6 +37,16 @@ static void Check(bool passed, const char *what)
 	}
 }
 
+// The whole path of a name in the folder the test runs in. A symbolic link's target is given as one: a relative target is read from the
+// link's own folder, so "<test folder>/target.txt" pointed at <test folder>/<test folder>/target.txt, which isn't there, and a check that a link
+// isn't written through passed whether or not the code followed it (Drake, 2026-11-23, card 6: found by plain_write_test's red run on GitHub).
+static std::string WholePath(const std::string &name)
+{
+	char whole[MAX_PATH];
+	DWORD const length = ::GetFullPathNameA(name.c_str(), MAX_PATH, whole, NULL);
+	return length > 0 && length < MAX_PATH ? std::string(whole) : name;
+}
+
 static std::string ReadWholeFile(const std::string &name)
 {
 	std::ifstream file(name.c_str(), std::ios::binary);
@@ -200,8 +210,9 @@ static void TestMovingAlong()
 
 		WriteWholeFile(target, "what a link points to\n");
 
-		if (::CreateSymbolicLinkA(log.c_str(), target.c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
+		if (::CreateSymbolicLinkA(log.c_str(), WholePath(target).c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
 		{
+			Check(ReadWholeFile(log) == "what a link points to\n", "(the link leads to the file it was made for)");
 			Check(!LogFiles_Empty(log) && LogFiles_OpenToAdd(log) == INVALID_HANDLE_VALUE, "a link is neither emptied nor written to");
 			Check(ReadWholeFile(target) == "what a link points to\n", "and what it points to is just as it was");
 			::DeleteFileA(log.c_str());

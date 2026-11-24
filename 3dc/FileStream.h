@@ -24,6 +24,8 @@
 
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   adds RanOutOfData, which says that a read reached the end of the file
+// Modified 2026-11-23 by Melanikus (Drake) for the AvP port (card 6):
+//   adds WhyNotOpened, which says in words why a file couldn't be opened to be written (a link, a second name, a device, ...)
 // Modified 2026-11-23 by Melanikus (Frost) for the AvP port:
 //   adds ReadsMade, how many reads the stream has asked Windows for (rim_test counts the reads a picture takes)
 //   adds Identity, which file the stream has open (the placement picker's picture cache keys by it)
@@ -119,6 +121,9 @@ class FileStream
 		// reading a file that says its own length has to ask this, or a damaged file can keep it going for ever.
 		bool RanOutOfData();
 
+		// Why the last Open to write refused the file, in words for the log (3dc/plain_write.h); empty when it opened, or for a read
+		const std::string &WhyNotOpened() const { return whyNotOpened; }
+
 		DWORD ReadBytes(uint8_t *buffer, size_t nBytes);
 
 		// How many reads this stream has asked Windows for, one a ReadBytes: each is a call into the system, so a reader that takes one byte at a time
@@ -166,6 +171,8 @@ class FileStream
 		uint32_t fileOffset;
 		uint32_t fileSize;
 		uint32_t memberBytesLeft;    // how much of a file inside a fastfile is still to be read
+
+		std::string whyNotOpened;    // why the last Open to write refused its file (WhyNotOpened)
 
 		bool OpenActual(const std::string &fileName, eAccess accessType);
 };

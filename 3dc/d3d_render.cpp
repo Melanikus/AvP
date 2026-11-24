@@ -93,6 +93,7 @@
 //   an animated polygon's corners are read in 16.16, as CreateTxAnimUVArray now gives them, so flowing animated textures move smoothly
 //   (#97, reported by Bobblen). See texture_animation.h
 #include "console.h"
+#include "plain_write_picture.h"   // a picture is written only through plain_write.h, never through a link (card 6, Tao 1)
 #include "debug_view.h"      // the normals view (Drake 11-20)
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -3635,7 +3636,7 @@ bool R_DrawScreenToChain(IDirect3DSwapChain9 *chain, uint32_t width, uint32_t he
 				chainPictureSaved = SUCCEEDED(chainBuffer->GetDesc(&size))
 					&& SUCCEEDED(d3d.lpD3DDevice->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL))
 					&& SUCCEEDED(d3d.lpD3DDevice->GetRenderTargetData(chainBuffer, copy))
-					&& SUCCEEDED(D3DXSaveSurfaceToFileA(chainPicturePath, D3DXIFF_PNG, copy, NULL, NULL));
+					&& PlainWrite_SurfaceToFile(chainPicturePath, D3DXIFF_PNG, copy, NULL);
 
 				if (copy)
 				{
