@@ -55,6 +55,7 @@
 //   the screen list's buffers hold 65536 corners, 16384 quads, the most its 16-bit index numbers reach: the level editor draws every letter of
 //   its panels as a quad, and at 2560 x 1440 they filled the 4096 the game had, so letters and boxes were left out. The game draws as it did.
 #include "d3_func.h"
+#include "device_reset_hooks.h"   // what else lives on the card alone, let go in ReleaseVolatileResources
 #include "hudson.h"
 #include "window_slot.h"
 #include "surface_normals.h"
@@ -295,6 +296,10 @@ uint32_t R_GetScreenWidth()
 
 bool ReleaseVolatileResources()
 {
+	// first, what parts of the program outside the game keep on the card alone (device_reset_hooks.h: the level editor's live picker panes' depth surface and
+	// state block), before the game's own textures they may hold are let go: a reset with any of it held is refused
+	DeviceReset_ReleaseAll();
+
 	extern void ReleaseEditorGroupQueries();
 	ReleaseEditorGroupQueries();   // the editor's occlusion queries (R_SetEditorWorldTriangles groups): default-pool, outstanding between frames
 	FrameTiming_Release();
