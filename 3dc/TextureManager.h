@@ -38,7 +38,12 @@
 enum TextureUsage
 {
 	TextureUsage_Normal,
-	TextureUsage_Dynamic
+	TextureUsage_Dynamic,
+
+	// A PICTURE DRAWN INTO ON THE CARD (added 2026-11-23 by Melanikus (Frost) for the level editor's live picker panes, R-INT-16): 32 bits a pixel only, it
+	// lives on the card alone, so it is released for a reset of the device and made again after, as a Dynamic one is, and it is never locked (the card
+	// draws into it; nothing is written into it from here)
+	TextureUsage_RenderTarget
 };
 
 enum TextureLock

@@ -11,6 +11,9 @@
 //   (B) one texture the reset can't make again doesn't stop the others being made again
 //   (C) a slot whose texture is released only for the reset is still its owner's: a texture made in between is never given it
 //   (D) the owner releasing a texture that is waiting for the reset frees its slot then, so the reset doesn't make it again
+// And a PICTURE DRAWN INTO ON THE CARD (TextureUsage_RenderTarget, for the level editor's live picker panes; added 2026-11-23):
+//   (E) it is released for the reset as a Dynamic one is (a reset with one still held fails), and made again after, with its own usage
+//   (F) it is never locked: Tex_Lock refuses it without asking the card (one on the card alone can't be locked)
 // The card is stood in: the test's own R_CreateTexture and R_ReleaseTexture make and free stand-in textures, count what was made, and can be told to fail one.
 //
 // HOW IT RUNS
@@ -18,7 +21,7 @@
 // tests/build.ps1 compiles it with the manager's own TextureManager.cpp (and the RimLoader and FileStream it reads pictures with). The program gives back a
 // non-zero result if anything failed.
 //
-// RED FIRST: on avpx_main bb7d2b29, (A), (B), (C) and (D) all fail.
+// RED FIRST: on avpx_main bb7d2b29, (A), (B), (C) and (D) all fail. On 17ec47d9 with TextureUsage_RenderTarget only named (its red), (E) and (F) fail.
 
 #include <stdio.h>
 #include <string>
@@ -52,6 +55,8 @@ texID_t MISSING_TEXTURE = 1;
 static int cardMade = 0;                     // stand-in textures made so far
 static std::vector<std::string> madeNames;   // the name of each texture made, in order
 static std::string failName;                 // a texture of this name can't be made
+static std::vector<TextureUsage> madeUsages; // the usage each was made with, in order
+static int cardLocks = 0;                    // locks the card was asked for
 
 bool R_CreateTexture(uint32_t width, uint32_t height, uint32_t bitsPerPixel, enum TextureUsage usageType, Texture &texture)
 {
@@ -72,6 +77,7 @@ bool R_CreateTexture(uint32_t width, uint32_t height, uint32_t bitsPerPixel, enu
 	texture.usage = usageType;
 	texture.isValid = true;
 	madeNames.push_back(texture.name);
+	madeUsages.push_back(usageType);
 	return true;
 }
 
@@ -87,6 +93,7 @@ void R_UnsetTexture(texID_t)
 
 bool R_LockTexture(Texture &, uint8_t **, uint32_t *, enum TextureLock)
 {
+	cardLocks++;
 	return false;
 }
 
@@ -265,6 +272,32 @@ int main()
 
 	Check(a != MISSING_TEXTURE && !Valid(a) && !madeNameless, "(A) a texture its owner released is not made again by the reset, nor anything in its slot (made again: " +
 		Names(madeA) + ")");
+
+	// ---- (E) a picture drawn into on the card: released for the reset, and made again with its own usage
+	texID_t const atlas = Tex_Create("editor_atlas", 256, 256, 32, TextureUsage_RenderTarget);
+	bool const atlasMade = atlas != MISSING_TEXTURE && Valid(atlas) && Tex_GetTextureDetails(atlas).usage == TextureUsage_RenderTarget;
+	ReleaseForTheReset();
+	bool const releasedForReset = atlasMade && !Valid(atlas) && Tex_GetTextureDetails(atlas).texture == NULL;
+	size_t const usagesBefore = madeUsages.size();
+	std::vector<std::string> const madeE = MakeAgainAfterTheReset();
+	bool madeAsTarget = false;
+
+	for (size_t i = usagesBefore; i < madeUsages.size(); i++)
+	{
+		madeAsTarget = madeAsTarget || (madeNames[i] == "editor_atlas" && madeUsages[i] == TextureUsage_RenderTarget);
+	}
+
+	Check(atlasMade, "(E) a texture drawn into on the card is made, with its own usage");
+	Check(releasedForReset, "(E) and released for the reset, as a Dynamic one is (a reset with one still held fails)");
+	Check(Valid(atlas) && madeAsTarget, "(E) and made again after the reset, still one drawn into (made again: " + Names(madeE) + ")");
+
+	// ---- (F) never locked
+	uint8_t *pixels = reinterpret_cast<uint8_t *>(1);
+	uint32_t pitch = 7;
+	int const locksBefore = cardLocks;
+	bool const locked = Tex_Lock(atlas, &pixels, &pitch);
+
+	Check(!locked && pixels == NULL && cardLocks == locksBefore, "(F) a texture drawn into on the card is never locked: Tex_Lock refuses it without asking the card");
 
 	Tex_DeInit();
 
