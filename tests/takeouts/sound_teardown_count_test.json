@@ -35,6 +35,21 @@
 			]
 		},
 		{
+			"name": "a teardown is counted only after the sounds are freed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\tteardowns++;\n\n\tLOADED_SOUND* ls;",
+					"to": "\tLOADED_SOUND* ls;"
+				},
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\t\tDeallocateMem (ls);\n\t}\n}",
+					"to": "\t\tDeallocateMem (ls);\n\t}\n\n\tteardowns++;\n}"
+				}
+			]
+		},
+		{
 			"name": "an empty teardown is not counted",
 			"changes": [
 				{

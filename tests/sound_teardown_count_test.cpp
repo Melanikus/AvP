@@ -50,8 +50,19 @@ void InitialiseBaseFrequency(SOUNDINDEX)
 {
 }
 
-void Sound_ForgetAddressesInside(const void *, size_t)   // psnd.cpp's, which our_mem.cpp calls on every free: no sound plays here
+// psnd.cpp's, which our_mem.cpp calls on every free (no sound plays here). It is also where this test watches a teardown from inside: at the first free while
+// watchingTheTeardown is set, it notes the count as code running during the frees would see it
+static bool watchingTheTeardown = false;
+static bool sawAFree = false;
+static unsigned long long countAtTheFirstFree = 0;
+
+void Sound_ForgetAddressesInside(const void *, size_t)
 {
+	if (watchingTheTeardown && !sawAFree)
+	{
+		sawAFree = true;
+		countAtTheFirstFree = LoadedSounds_Teardowns();
+	}
 }
 
 void LogErrorString(const std::string &text)
@@ -105,9 +116,12 @@ static void TestTheCount()
 	// what a holder does: note the count when it gets its sound
 	unsigned long long const noted = LoadedSounds_Teardowns();
 
+	watchingTheTeardown = true;
 	LoseAllNonCommonSounds();
+	watchingTheTeardown = false;
 	Check(loaded_sounds.size() == 0 && unloaded == 1, "the teardown let go of the sound, though a holder still had it");
 	Check(LoadedSounds_Teardowns() == noted + 1, "and it counted: the holder sees a number other than the one it noted, so it knows its sound is gone");
+	Check(sawAFree && countAtTheFirstFree == noted + 1, "it counted BEFORE freeing anything, so code that runs while the sounds are freed already sees the new number");
 
 	LoseAllNonCommonSounds();
 	Check(LoadedSounds_Teardowns() == noted + 2, "a teardown with nothing loaded counts too, so a holder never has to know what was loaded");
