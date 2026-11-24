@@ -3392,10 +3392,32 @@ Check-Order $installScript 'foreach ($flag in @(' '$found = gh @which' 'before i
 # the pull request that brings it
 $testsWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/tests.yml')) -replace "`r", ''
 Check ($testsWorkflow -match '(?m)^  pull_request:\n') 'the tests run on every pull request'
-Check-Order $testsWorkflow 'name: Unit tests' './tools/check-hudson-asleep.ps1' 'and the required Unit tests check refuses any way a player''s game could run Hudson'
-Check-Order $testsWorkflow './tools/check-hudson-asleep.ps1' './tests/build.ps1' 'before it builds anything'
-Check-Order $testsWorkflow 'name: Unit tests' './tools/check-online-play.ps1' 'and the required Unit tests check refuses any way a player''s game could play online but the safe way'
-Check-Order $testsWorkflow './tools/check-online-play.ps1' './tests/build.ps1' 'before it builds anything'
+
+# THE REQUIRED UNIT TESTS CHECK, IN PARTS SIDE BY SIDE (added 2026-11-23 by Melanikus (Drake) for the AvP port; the owner: "You obviously need to
+# paralelize the tests"). It was one job of about 30 minutes, the longest of every pull request. Now the checks before the tests, the tests in parts,
+# and the release checks run side by side, and one job keeps the required name. That job needs all of them and runs even when one failed, because
+# GitHub counts a required check that was skipped as passed; it passes only when each of them passed. The checks that refuse a player's game running
+# Hudson or playing online but the safe way are one of the jobs it needs, so a way in left awake still fails the pull request that brings it.
+function Get-WorkflowJob([string]$text, [string]$id)
+{
+    [regex]::Match($text, "(?ms)^  $([regex]::Escape($id)):\n.*?(?=^  [a-z][a-z0-9-]*:\n|\z)").Value
+}
+
+$unitJob = Get-WorkflowJob $testsWorkflow 'unit-tests'
+$unitChecks = Get-WorkflowJob $testsWorkflow 'unit-tests-checks'
+$unitParts = Get-WorkflowJob $testsWorkflow 'unit-tests-part'
+$unitRelease = Get-WorkflowJob $testsWorkflow 'unit-tests-release-checks'
+Check ($unitJob -match '(?m)^    name: Unit tests\n') 'the required Unit tests check is one job, by that name'
+Check ($unitJob -match '(?m)^    needs: \[unit-tests-checks, unit-tests-part, unit-tests-release-checks\]\n') 'and it needs the checks, every part of the tests and the release checks'
+Check ($unitJob -match '(?m)^    if: always\(\)\n') 'and it runs even when one of them failed (a required check that was skipped would count as passed)'
+Check ($unitJob.Contains('CHECKS: ${{ needs.unit-tests-checks.result }}') -and $unitJob.Contains('PARTS: ${{ needs.unit-tests-part.result }}') -and
+    $unitJob.Contains('RELEASE: ${{ needs.unit-tests-release-checks.result }}') -and $unitJob.Contains('if [ "$CHECKS" != "success" ]') -and
+    $unitJob.Contains('if [ "$PARTS" != "success" ]') -and $unitJob.Contains('if [ "$RELEASE" != "success" ]')) 'and it fails unless each of them passed'
+Check ($unitChecks -match 'shell: pwsh\n\s+run: \./tools/check-hudson-asleep\.ps1\s') 'and its checks refuse any way a player''s game could run Hudson'
+Check ($unitChecks -match 'shell: pwsh\n\s+run: \./tools/check-online-play\.ps1\s') 'and any way a player''s game could play online but the safe way'
+Check ($unitParts -match '(?m)^      fail-fast: false\b' -and $unitParts.Contains('PART: ${{ strategy.job-index }}') -and $unitParts.Contains('PARTS: ${{ strategy.job-total }}') -and
+    $unitParts.Contains('./tests/build.ps1 -Part $env:PART -Parts $env:PARTS')) 'every part builds and runs its own share of the tests, numbered by GitHub, and one part failing stops no other'
+Check ($unitRelease -match 'shell: pwsh\n\s+run: \./tests/release-test\.ps1\s') 'and the release checks are tested on their own'
 
 # --- Outside the automatic checks, each copy of the repository builds its tests into a folder of its own. tests/build.ps1 empties its output
 # folder first, and copies of the repository side by side would share the folder next to them, so one copy's build emptied another's tests,
@@ -3403,6 +3425,11 @@ Check-Order $testsWorkflow './tools/check-online-play.ps1' './tests/build.ps1' '
 $testBuild = (Get-Content -Raw (Join-Path $repository 'tests/build.ps1')) -replace "`r", ''
 Check ($testBuild.Contains('$outputDir  = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP ''avp-tests'' }')) 'in the automatic checks, tests/build.ps1 builds into the runner''s own folder'
 Check ($testBuild.Contains('else { Join-Path (Split-Path -Parent $repository) "AvP-test-out\tests\$(Split-Path -Leaf $repository)" }')) 'and outside them, into a folder of this copy of the repository''s own'
+
+# A part of the tests (above) is shared out as the sanitizer job shares them: in name order, compared letter by letter, round again; so every test is
+# in exactly one part. A part's number that makes no sense is refused, never read as "every test" or "none"
+Check ($testBuild.Contains('[Array]::Sort($names, [StringComparer]::Ordinal)') -and $testBuild.Contains('for ($i = $Part; $i -lt $names.Count; $i += $Parts) { $names[$i] }')) 'tests/build.ps1 shares the tests out between parts in name order, round again, as the sanitizer job does'
+Check ($testBuild.Contains('if ($Parts -lt 0 -or ($Parts -eq 0 -and $Part -ne 0) -or ($Parts -gt 0 -and ($Part -lt 0 -or $Part -ge $Parts -or $Only)))')) 'and refuses a part that makes no sense'
 Check ($testBuild.Contains('if (Test-Path -LiteralPath $outputDir) { Remove-Item -LiteralPath $outputDir -Recurse -Force }')) 'and it empties only that folder, its name read letter for letter'
 
 # The same for every other local test output: the take-out runner's copies, its refusal check's folder, the sanitizer's builds, and the stock
