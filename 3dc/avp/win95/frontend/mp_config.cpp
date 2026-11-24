@@ -1,4 +1,8 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-23 by Melanikus (Drake) for the AvP port (card 6, Tao 1 and 3):
+//   a settings file's name is used only if it's a plain file name (plain_file_name.h): the player types it, Ctrl+V pastes it, and
+//   "Previous Game" comes from language.txt, so "..\..\x" chose where the game wrote. The settings and the IP addresses are written
+//   through FileStream's judged write (plain_write.h), never through a link, and a refusal says why in the log.
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the level lists have the 32 single player levels on them, between the multiplayer levels and the custom ones
 //   the settings for the new classes and Allow Staff come last in the file, checked, so older files read the same
@@ -25,6 +29,7 @@
 #include "..\3dc\FileStream.h"
 #include "logString.h"
 #include "marine_classes.h"
+#include "plain_file_name.h"
 
 extern void SetDefaultMultiplayerConfig();
 extern char MP_SessionName[];
@@ -47,8 +52,20 @@ AVPMENU_ELEMENT* AvPMenu_Multiplayer_LoadConfig=0;
 // The name is one found in the folder, up to 259 characters long, or one the player typed, so the whole path may not
 // fit. A path cut short could name a different file, so in that case nothing is used: one line goes to the log, the
 // buffer is left empty, FALSE comes back, and the caller acts as if the file were missing.
+// The name comes from outside (typed, pasted, a file found in the folder, or language.txt's "Previous Game"), so first it must be a
+// plain file name (plain_file_name.h): never a way into another folder, a device, or a hidden part of a file. A name that isn't makes
+// no path at all, the same way, and the log says why, with the name shown so that it can't break the log's lines.
 static BOOL BuildConfigPath(char *buffer, const char *folder, const char *dir, const char *name, const char *extension)
 {
+	std::string const whyNot = PlainFileName_Why(name);
+
+	if (!whyNot.empty())
+	{
+		LogErrorString("configuration file name not used (" + whyNot + "): " + PlainFileName_Printable(name));
+		buffer[0] = 0;
+		return FALSE;
+	}
+
 	if (_snprintf(buffer, MAX_PATH - 1, "%s%s/%s%s", folder, dir, name, extension) < 0)
 	{
 		LogErrorString(std::string("configuration file path too long: ") + folder + dir + "/" + name + extension);
@@ -480,6 +497,7 @@ void SaveMultiplayerConfiguration(const char* name)
 	FileStream file;
 	file.Open(filename, FileStream::FileWrite, FileStream::SkipFastFileCheck);
 	if (!file.IsGood()) {
+		LogErrorString(std::string("multiplayer settings not saved to ") + filename + ": " + file.WhyNotOpened());
 		return;
 	}
 
@@ -693,12 +711,17 @@ void SaveIPAddress(const char* name, const char* address)
 	}
 	
 	::CreateDirectory(IP_ADDRESS_DIR, 0);
-	FILE* file = avp_fopen(filename,"wb");
-	if (!file) return;
 
-	fwrite(address,1,strlen(address)+1,file);
-	
-	fclose(file);
+	// the address and the 0 after it, as before, through FileStream's judged write (never through a link)
+	FileStream file;
+	file.Open(filename, FileStream::FileWrite, FileStream::SkipFastFileCheck);
+	if (!file.IsGood()) {
+		LogErrorString(std::string("IP address not saved to ") + filename + ": " + file.WhyNotOpened());
+		return;
+	}
+
+	file.WriteBytes((const uint8_t *)address, strlen(address) + 1);
+	file.Close();
 }
 
 void LoadIPAddress(const char* name)

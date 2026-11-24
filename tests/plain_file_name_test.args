@@ -1,0 +1,4 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /D_MSVC_STL_HARDENING=1 /Itests/every_test /FIevery_test.h
+/D_WINDOWS /DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /D_WIN32_WINNT=0x0602 /D_SECURE_SCL=0 /D_HAS_ITERATOR_DEBUGGING=0
+/I3dc
+tests/plain_file_name_test.cpp

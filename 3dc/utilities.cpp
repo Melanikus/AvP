@@ -1,3 +1,6 @@
+// Modified 2026-11-23 by Melanikus (Drake) for the AvP port (card 6, Tao 1 and 3):
+//   avp_open_userfile, avp_fopen and avp_CreateFile write only through plain_write.h: never through a link, into a second name of
+//   another file, or to a device. Reading is as it was.
 // Modified 2026-11-22 by Melanikus for the AvP port:
 //   the window title names the build's version (tools/build-and-package.ps1 writes it), not the time the compiler ran, so the same commit makes the same bytes
 // Modified 2026-11-14 by Melanikus for the AvP port:
@@ -37,6 +40,7 @@
 //   what went wrong finding the save folder is kept for the log to say, because the log asks for that folder first
 #include "utilities.h"
 #include "hudson.h"
+#include "plain_write.h"
 #include <string>
 #include <algorithm>
 #include "configFile.h"
@@ -256,7 +260,13 @@ FILE *avp_open_userfile(const char *fileName, const char *mode)
 	}
 	else {
 		finalPath = savePath + sFileName;
-	}	
+	}
+
+	// a writing mode ("w", "a", or any with "+") only through PlainWrite_FOpen: never through a link (plain_write.h says why)
+	if (PlainWrite_ModeWrites(mode))
+	{
+		return PlainWrite_FOpen(finalPath, mode);
+	}
 
 	return fopen(finalPath.c_str(), mode);
 #endif
@@ -279,6 +289,12 @@ FILE *avp_fopen(const char *fileName, const char *mode)
 #ifdef _WIN32
 
 	finalPath += fileName;
+
+	// a writing mode ("w", "a", or any with "+") only through PlainWrite_FOpen: never through a link (plain_write.h says why)
+	if (PlainWrite_ModeWrites(mode))
+	{
+		return PlainWrite_FOpen(finalPath, mode);
+	}
 
 	return fopen(finalPath.c_str(), mode);
 #endif
@@ -319,6 +335,18 @@ HANDLE avp_CreateFile(LPCTSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMo
 
 #endif
 #ifdef _WIN32
+	// Only a plain read of a file that is there opens as it was. Anything else goes through PlainWrite_Open, never through a link
+	// (plain_write.h says why): an access beyond reading (writing its data, and also FILE_WRITE_ATTRIBUTES, FILE_WRITE_EA, DELETE,
+	// WRITE_DAC, WRITE_OWNER, MAXIMUM_ALLOWED, which change a file without writing its data), and any way but OPEN_EXISTING (OPEN_ALWAYS
+	// makes a file even for reading). (Frost's review of #294, SHOULD 1.) Every caller gives no security attributes and no template file,
+	// so the open is the same but for that.
+	DWORD const reads = GENERIC_READ | FILE_READ_DATA | FILE_READ_ATTRIBUTES | FILE_READ_EA | READ_CONTROL | SYNCHRONIZE;
+
+	if ((dwDesiredAccess & ~reads) != 0 || dwCreationDisposition != OPEN_EXISTING)
+	{
+		return PlainWrite_Open(lpFileName, dwDesiredAccess, dwShareMode, dwCreationDisposition, dwFlagsAndAttributes, NULL);
+	}
+
 	return CreateFile(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 #endif
 }

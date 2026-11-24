@@ -90,6 +90,16 @@ static void MakeFile(const std::string &name, const char *text)
 	}
 }
 
+// The whole path of a name in the folder the test runs in. A symbolic link's target is given as one: a relative target is read from the
+// link's own folder, so "<test folder>/target.txt" pointed at <test folder>/<test folder>/target.txt, which isn't there, and a check that a link
+// isn't written through passed whether or not the code followed it (Drake, 2026-11-23, card 6: found by plain_write_test's red run on GitHub).
+static std::string WholePath(const std::string &name)
+{
+	char whole[MAX_PATH];
+	DWORD const length = ::GetFullPathNameA(name.c_str(), MAX_PATH, whole, NULL);
+	return length > 0 && length < MAX_PATH ? std::string(whole) : name;
+}
+
 static std::string ReadWholeFile(const std::string &name)
 {
 	HANDLE const file = ::CreateFileA(name.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -249,8 +259,9 @@ static void TestNumbersAndKeeping()
 			Check(false, "a second name for a file can be made on this disk, so that it can be tried");
 		}
 
-		if (::CreateSymbolicLinkA(link.c_str(), other.c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
+		if (::CreateSymbolicLinkA(link.c_str(), WholePath(other).c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
 		{
+			Check(ReadWholeFile(link) == "someone else's", "(the link leads to the file it was made for)");
 			Check(!Mark_WritePicture(link, "png", 3) && ReadWholeFile(other) == "someone else's", "a picture is never written through a link");
 			::DeleteFileA(link.c_str());
 		}

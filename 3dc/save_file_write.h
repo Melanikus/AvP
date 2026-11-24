@@ -7,11 +7,16 @@
 // place, which Windows does in one step. If anything goes wrong before then, the old save hasn't been touched.
 //
 // It's on its own so that a test can try it on real files, and make each step fail.
+//
+// Changed 2026-11-23 by Melanikus (Drake), card 6 (Tao 1 and 3): the new file, "<slot>.new", a name anyone can guess, is made through
+// PlainWrite_Open (plain_write.h). With a plain CreateFile, a link put there in advance took the save, wherever it pointed.
 #ifndef SAVE_FILE_WRITE_H
 #define SAVE_FILE_WRITE_H
 
 #include <windows.h>
 #include <string>
+
+#include "plain_write.h"
 
 // Windows can write less than it was asked to and still say it worked, so the amount has to be checked as well.
 inline bool SaveFile_WriteOnePart(HANDLE file, const void *part, DWORD size)
@@ -62,7 +67,7 @@ inline bool SaveFile_WriteSafely(const char *path, const void *first, DWORD firs
 	}
 
 	std::string const newFile = std::string(path) + ".new";
-	HANDLE const file = ::CreateFileA(newFile.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE const file = PlainWrite_Open(newFile, GENERIC_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	if (file == INVALID_HANDLE_VALUE)
 	{

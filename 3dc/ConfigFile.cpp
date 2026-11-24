@@ -28,6 +28,7 @@
 //   a setting with nothing after its = sign is read as empty, instead of crashing the game at start-up
 
 #include <string>
+#include "plain_write.h"   // a file is written only through plain_write.h, never through a link (card 6, Tao 1)
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -130,12 +131,8 @@ bool Config_Load()
 bool Config_Save()
 {
 	std::string filePath = GetSaveFolderPath() + kCfgFileName;
-	std::ofstream file(filePath.c_str());
-	if (!file.is_open())
-	{
-		std::cout << "Error opening config file " << kCfgFileName << " for save!" << std::endl;
-		return false;
-	}
+	// the settings are put together in memory, then written through plain_write.h (never through a link put at the file's name)
+	std::ostringstream file;
 
 	MapHeading::iterator headingIt = AvPConfig.begin();
 
@@ -159,7 +156,20 @@ bool Config_Save()
 			file << "\n";
 		}
 	}
-	return true;
+
+	std::string why;
+	FILE *const out = PlainWrite_FOpen(filePath, "w", &why);
+
+	if (!out)
+	{
+		LogErrorString("Error opening config file " + kCfgFileName + " for save: " + why);
+		return false;
+	}
+
+	std::string const text = file.str();
+	bool const written = fwrite(text.data(), 1, text.size(), out) == text.size();
+
+	return fclose(out) == 0 && written;
 }
 
 bool CheckValuesExist(const std::string &heading, const std::string &variable)
@@ -301,14 +311,17 @@ static bool Config_CreateDefault()
 {
 	std::string filePath(GetSaveFolderPath() + kCfgFileName);
 
-	std::ofstream file(filePath.c_str());
-	if (!file.is_open())
+	// an empty file, made through plain_write.h (never through a link put at its name)
+	std::string why;
+	FILE *const file = PlainWrite_FOpen(filePath, "w", &why);
+
+	if (!file)
 	{
-		LogErrorString("Couldn't create default config file!");
+		LogErrorString("Couldn't create default config file: " + why);
 		return false;
 	}
 
-	file.close();
+	fclose(file);
 
 	return true;
 }

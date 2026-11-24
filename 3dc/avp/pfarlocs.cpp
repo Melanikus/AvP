@@ -10,6 +10,7 @@
 //   AIModuleDoorKindOf, so ai_module_door.h can ask a module what kind of door it is. AIModuleIsADoor, which looked through an AI
 //   module's list for a door, is taken out: its only caller was the scent test, which now finds the door itself (ai_module_door.h)
 #include "3dc.h"
+#include "plain_write.h"   // a file is written only through PlainWrite_FOpen, never through a link (card 6, Tao 1)
 #include "inline.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -144,7 +145,7 @@ void BuildFarModuleLocs(void)
 	}
 		
 	#if logFarLocData
-	logfile = fopen("E:/3DC/FARLOCS.TXT","w");
+	logfile = PlainWrite_FOpen("E:/3DC/FARLOCS.TXT","w");
 	fprintf(logfile, "MODULE FAR LOCATIONS DATA \n");
 	fprintf(logfile, "ENV: %s \n", Env_List[AvP.CurrentEnv]->main);
 	fprintf(logfile, "************************* \n");
