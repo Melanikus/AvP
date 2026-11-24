@@ -1,4 +1,4 @@
-// The test of where a quad showing part of a texture reads from (3dc/quad_part.h, used by d3d_render.cpp DrawQuadPart). Written 2026-11-23 by Melanikus (Frost)
+// The test of where a quad showing part of a texture reads from (3dc/quad_part.h: the places d3d_render.cpp DrawFontQuad takes). Written 2026-11-23 by Melanikus (Frost)
 // for the AvP port.
 //
 // WHAT IT TESTS
