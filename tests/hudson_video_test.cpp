@@ -442,6 +442,8 @@ static void TestThatAFullQueueDropsPictures(bool asksFirst)
 
 	bool everSaidNo = false;
 	bool hadASlowFrame = false;
+	int firstDropped = -1;   // the first moment a picture was dropped for
+	int lastTaken = -1;      // the last moment the writer took a picture for: the film ends there
 
 	for (int i = 0; i < pictures; i++)
 	{
@@ -462,6 +464,8 @@ static void TestThatAFullQueueDropsPictures(bool asksFirst)
 			hadASlowFrame = true;
 		}
 
+		long const droppedBefore = Facts().dropped;
+
 		if (!asksFirst || HudsonVideoWriter_WantsPictureFor(MomentOf(i)))
 		{
 			HudsonVideoWriter_Add(&picture[0], pitch, MomentOf(i));
@@ -470,11 +474,27 @@ static void TestThatAFullQueueDropsPictures(bool asksFirst)
 		{
 			everSaidNo = true;
 		}
+
+		// Only this thread adds pictures, so one that wasn't counted as dropped, while the film goes on, went into the queue
+		if (Facts().dropped != droppedBefore)
+		{
+			if (firstDropped < 0)
+			{
+				firstDropped = i;
+			}
+		}
+		else if (Facts().goingOn)
+		{
+			lastTaken = i;
+		}
 	}
 
-	// Then a slow frame, as the game has now and then: the encoder catches up, and the next picture goes in. The loop above is far faster
-	// than the encoder, so its drops all come at its end; only a picture after them shows that each moment missed while the queue was full
-	// is counted once, as dropped, and not a second time as a moment nobody had a picture for.
+	Check(hadASlowFrame && firstDropped >= 0 && lastTaken > firstDropped, "after drops and a slow frame, the next picture goes in: moment "
+		+ std::to_string(lastTaken) + ", the first dropped " + std::to_string(firstDropped));
+
+	// Then, when the game asks first, a slow frame at the end too: the encoder catches up, and the next picture goes in. A picture after
+	// drops shows that each moment missed while the queue was full is counted once, as dropped, and not a second time as a moment nobody
+	// had a picture for.
 	int moments = pictures;
 
 	if (asksFirst)
@@ -489,6 +509,7 @@ static void TestThatAFullQueueDropsPictures(bool asksFirst)
 			{
 				HudsonVideoWriter_Add(&picture[0], pitch, MomentOf(moments));
 				tookOneMore = true;
+				lastTaken = moments;
 			}
 
 			moments++;
@@ -508,10 +529,11 @@ static void TestThatAFullQueueDropsPictures(bool asksFirst)
 
 	WhatWasRead const read = ReadFilm(path.c_str());
 
-	// The film holds a picture for every moment from its first to its last: a moment missed between them holds the picture before, as the
-	// game's film does when a frame comes late. Without the picture after the drops, they all come at the end, and the film ends with the
-	// last picture written.
-	int const filmPictures = asksFirst ? moments : facts.written;
+	// The film holds a picture for every moment from its first to the last one a picture was taken for: a moment missed between them holds
+	// the picture before, as the game's film does when a frame comes late. Moments dropped after the last picture taken aren't in it. So
+	// its length follows the last picture taken, not the count of them: when the encoder makes room part way, as it did on its own on a
+	// slow machine (PR #303's sanitizer run, 105 pictures from 14 written), the film is longer than the count.
+	int const filmPictures = lastTaken + 1;
 
 	Check(read.pictures == filmPictures, "the film holds a picture for each moment up to its last: " + std::to_string(read.pictures) + " of " + std::to_string(filmPictures));
 
