@@ -441,9 +441,27 @@ static void TestThatAFullQueueDropsPictures(bool asksFirst)
 	HudsonVideoWriter_Start(path.c_str(), 1920, 1080, 0, kHudsonVideoMostBytes);
 
 	bool everSaidNo = false;
+	bool hadASlowFrame = false;
 
 	for (int i = 0; i < pictures; i++)
 	{
+		// A slow frame part way, as the game has now and then: once the queue has been full and a picture was dropped, the encoder
+		// catches up a little before the next picture comes. Two more pictures written means the place of the first of them is free
+		// again (the writer frees a place before it starts on the next one), so the next picture goes in after drops, on a fast
+		// machine and on a slow one alike. A slow machine did that on its own once (PR #303's sanitizer run, 2026-11-25), and the
+		// film's length below then has to follow the last picture taken, not the count of them
+		if (!hadASlowFrame && Facts().dropped > 0)
+		{
+			long const writtenThen = Facts().written;
+
+			for (int tries = 0; tries < 400 && Facts().written < writtenThen + 2 && Facts().goingOn; tries++)
+			{
+				Sleep(50);
+			}
+
+			hadASlowFrame = true;
+		}
+
 		if (!asksFirst || HudsonVideoWriter_WantsPictureFor(MomentOf(i)))
 		{
 			HudsonVideoWriter_Add(&picture[0], pitch, MomentOf(i));
