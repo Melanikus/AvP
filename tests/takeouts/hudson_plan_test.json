@@ -7392,7 +7392,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt || seenWatchFrom || seenTogether) && !plan->combatAlien)",
+					"from": "if ((seenWatch || seenHoldFire || ((seenAlienAt || seenStandAt) && !plan->lanes) || seenWatchFrom || seenTogether) && !plan->combatAlien)",
 					"to": "if (false)"
 				}
 			]
@@ -7542,8 +7542,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "seenStandAt || seenWatchFrom || seenTogether) && !plan->combatAlien",
-					"to": "seenStandAt || seenTogether) && !plan->combatAlien"
+					"from": "|| seenWatchFrom || seenTogether) && !plan->combatAlien",
+					"to": "|| seenTogether) && !plan->combatAlien"
 				}
 			]
 		},
@@ -9542,8 +9542,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": " && !plan->play)",
-					"to": ")"
+					"from": "plan->gunSlot == 0 && !plan->meets) && !plan->play)",
+					"to": "plan->gunSlot == 0 && !plan->meets))"
 				}
 			]
 		},
