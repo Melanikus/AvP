@@ -917,6 +917,8 @@ private:
 			uint32_t from, to;
 			float cost;
 		};
+		// (This list, and byTile above, grow before their room is asked for, as they're only this tile's: no more than its 64 cells' moves.
+		// What of them is kept is counted below, before it's put on the nodes. Drake's review.)
 		std::vector<Crossing> crossings;
 
 		for (auto &pair : byTile)
@@ -1124,6 +1126,8 @@ private:
 		SearchInside(nodes[u].cell, tile, targets, &costs, nullptr);
 		looks += static_cast<size_t>(kNpcGridTile * kNpcGridTile);
 
+		// (This list grows before its room is asked for, as it's only this tile's exits, at most one for each of its 64 cells. Its room is
+		// counted below, before it's kept. Drake's review.)
 		std::vector<Join> joins;
 
 		for (size_t k = 0; k < exits.size(); k++)
