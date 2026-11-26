@@ -693,12 +693,13 @@ static void SayHowLongACold()
 	tiles.Start(g, from, to, kNpcGridAlien, 10);
 	NpcGridSearch const cold = tiles.Work(1000000000);
 	clock_t const t1 = clock();
+	size_t const coldLooks = tiles.Looks();   // before the second search starts its own count
 	tiles.Start(g, from, to, kNpcGridAlien, 10);
 	NpcGridSearch const warm = tiles.Work(1000000000);
 	clock_t const t2 = clock();
-	printf("  said    400 x 400 floor and a 400 x 200 wall, 12 walls with gaps: cold %s in %.0f ms (%u tiles, %u cells' work), kept %s in %.0f ms\n",
-		cold == kNpcGridFound ? "found" : "no way", 1000.0 * (t1 - t0) / CLOCKS_PER_SEC, (unsigned)tiles.TilesMade(), (unsigned)tiles.Looks(),
-		warm == kNpcGridFound ? "found" : "no way", 1000.0 * (t2 - t1) / CLOCKS_PER_SEC);
+	printf("  said    400 x 400 floor and a 400 x 200 wall, 12 walls with gaps: cold %s in %.0f ms (%u tiles, %u cells' work), kept %s in %.0f ms (%u cells' work)\n",
+		cold == kNpcGridFound ? "found" : "no way", 1000.0 * (t1 - t0) / CLOCKS_PER_SEC, (unsigned)tiles.TilesMade(), (unsigned)coldLooks,
+		warm == kNpcGridFound ? "found" : "no way", 1000.0 * (t2 - t1) / CLOCKS_PER_SEC, (unsigned)tiles.Looks());
 }
 
 int main()
