@@ -589,8 +589,8 @@
 			"changes": [
 				{
 					"file": "3dc/save_file_write.h",
-					"from": "GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL",
-					"to": "GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL"
+					"from": "PlainWrite_Open(newFile, GENERIC_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL)",
+					"to": "PlainWrite_Open(newFile, GENERIC_WRITE, 0, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL)"
 				}
 			]
 		},
@@ -599,8 +599,8 @@
 			"changes": [
 				{
 					"file": "3dc/save_file_write.h",
-					"from": "GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL",
-					"to": "GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL"
+					"from": "PlainWrite_Open(newFile, GENERIC_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL)",
+					"to": "PlainWrite_Open(newFile, GENERIC_WRITE, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL)"
 				}
 			]
 		},
