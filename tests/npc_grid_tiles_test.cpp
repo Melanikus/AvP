@@ -394,14 +394,14 @@ static void TestOverFrames()
 
 			g.Middle(best, at);
 			g.Middle(to, goal);
-			double const far = sqrt((at[0] - goal[0]) * (at[0] - goal[0]) + (at[1] - goal[1]) * (at[1] - goal[1]) + (at[2] - goal[2]) * (at[2] - goal[2]));
+			double const away = sqrt((at[0] - goal[0]) * (at[0] - goal[0]) + (at[1] - goal[1]) * (at[1] - goal[1]) + (at[2] - goal[2]) * (at[2] - goal[2]));
 
-			if (far > bestFar + 1e-6)
+			if (away > bestFar + 1e-6)
 			{
 				bestGetsNearer = false;
 			}
 
-			bestFar = std::min(bestFar, far);
+			bestFar = std::min(bestFar, away);
 		}
 	}
 

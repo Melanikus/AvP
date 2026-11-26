@@ -179,11 +179,12 @@ public:
 			nodeLooks++;
 			looks++;
 
-			double const far = FarFromTheGoal(u);
+			// ("away", not "far": the game's Windows headers make "far" and "near" into nothing)
+			double const away = FarFromTheGoal(u);
 
-			if (far < bestFar)
+			if (away < bestFar)
 			{
-				bestFar = far;
+				bestFar = away;
 				bestNode = u;
 			}
 
