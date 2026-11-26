@@ -6,6 +6,8 @@
 //   and that facehuggers and the queen glow in the alien colour;
 //   and that an alien coming for its target checks it has one before it reads where it is;
 //   and that a dormant predator that wakes is still kept until the level ends
+// Modified 2026-11-26 by Melanikus (Vasquez) for the AvP port:
+//   and that an NPC heading for the player checks the player and itself are in a room before it reads either room
 //
 // WHAT IT TESTS
 //
@@ -405,6 +407,24 @@ static void TestTheAlienWithNoTarget()
 	Check(ComesBefore(approach, check, read), "but only after the check, so an alien with none never reads through the empty pointer");
 }
 
+// An NPC heading for the player when the player is in no room, or it is in none itself. The game keeps the player's room in playerPherModule,
+// which is NULL while the player is between rooms (XENA's slides, with the level's walls off, do that for a moment), and the function's
+// GLOBALASSERT(playerPherModule) is gone in a release build. Without the check, NPCGetMovementTarget reads playerPherModule->m_aimodule through the
+// empty pointer: XENA's run 195719 crashed there (C0000005 at NPCGetMovementTarget +0x2a, `cmp edi,[eax+0ACh]` with eax NULL) as a marine targeted her.
+static void TestTheNpcHeadingForAPlayerInNoRoom()
+{
+	puts("An NPC heading for the player while the player is in no room (playerPherModule NULL), or the NPC is in none:");
+
+	std::string const target = Between(ReadSourceFile("3dc/avp/bh_ais.cpp"), "void NPCGetMovementTarget(STRATEGYBLOCK *sbPtr, STRATEGYBLOCK *target, VECTORCH *targetPosition, int *targetIsAirduct, int alien)",
+		"Calculates best direction of movement for NPC");
+	std::string const check = "if (playerPherModule && sbPtr->containingModule && sbPtr->containingModule->m_aimodule != playerPherModule->m_aimodule)";
+
+	Check(Has(target, check), "it checks the player's room and its own are there");
+	Check(ComesBefore(target, "if (playerPherModule && ", "playerPherModule->"), "before the first read of the player's room, so a player in none is never read through");
+	Check(ComesBefore(target, "playerPherModule && sbPtr->containingModule && ", "sbPtr->containingModule->"), "and of its own room");
+	Check(Has(target, "GetTargetingPointOfObject(Player, targetPosition);"), "and with either missing it still heads for the player's own targeting point");
+}
+
 // Everything placed in a level is marked to be kept until the level ends, because switches, tracks and other things in the level keep
 // hold of it, even after it's gone. A dormant predator that wakes has its block started afresh, which clears that mark, so it has to be
 // put back. Without it, once the predator's body has gone its block is handed to the next thing made, while the switches still hold it.
@@ -463,6 +483,7 @@ int main()
 	TestTheAlienWithNoTarget();
 	TestTheWokenPredator();
 	TestTheZoneAlertLine();
+	TestTheNpcHeadingForAPlayerInNoRoom();
 
 	puts(checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 	return checksFailed ? 1 : 0;
