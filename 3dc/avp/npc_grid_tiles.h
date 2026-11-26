@@ -62,6 +62,7 @@ size_t const kNpcGridTilesMostBytes = 64u * 1024u * 1024u;   // the most it may 
 size_t const kNpcGridTilesMapEntryBytes = 40;                // what one entry of a hash table is taken to hold: its key and value, its links and
                                                              // the heap's own bookkeeping, on the high side (about 24 on a 32-bit build)
 size_t const kNpcGridTilesBucketBytes = 16;                  // and one bucket of a hash table (two iterators: 8 on a 32-bit build)
+double const kNpcGridTilesMostBreakableMm = 1000000.0;       // the most a breakable cell's extra can be (1 km of walking): more counts as this
 
 template <class Grid>
 class NpcGridTilesSearch
@@ -116,6 +117,20 @@ public:
 	void SetMostBytes(size_t bytes) { mostBytes = bytes; }
 	size_t MostBytes() const { return mostBytes; }
 
+	// BREAKABLES (the owner, 2026-11-26: "She can never plot her way away so brekables need to have a cost but be transpassable for her").
+	// Added 2026-11-26 by Melanikus (Frost) for the AvP port, with Vasquez's walk. A cell in extraMmOfCell counts as one the body can be on
+	// even without its flag (a floor cell under a breakable object keeps its cell but loses kNpcGridClings to the object's room), and every
+	// move onto it costs its extra millimetres more (the walk spreads a breakable's cost, the time to claw it down as walking, over its
+	// cells). The map comes from outside the search, so its numbers are checked: a negative extra, or not a number, makes the cell no
+	// breakable at all; one above kNpcGridTilesMostBreakableMm counts as that. The map stays the caller's and has to outlive the searches
+	// over it; only the pointer is kept. The tiles are made with the breakables there were then, so a new version (a breakable broken: the
+	// map without it) makes them be made again at the next Start. nullptr: none, the grid's own cells only.
+	void SetBreakables(std::unordered_map<uint32_t, float> const *extraMmOfCell, uint32_t version)
+	{
+		breakables = extraMmOfCell;
+		breakablesVersion = version;
+	}
+
 	// Starts a search from one cell to another, for one body: nothing if it has started, or why not, in words (then Work says kNpcGridNoWay,
 	// or kNpcGridTooFar past what it may hold). The grid has to stay as it is until the search ends (and its tiles are kept for the next one).
 	const char *Start(Grid const &onGrid, uint32_t from, uint32_t to, NpcGridBody forBody, int price)
@@ -131,7 +146,7 @@ public:
 		}
 
 		if (grid != &onGrid || body != forBody || floorPrice != price || gridCells != onGrid.Cells() || gridSheets != onGrid.Sheets()
-			|| gridSurface != onGrid.SurfaceCells() || gridLinks != onGrid.Links())
+			|| gridSurface != onGrid.SurfaceCells() || gridLinks != onGrid.Links() || tilesBreakables != breakables || tilesBreakablesVersion != breakablesVersion)
 		{
 			Forget();
 			grid = &onGrid;
@@ -141,11 +156,13 @@ public:
 			gridSheets = onGrid.Sheets();
 			gridSurface = onGrid.SurfaceCells();
 			gridLinks = onGrid.Links();
+			tilesBreakables = breakables;
+			tilesBreakablesVersion = breakablesVersion;
 		}
 
 		bit = body == kNpcGridMarine ? kNpcGridStands : kNpcGridClings;
 
-		if (from >= gridCells || to >= gridCells || !(grid->Flags(from) & bit) || !(grid->Flags(to) & bit))
+		if (from >= gridCells || to >= gridCells || !Fits(from) || !Fits(to))
 		{
 			return Refuse("the start or the goal is a cell this body can't be on");
 		}
@@ -373,6 +390,10 @@ private:
 	int floorPrice;
 	size_t gridCells, gridSheets, gridSurface, gridLinks;
 	uint8_t bit = kNpcGridClings;
+	std::unordered_map<uint32_t, float> const *breakables = nullptr;       // SetBreakables: the caller's, now
+	uint32_t breakablesVersion = 0;
+	std::unordered_map<uint32_t, float> const *tilesBreakables = nullptr;  // and the ones the tiles kept were made with
+	uint32_t tilesBreakablesVersion = 0;
 	std::unordered_map<uint64_t, uint32_t> tileOfKey;
 	std::vector<Tile> tiles;
 	std::unordered_map<uint32_t, uint32_t> nodeOfCell;
@@ -451,6 +472,38 @@ private:
 		return RoomFor(kNpcGridTilesMapEntryBytes);
 	}
 
+	// A breakable cell's extra millimetres (SetBreakables), or -1 for a cell that isn't one: not in the map, or its number negative or not a
+	// number (checked, as the map comes from outside the search)
+	double ExtraOf(uint32_t cell) const
+	{
+		if (!breakables)
+		{
+			return -1.0;
+		}
+
+		auto const found = breakables->find(cell);
+
+		if (found == breakables->end() || !(found->second >= 0.0f))
+		{
+			return -1.0;
+		}
+
+		return std::min<double>(found->second, kNpcGridTilesMostBreakableMm);
+	}
+
+	// Can the body be on this cell: its flag, or a breakable (above)
+	bool Fits(uint32_t cell) const
+	{
+		return (grid->Flags(cell) & bit) != 0 || ExtraOf(cell) >= 0.0;
+	}
+
+	// What a move onto this cell costs on top of npc_grid's price: a breakable's extra, or nothing
+	double ArrivalExtra(uint32_t cell) const
+	{
+		double const extra = ExtraOf(cell);
+		return extra > 0.0 ? extra : 0.0;
+	}
+
 	double PriceOf(uint32_t cell) const
 	{
 		return body == kNpcGridAlien && grid->KindOf(cell) == kAlienWaysFloor ? static_cast<double>(floorPrice) : 1.0;
@@ -494,7 +547,7 @@ private:
 
 				uint32_t const n = grid->CellAt(s, i + di, j + dj);
 
-				if (n == kNpcGridNoCell || !(grid->Flags(n) & bit))
+				if (n == kNpcGridNoCell || !Fits(n))
 				{
 					continue;
 				}
@@ -504,26 +557,25 @@ private:
 				{
 					uint32_t const side1 = grid->CellAt(s, i + di, j), side2 = grid->CellAt(s, i, j + dj);
 
-					if (side1 == kNpcGridNoCell || side2 == kNpcGridNoCell || !(grid->Flags(side1) & bit) || !(grid->Flags(side2) & bit))
+					if (side1 == kNpcGridNoCell || side2 == kNpcGridNoCell || !Fits(side1) || !Fits(side2))
 					{
 						continue;
 					}
 				}
 
-				double b[3];
-
-				if (!grid->Middle(n, b))
+				// A marine doesn't climb a steep floor. y goes down, so up is a smaller y. (Only a marine's step needs the cell's middle: an
+				// alien's on a sheet is a cell's length at the price of the cell it leaves, so its middle isn't looked up, a search over the sheets.)
+				if (body == kNpcGridMarine)
 				{
-					continue;
+					double b[3];
+
+					if (!grid->Middle(n, b) || (((grid->Flags(n) | here) & kNpcGridSteep) && b[1] < a[1]))
+					{
+						continue;
+					}
 				}
 
-				// A marine doesn't climb a steep floor. y goes down, so up is a smaller y.
-				if (body == kNpcGridMarine && ((grid->Flags(n) | here) & kNpcGridSteep) && b[1] < a[1])
-				{
-					continue;
-				}
-
-				visit(n, (di != 0 && dj != 0 ? sqrt(2.0) : 1.0) * kNpcGridCell * price);
+				visit(n, (di != 0 && dj != 0 ? sqrt(2.0) : 1.0) * kNpcGridCell * price + ArrivalExtra(n));
 			}
 		}
 
@@ -536,7 +588,7 @@ private:
 			double b[3];
 
 			// Every link was made between two of the grid's cells, but a number past them is turned away all the same
-			if (n >= gridCells || !(grid->Flags(n) & bit) || !grid->Middle(n, b))
+			if (n >= gridCells || !Fits(n) || !grid->Middle(n, b))
 			{
 				continue;
 			}
@@ -563,7 +615,7 @@ private:
 				extra = join == kNpcGridJoinOutside ? kNpcGridOutsidePrice : (join == kNpcGridJoinThrough ? kNpcGridThroughPrice : 0.0);
 			}
 
-			visit(n, Far(a, b) * PriceOf(n) + extra);
+			visit(n, Far(a, b) * PriceOf(n) + extra + ArrivalExtra(n));
 		}
 
 		if (body == kNpcGridMarine)
@@ -597,7 +649,7 @@ public:
 		*cost = -1.0;
 		*cellsLooked = 0;
 
-		if (from >= gridCells || to >= gridCells || !(grid->Flags(from) & bit) || !(grid->Flags(to) & bit))
+		if (from >= gridCells || to >= gridCells || !Fits(from) || !Fits(to))
 		{
 			return kNpcGridNoWay;
 		}
@@ -866,7 +918,7 @@ private:
 				uint32_t const c = grid->CellAt(t.sheet, t.i0 + di, t.j0 + dj);
 				looks++;
 
-				if (c == kNpcGridNoCell || !(grid->Flags(c) & bit))
+				if (c == kNpcGridNoCell || !Fits(c))
 				{
 					continue;
 				}

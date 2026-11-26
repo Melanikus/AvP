@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <limits>
+#include <unordered_map>
 #include <vector>
 
 #include "npc_grid_tiles.h"
@@ -199,8 +201,9 @@ static uint32_t Random(uint32_t below)
 	return (randomState >> 8) % below;
 }
 
-// Is this way a real one, move by move, by the exact search's own moves, from `from` to `to`? Its cost, in *cost.
-static bool IsARealWay(TestGrid const &g, std::vector<uint32_t> const &way, uint32_t from, uint32_t to, NpcGridBody body, int price, double *cost)
+// Is this way a real one, move by move, by the exact search's own moves (with the same breakables, if any), from `from` to `to`? Its cost, in *cost.
+static bool IsARealWay(TestGrid const &g, std::vector<uint32_t> const &way, uint32_t from, uint32_t to, NpcGridBody body, int price, double *cost,
+	std::unordered_map<uint32_t, float> const *breakables = nullptr)
 {
 	*cost = 0.0;
 
@@ -212,6 +215,7 @@ static bool IsARealWay(TestGrid const &g, std::vector<uint32_t> const &way, uint
 	for (size_t k = 1; k < way.size(); k++)
 	{
 		Tiles one;
+		one.SetBreakables(breakables, 1);
 		double step = -1.0;
 		size_t looked = 0;
 
@@ -525,6 +529,89 @@ static void TestWhatItHolds()
 		"a grid with another number of links: its old tiles are forgotten, and it searches as a fresh one does");
 }
 
+// BREAKABLES (the owner: "brekables need to have a cost but be transpassable for her"): a floor cut in two by a row an alien can't be on (a
+// breakable object's room), and that row's cells given as breakables
+static void TestBreakables()
+{
+	printf("Breakables: passable at a cost\n");
+
+	TestGrid g;
+	int const s = g.AddSheet(30, 20, 0, 0, 0, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+
+	for (int i = 0; i < 30; i++)
+	{
+		g.Block(s, i, 10);
+	}
+
+	uint32_t const from = g.CellAt(s, 2, 2), to = g.CellAt(s, 25, 17);
+	Tiles tiles, exact;
+	double exactCost = 0.0, cost = 0.0;
+	size_t looked = 0;
+
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay
+		&& exact.ExactSearch(g, from, to, kNpcGridAlien, 10, &exactCost, &looked) == kNpcGridNoWay, "with the row unbreakable, no way, the tiles and the exact search alike");
+
+	// The row's cells breakable at 4000 mm each, but for two with numbers that can't be (a negative one, and one that isn't a number)
+	std::unordered_map<uint32_t, float> extra;
+
+	for (int i = 0; i < 30; i++)
+	{
+		extra[g.CellAt(s, i, 10)] = 4000.0f;
+	}
+
+	extra[g.CellAt(s, 24, 10)] = -5.0f;
+	extra[g.CellAt(s, 25, 10)] = std::numeric_limits<float>::quiet_NaN();
+	tiles.SetBreakables(&extra, 1);
+	exact.SetBreakables(&extra, 1);
+	bool const found = tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridFound;
+	NpcGridSearch const exactFound = exact.ExactSearch(g, from, to, kNpcGridAlien, 10, &exactCost, &looked);
+	std::vector<uint32_t> way;
+	bool const real = found && tiles.WayTo(to, &way) && IsARealWay(g, way, from, to, kNpcGridAlien, 10, &cost, &extra);
+	// it had to cross the row somewhere: through a cell of it
+	bool crossed = false, crossedABadOne = false;
+
+	for (uint32_t c : way)
+	{
+		int sh = 0, i = 0, j = 0;
+		g.CellPlace(c, &sh, &i, &j);
+		crossed = crossed || j == 10;
+		crossedABadOne = crossedABadOne || (j == 10 && (i == 24 || i == 25));
+	}
+
+	char line[300];
+	snprintf(line, sizeof(line), "breakable, a way through it (tiles %.0f, exact %.0f), never cheaper than exact and at most %.2f times as dear", tiles.CostOfTheWay(), exactCost, kMostDearer);
+	Check(found && exactFound == kNpcGridFound && tiles.CostOfTheWay() >= exactCost - 1.0 && tiles.CostOfTheWay() <= kMostDearer * exactCost, line);
+	Check(real && crossed, "the way is a real one, move by move by the same rule, through the row");
+	Check(!crossedABadOne, "and never through a cell whose number can't be (negative, or not a number): that cell is no breakable");
+
+	// The extra is paid: the way costs at least the walk across the floor (23 x 300 mm of floor at 10, as the crow flies) plus one
+	// breakable's 4000 mm
+	Check(found && tiles.CostOfTheWay() >= 23 * 300 * 10.0 + 4000.0 - 1.0, "and it pays a breakable's extra to cross");
+
+	// A breakable broken: the map without the row's middle third, at a new version. The tiles are made again, and the search is as a fresh one's.
+	size_t const madeBefore = tiles.TilesMade();
+	std::unordered_map<uint32_t, float> fewer;
+
+	for (int i = 0; i < 10; i++)
+	{
+		fewer[g.CellAt(s, i, 10)] = 4000.0f;
+	}
+
+	tiles.SetBreakables(&fewer, 2);
+	tiles.Start(g, from, to, kNpcGridAlien, 10);
+	tiles.Work(100000000);
+	Tiles fresh;
+	fresh.SetBreakables(&fewer, 2);
+	fresh.Start(g, from, to, kNpcGridAlien, 10);
+	fresh.Work(100000000);
+	Check(madeBefore > 0 && tiles.TilesMade() == fresh.TilesMade() && fabs(tiles.CostOfTheWay() - fresh.CostOfTheWay()) < 1e-6,
+		"a new version of the breakables: the tiles are made again, and it searches as a fresh one does");
+
+	// None again: no way
+	tiles.SetBreakables(nullptr, 3);
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay, "with none set again, no way");
+}
+
 int main()
 {
 	TestTheRules();
@@ -532,6 +619,7 @@ int main()
 	TestOverFrames();
 	TestTheMarine();
 	TestWhatItHolds();
+	TestBreakables();
 
 	if (checksFailed > 0)
 	{
