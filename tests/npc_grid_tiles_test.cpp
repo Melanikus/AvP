@@ -69,6 +69,15 @@ public:
 
 	// npc_grid's answers
 	bool Ready() const { return ready; }
+	uint32_t buildNumber = 1;   // as npc_grid's BuildNumber: the tests make it another when they "build again"
+	uint32_t BuildNumber() const { return buildNumber; }
+	std::vector<int> pieceOf;   // made-up pieces, as npc_grid_pieces.h's: empty, or each cell's piece (-1: not known)
+
+	bool CertainlyApart(uint32_t a, uint32_t b) const
+	{
+		return a < pieceOf.size() && b < pieceOf.size() && pieceOf[a] >= 0 && pieceOf[b] >= 0 && pieceOf[a] != pieceOf[b];
+	}
+
 	size_t Cells() const { return flags.size(); }
 	size_t Sheets() const { return sheets.size(); }
 
@@ -514,19 +523,63 @@ static void TestWhatItHolds()
 		(unsigned)tiles.NodesKept(), (unsigned)tiles.TilesMade());
 	Check(tiles.NodesKept() == 0 && tiles.TilesMade() == 0 && tiles.BytesHeld() < 1024 && before > 10 * 1024, line);
 
-	// The same grid at the same place, with one more link: its tiles are forgotten, and made again for it
+	// The same grid at the same place, built again (one more link, and its BuildNumber another, as npc_grid's build gives): its tiles are
+	// forgotten, and made again for it (Bishop: "a build number, not the pointer + size")
 	Tiles kept;
 	kept.Start(g, from, to, kNpcGridAlien, 10);
 	kept.Work(100000000);
 	size_t const made = kept.TilesMade();
 	g.Link(g.CellAt(0, 30, 30), g.CellAt(1, 30, 5));
+	g.buildNumber++;
 	kept.Start(g, from, to, kNpcGridAlien, 10);
 	kept.Work(100000000);
 	Tiles fresh;
 	fresh.Start(g, from, to, kNpcGridAlien, 10);
 	fresh.Work(100000000);
 	Check(made > 0 && kept.TilesMade() == fresh.TilesMade() && fabs(kept.CostOfTheWay() - fresh.CostOfTheWay()) < 1e-6,
-		"a grid with another number of links: its old tiles are forgotten, and it searches as a fresh one does");
+		"the grid built again (another build number): its old tiles are forgotten, and it searches as a fresh one does");
+
+	// The same build again: its tiles are kept (the build number is what names the grid)
+	size_t const madeNow = kept.TilesMade();
+	kept.Start(g, from, to, kNpcGridAlien, 10);
+	kept.Work(100000000);
+	Check(kept.TilesMade() == madeNow, "the same build: its tiles kept, no new one made");
+}
+
+// PIECES THAT DON'T JOIN: an alien's search across two pieces npc_grid knows can't join ends at once; with breakables, never
+static void TestPieces()
+{
+	printf("Pieces that don't join\n");
+
+	TestGrid g;
+	int const a = g.AddSheet(20, 20, 0, 0, 0, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	int const b = g.AddSheet(20, 20, 0, 0, 30000, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	g.pieceOf.assign(g.Cells(), 0);
+
+	for (int j = 0; j < 20; j++)
+	{
+		for (int i = 0; i < 20; i++)
+		{
+			g.pieceOf[g.CellAt(b, i, j)] = 1;
+		}
+	}
+
+	uint32_t const from = g.CellAt(a, 2, 2), to = g.CellAt(b, 5, 5);
+	Tiles tiles;
+	const char *const why = tiles.Start(g, from, to, kNpcGridAlien, 10);
+	Check(why != nullptr && tiles.Work(100000000) == kNpcGridNoWay && tiles.Looks() == 0 && tiles.BestSoFar() == kNpcGridNoCell,
+		"in pieces that certainly don't join: no way at once, not a cell looked at, and no best so far");
+
+	// Breakables set (even none in the map): a breakable can join two pieces, so the pieces don't answer, and the search looks
+	std::unordered_map<uint32_t, float> none;
+	tiles.SetBreakables(&none, 1);
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay && tiles.Looks() > 0,
+		"with breakables set, the pieces don't answer: it looks, and finds no way itself");
+
+	// A marine's search: the pieces are an alien's, so they never answer for him
+	Tiles marine;
+	Check(marine.Start(g, from, to, kNpcGridMarine, 10) == nullptr && marine.Work(100000000) == kNpcGridNoWay && marine.Looks() > 0,
+		"and never for a marine, whose pieces they aren't");
 }
 
 // BREAKABLES (the owner: "brekables need to have a cost but be transpassable for her"): a floor cut in two by a row an alien can't be on (a
@@ -620,6 +673,7 @@ int main()
 	TestTheMarine();
 	TestWhatItHolds();
 	TestBreakables();
+	TestPieces();
 
 	if (checksFailed > 0)
 	{

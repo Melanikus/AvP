@@ -210,6 +210,13 @@ public:
 	size_t Pieces() const { return pieces.Pieces(); }
 	const char *PiecesGaveUp() const { return piecesSkipped; }
 	size_t PieceBytes() const { return pieces.BytesKept(); }      // part of BytesKept()
+	// Added 2026-11-26 by Melanikus (Frost) for the AvP port (the tiles, npc_grid_tiles.h; Bishop's OK). Whether an alien's cells a and b are
+	// in pieces that certainly don't join: the test StartSearch makes, for another search to make at once. False unless both pieces are known
+	// and differ (npc_grid_pieces.h), so never "apart" while the pieces aren't done, or after they gave up. An alien's cells only.
+	bool CertainlyApart(uint32_t a, uint32_t b) const { return pieces.CertainlyApart(a, b); }
+	// Which build this grid is: a number no other build in this run of the game has had, 0 before its first and after LetGo. A search that
+	// keeps what it worked out over one grid knows by it that the grid is another one now, even at the same address.
+	uint32_t BuildNumber() const { return buildNumber; }
 
 	// THE KIND OF A JOIN (above), between two cells of different sheets: PLAIN for two cells of one sheet, or a number that isn't a cell.
 	// The same both ways round. And how many of the grid's links are OUTSIDE and THROUGH, each link counted once, though it's kept both
@@ -357,6 +364,7 @@ private:
 	size_t bytesKept, bytesBuilding, bytesBuildingUsed;
 	NpcGridLimits limits;
 	bool ready;
+	uint32_t buildNumber = 0;            // BuildNumber (added 2026-11-26 by Melanikus (Frost))
 	std::atomic<bool> stopAsked;
 	size_t looksAtStop, stopAtLook;
 };

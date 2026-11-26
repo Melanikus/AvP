@@ -26,8 +26,12 @@
 // (kNpcGridTilesMostBytes, 64 MB, npc_grid's own cap without "advanced AI"; SetMostBytes for another): a search that would go past it ends
 // kNpcGridTooFar, and Why says so. A level is hostile input, and the game is a 32-bit program. PeakBytes says the most it held in the last
 // search. Forget gives it all back.
-// WHO FORGETS: the walk, at each level's start, as a grid built again for another level can sit at the same address. Start also forgets by
-// itself when the grid, the body or the price changes, or the grid's sheets, cells, surface cells or links are another number.
+// WHO FORGETS: Start, by itself, whenever the grid is another one or another build of the same one (NpcGrid::BuildNumber: Bishop, "a build
+// number, not the pointer + size"), or the body, the price or the breakables (SetBreakables) are others. The walk may call Forget too, to give
+// the room back at once when a level ends.
+// PIECES THAT DON'T JOIN: an alien's search whose start and goal are in pieces that certainly don't join (NpcGrid::CertainlyApart, the test
+// npc_grid's own StartSearch makes) ends at once, NO WAY, without looking at a cell, as npc_grid's own does; Start says why, and BestSoFar is
+// then nothing (there was no search to find the reachable cell nearest the goal). Never with breakables set: a breakable can join two pieces.
 // THE SMOOTHING runs to its end inside the Work call that finds the goal, past that call's looksAllowed: it looks at no more than the cells of
 // the tiles the way went through (64 each: a way through 500 tiles, 32,000 cells), and its looks are counted.
 //
@@ -40,8 +44,8 @@
 //     directions); a marine only onto a floor, up or down no more than a step;
 //   - a marine's fall, one way, its length; an alien never falls;
 //   - an alien's floor costs floorPrice times as much (1 to kAlienWaysMostFloorPrice); everything else costs 1 a millimetre.
-// THE GRID it's given is any class with npc_grid's few public answers: Ready, Sheets, Cells, SurfaceCells, Links, Flags, KindOf, Middle,
-// CellPlace, CellAt, LinksOf, FallsOf and JoinOf. NpcGridWaySearch below is it over the game's NpcGrid; the tests use a made-up grid with the
+// THE GRID it's given is any class with npc_grid's few public answers: Ready, BuildNumber, Cells, Flags, KindOf, Middle, CellPlace, CellAt,
+// LinksOf, FallsOf, JoinOf and CertainlyApart. NpcGridWaySearch below is it over the game's NpcGrid; the tests use a made-up grid with the
 // same answers.
 #pragma once
 
@@ -76,7 +80,8 @@ public:
 		grid = nullptr;
 		body = kNpcGridAlien;
 		floorPrice = 1;
-		gridCells = gridSheets = gridSurface = gridLinks = 0;
+		gridCells = 0;
+		gridBuild = 0;
 		// A list's room goes back with clear and then shrink_to_fit, which only ever lets go (it never asks for room). A hash table keeps its
 		// buckets after clear, and rehash doesn't make them fewer (measured, MSVC), so each table is swapped for an empty one, which lets the
 		// old room go. An empty table asks for a little room of its own; if even that can't be had, the table stays as cleared.
@@ -145,17 +150,15 @@ public:
 			return Refuse("the floor's price is out of its range");
 		}
 
-		if (grid != &onGrid || body != forBody || floorPrice != price || gridCells != onGrid.Cells() || gridSheets != onGrid.Sheets()
-			|| gridSurface != onGrid.SurfaceCells() || gridLinks != onGrid.Links() || tilesBreakables != breakables || tilesBreakablesVersion != breakablesVersion)
+		if (grid != &onGrid || gridBuild != onGrid.BuildNumber() || body != forBody || floorPrice != price || tilesBreakables != breakables
+			|| tilesBreakablesVersion != breakablesVersion)
 		{
 			Forget();
 			grid = &onGrid;
+			gridBuild = onGrid.BuildNumber();
 			body = forBody;
 			floorPrice = price;
 			gridCells = onGrid.Cells();
-			gridSheets = onGrid.Sheets();
-			gridSurface = onGrid.SurfaceCells();
-			gridLinks = onGrid.Links();
 			tilesBreakables = breakables;
 			tilesBreakablesVersion = breakablesVersion;
 		}
@@ -165,6 +168,17 @@ public:
 		if (from >= gridCells || to >= gridCells || !Fits(from) || !Fits(to))
 		{
 			return Refuse("the start or the goal is a cell this body can't be on");
+		}
+
+		// PIECES THAT DON'T JOIN (above): no way, at once, as npc_grid's own StartSearch says; never with breakables, which can join two
+		if (body == kNpcGridAlien && !breakables && grid->CertainlyApart(from, to))
+		{
+			number++;
+			open.clear();
+			looks = nodeLooks = 0;
+			bestNode = kNone;
+			smoothWay.clear();
+			return Refuse("the start and the goal are in pieces that certainly don't join (npc_grid_pieces.h)");
 		}
 
 		number++;
@@ -388,7 +402,8 @@ private:
 	Grid const *grid;
 	NpcGridBody body;
 	int floorPrice;
-	size_t gridCells, gridSheets, gridSurface, gridLinks;
+	size_t gridCells;
+	uint32_t gridBuild;               // the grid's BuildNumber the tiles were made on
 	uint8_t bit = kNpcGridClings;
 	std::unordered_map<uint32_t, float> const *breakables = nullptr;       // SetBreakables: the caller's, now
 	uint32_t breakablesVersion = 0;
