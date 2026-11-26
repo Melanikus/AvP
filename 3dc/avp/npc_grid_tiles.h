@@ -22,7 +22,9 @@
 // the joins to its own goal are new. What it keeps grows with the tiles the searches went into.
 //
 // WHAT IT HOLDS (Drake's review, 2026-11-26). Every byte it keeps is counted (BytesHeld: its lists' room, and an estimate on the high side for
-// each entry of its two hash tables and their buckets), and counted BEFORE a list grows, not after. It never holds more than MostBytes
+// each entry of its one hash table, from a tile's place to the tile, and its buckets), and counted BEFORE a list grows, not after. Its nodes
+// and their joins are kept in chunks that never move (THE ROOM OF A NODE, below), so what it holds grows a chunk at a time, never by a copy
+// of a whole list beside the old one. It never holds more than MostBytes
 // (kNpcGridTilesMostBytes, 64 MB, npc_grid's own cap without "advanced AI"; SetMostBytes for another): a search that would go past it ends
 // kNpcGridTooFar, and Why says so. A level is hostile input, and the game is a 32-bit program. PeakBytes says the most it held in the last
 // search. Forget gives it all back.
@@ -55,6 +57,8 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
+#include <new>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -98,25 +102,29 @@ private:
 		// old room go. An empty table asks for a little room of its own; if even that can't be had, the table stays as cleared.
 		tiles.clear();
 		tiles.shrink_to_fit();
-		nodes.clear();
-		nodes.shrink_to_fit();
+		nodeChunks.clear();   // each chunk is let go as the list lets go of its owner
+		nodeChunks.shrink_to_fit();
+		nodeCount = 0;
+		joinChunks.clear();
+		joinChunks.shrink_to_fit();
+		joinRoom = 0;
+		joinsFree = nullptr;
+		joinsFreeCount = 0;
 		open.clear();
 		open.shrink_to_fit();
 		smoothWay.clear();
 		smoothWay.shrink_to_fit();
 		tileOfKey.clear();
-		nodeOfCell.clear();
 
 		try
 		{
 			std::unordered_map<uint64_t, uint32_t>().swap(tileOfKey);
-			std::unordered_map<uint32_t, uint32_t>().swap(nodeOfCell);
 		}
 		catch (...)
 		{
 		}
 
-		listBytes = 0;
+		exitsBytes = 0;
 		peakBytes = 0;
 		tilesMade = 0;
 		state = kNpcGridNoWay;
@@ -219,12 +227,11 @@ public:
 			return why ? why : TooMuch();
 		}
 
-		Node &s = nodes[startNode];
+		Node &s = N(startNode);
 		s.stamp = number;
 		s.cost = 0.0;
 		s.cameFrom = kNone;
-		s.cameBy = kByStart;
-		s.done = false;
+		s.how = kByStart;   // reached as the start, and not done
 
 		if (!Push(startNode))
 		{
@@ -261,12 +268,12 @@ public:
 			uint32_t const u = open.back().second;
 			open.pop_back();
 
-			if (nodes[u].stamp != number || nodes[u].done)
+			if (N(u).stamp != number || (N(u).how & kDone) != 0)
 			{
 				continue;   // an older copy of a node already looked at: the guess never says more than it costs, so its first time out was its best
 			}
 
-			nodes[u].done = true;
+			N(u).how |= kDone;
 			nodeLooks++;
 			looks++;
 
@@ -289,7 +296,12 @@ public:
 			if (!LookAt(u))
 			{
 				state = kNpcGridTooFar;
-				TooMuch();
+
+				if (why == nullptr)
+				{
+					TooMuch();
+				}
+
 				break;
 			}
 		}
@@ -301,7 +313,7 @@ public:
 	const char *Why() const { return why; }
 
 	// The node looked at so far whose middle is nearest the goal's, in a straight line: the start, until another is
-	uint32_t BestSoFar() const { return bestNode != kNone ? nodes[bestNode].cell : kNpcGridNoCell; }
+	uint32_t BestSoFar() const { return bestNode != kNone ? N(bestNode).cell : kNpcGridNoCell; }
 
 	// Every cell of the way from the start to a cell this search has looked at as a node (BestSoFar, or the goal once found), start and
 	// that cell included. False, and nothing in cells, for any other cell.
@@ -316,9 +328,9 @@ public:
 			return true;
 		}
 
-		auto const found = nodeOfCell.find(cell);
+		uint32_t const found = FindNode(cell);
 
-		if (!grid || found == nodeOfCell.end() || nodes[found->second].stamp != number || !nodes[found->second].done)
+		if (found == kNone || N(found).stamp != number || (N(found).how & kDone) == 0)
 		{
 			return false;
 		}
@@ -326,28 +338,28 @@ public:
 		// The nodes back to the start, then each step between two of them as the cells it goes over
 		std::vector<uint32_t> chain;
 
-		for (uint32_t k = found->second; k != kNone; k = nodes[k].cameFrom)
+		for (uint32_t k = found; k != kNone; k = N(k).cameFrom)
 		{
 			chain.push_back(k);
 
-			if (chain.size() > nodes.size())
+			if (chain.size() > nodeCount)
 			{
 				return false;   // a loop can't be, but the way is never followed round one
 			}
 		}
 
 		std::reverse(chain.begin(), chain.end());
-		cells->push_back(nodes[chain[0]].cell);
+		cells->push_back(N(chain[0]).cell);
 
 		for (size_t k = 1; k < chain.size(); k++)
 		{
-			Node const &n = nodes[chain[k]];
+			Node const &n = N(chain[k]);
 
-			if (n.cameBy == kByCrossing)
+			if ((n.how & kCameByBits) == kByCrossing)
 			{
 				cells->push_back(n.cell);
 			}
-			else if (!CellsInside(nodes[chain[k - 1]].cell, n.cell, cells))
+			else if (!CellsInside(N(chain[k - 1]).cell, n.cell, cells))
 			{
 				cells->clear();
 				return false;
@@ -360,29 +372,30 @@ public:
 	size_t Looks() const { return looks; }             // cells' worth of work in this search: comparable with npc_grid's looks
 	size_t NodeLooks() const { return nodeLooks; }     // of which, the nodes it looked at
 	size_t TilesMade() const { return tilesMade; }     // tiles whose crossings are found, kept since the last Forget
-	size_t NodesKept() const { return nodes.size(); }
-	double CostOfTheWay() const { return state == kNpcGridFound ? (smoothWay.empty() ? nodes[goalNode].cost : smoothCost) : -1.0; }
+	size_t NodesKept() const { return nodeCount; }
+	double CostOfTheWay() const { return state == kNpcGridFound ? (smoothWay.empty() ? N(goalNode).cost : smoothCost) : -1.0; }
 
 	// What it holds now, and the most it held in the last search (WHAT IT HOLDS, above)
 	size_t BytesHeld() const
 	{
-		return tiles.capacity() * sizeof(Tile) + nodes.capacity() * sizeof(Node) + open.capacity() * sizeof(std::pair<double, uint32_t>) + listBytes
-			+ smoothWay.capacity() * sizeof(uint32_t)
-			+ (tileOfKey.size() + nodeOfCell.size()) * kNpcGridTilesMapEntryBytes + (tileOfKey.bucket_count() + nodeOfCell.bucket_count()) * kNpcGridTilesBucketBytes;
+		size_t parts[6];
+		BytesByPart(parts);
+		return parts[0] + parts[1] + parts[2] + parts[3] + parts[4] + parts[5];
 	}
 
 	size_t PeakBytes() const { return peakBytes; }
 
 	// What it holds now, part by part, as BytesHeld counts it: for a log line that says where the room goes (Vasquez, 2026-11-26: Temple's
-	// first leg came to 59.4 MB of the 64). In order: the nodes' list, the nodes' own joins and the tiles' exits, the tiles' list, the
-	// search's open list, the two hash tables (their entries and buckets, on the high side), the smoothed way.
+	// first leg came to 59.4 MB of the 64). In order: the nodes' chunks (and the list of them), the join pool's chunks (and the list of them)
+	// and the tiles' exits, the tiles' list, the search's open list, the hash table (its entries and buckets, on the high side), the smoothed
+	// way.
 	void BytesByPart(size_t parts[6]) const
 	{
-		parts[0] = nodes.capacity() * sizeof(Node);
-		parts[1] = listBytes;
+		parts[0] = nodeChunks.size() * kNodesInAChunk * sizeof(Node) + nodeChunks.capacity() * sizeof(std::unique_ptr<Node[]>);
+		parts[1] = joinRoom * sizeof(Join) + joinChunks.capacity() * sizeof(std::unique_ptr<Join[]>) + exitsBytes;
 		parts[2] = tiles.capacity() * sizeof(Tile);
 		parts[3] = open.capacity() * sizeof(std::pair<double, uint32_t>);
-		parts[4] = (tileOfKey.size() + nodeOfCell.size()) * kNpcGridTilesMapEntryBytes + (tileOfKey.bucket_count() + nodeOfCell.bucket_count()) * kNpcGridTilesBucketBytes;
+		parts[4] = tileOfKey.size() * kNpcGridTilesMapEntryBytes + tileOfKey.bucket_count() * kNpcGridTilesBucketBytes;
 		parts[5] = smoothWay.capacity() * sizeof(uint32_t);
 	}
 
@@ -396,33 +409,60 @@ private:
 		kByInside
 	};
 
+	// In a node's `how`: how this search reached it (a CameBy, in the low two bits), and kDone once its cost is final in this search
+	static uint8_t const kCameByBits = 3;
+	static uint8_t const kDone = 4;
+	// A node's insideCount before its joins inside its tile are made (once made there are at most its tile's other exits: 63)
+	static uint8_t const kInsideNotMade = 0xFF;
+	// The most crossings that can leave from one node (its crossCount). A real level's cell crosses into a few tiles; a level whose cell
+	// crosses into more than this is hostile input, and the search over it ends (MakeTile).
+	static size_t const kMostCrossingsOfANode = 0xFFFF;
+
 	struct Join
 	{
 		uint32_t to;
 		float cost;
 	};
 
+	// THE ROOM OF A NODE (frost-tiles-3, 2026-11-26, Bishop: "nodes in a deque, no cell->node hash, one join list per node"). Temple's first
+	// leg came to 59.4 MB of the 64 (Vasquez). On a made-up world of 2 million cells, nearly two thirds of what the tiles held was for the
+	// nodes: a node took 64 bytes on the game's 32-bit build, with two lists of its own (each its own block on the heap), an entry in a hash
+	// table from its cell to it (about 40 bytes more), and a list of all the nodes that grew by a copy of itself at twice its size. Its peak
+	// went from 54.0 MB to 33.5 with this, the same way at the same cost. Now a node is 40 bytes on the 32-bit build, and nothing of its own:
+	//   - the nodes are in chunks of kNodesInAChunk (AddNode, N): a chunk never moves, so a node is never copied as more are made, and the
+	//     room grows one chunk at a time. (Not a std::deque: Microsoft's library gives a deque of anything bigger than 8 bytes one heap
+	//     block for each element: _Block_size, in its <deque>.)
+	//   - its joins are side by side in the join pool (AddJoins), as two runs of it, as they are made at different times: the crossings that
+	//     leave from it, when its tile is made, and its joins inside its tile, the first time it's looked at.
+	//   - a cell's node is found by its tile (FindNode): the nodes of a tile are a list through nextInTile, at most the tile's 64 cells.
 	struct Node
 	{
+		double cost;                  // this search's: what the way here costs
 		uint32_t cell;
 		uint32_t tile;
-		std::vector<Join> inside;      // to the exits of its tile it can reach without leaving it (made the first time it's looked at)
-		bool insideMade = false;
-		std::vector<Join> cross;       // its tile's crossings that leave from this cell, if it's an exit: one for each tile they go into
-		// this search's
-		uint32_t stamp = 0;
-		double cost = 0.0;
-		uint32_t cameFrom = kNone;
-		CameBy cameBy = kByStart;
-		bool done = false;
+		uint32_t nextInTile;          // the next node of its tile, or kNone
+		Join const *inside;           // its joins inside its tile: to each of the tile's exits it reaches without leaving the tile
+		Join const *cross;            // the crossings that leave from it, if it's an exit of its tile: one for each run it's the middle of
+		uint32_t stamp;               // the search its cost, cameFrom and how are from: they're this search's only when stamp is its number
+		uint32_t cameFrom;            // this search's: the node before it on the way here
+		uint16_t crossCount;
+		uint8_t insideCount;          // kInsideNotMade until its joins inside are made
+		uint8_t how;                  // this search's: how it was reached, and if it's done (kCameByBits, kDone)
 	};
+
+	// What it says above, on the game's 32-bit build: a field put in, or one made bigger, shows here first
+	static_assert(sizeof(void *) != 4 || sizeof(Node) == 40, "a node is 40 bytes on a 32-bit build (THE ROOM OF A NODE)");
 
 	struct Tile
 	{
 		int sheet, i0, j0;             // its first cell, on its sheet
 		bool made = false;             // its crossings are found
+		uint32_t firstNode = kNone;    // its nodes, as a list through each node's nextInTile
 		std::vector<uint32_t> exits;   // its nodes that a crossing leaves from
 	};
+
+	static size_t const kNodesInAChunk = 1024;   // 40 KB a chunk on the game's 32-bit build
+	static size_t const kJoinsInAChunk = 8192;   // 64 KB a chunk
 
 	Grid const *grid;
 	NpcGridBody body;
@@ -436,9 +476,13 @@ private:
 	uint32_t tilesBreakablesVersion = 0;
 	std::unordered_map<uint64_t, uint32_t> tileOfKey;
 	std::vector<Tile> tiles;
-	std::unordered_map<uint32_t, uint32_t> nodeOfCell;
-	std::vector<Node> nodes;
-	size_t listBytes;                 // the room of the nodes' and tiles' own lists (their joins and exits), counted as they're made
+	std::vector<std::unique_ptr<Node[]> > nodeChunks;   // THE ROOM OF A NODE, above
+	size_t nodeCount;
+	std::vector<std::unique_ptr<Join[]> > joinChunks;   // the join pool
+	size_t joinRoom;                  // the joins the pool's chunks have room for, all of them
+	Join *joinsFree;                  // the end of the last chunk that isn't given out yet: joinsFreeCount joins
+	size_t joinsFreeCount;
+	size_t exitsBytes;                // the room of the tiles' lists of exits, counted as they're made
 	size_t mostBytes = kNpcGridTilesMostBytes;
 	size_t peakBytes;
 	size_t tilesMade;
@@ -465,6 +509,106 @@ private:
 	{
 		why = "the tiles would hold more than they may (MostBytes)";
 		return why;
+	}
+
+	// The node at k: in its chunk (THE ROOM OF A NODE, above)
+	Node &N(uint32_t k) { return nodeChunks[k / kNodesInAChunk][k % kNodesInAChunk]; }
+	Node const &N(uint32_t k) const { return nodeChunks[k / kNodesInAChunk][k % kNodesInAChunk]; }
+
+	// A new node for a cell of a tile, put on the tile's list: one more chunk first if the last is full. kNone past MostBytes, or if the
+	// game has no room left (then why says which).
+	uint32_t AddNode(uint32_t cell, uint32_t tile)
+	{
+		if (nodeCount % kNodesInAChunk == 0)
+		{
+			if (nodeCount >= kNone - kNodesInAChunk || !RoomFor(kNodesInAChunk * sizeof(Node) + GrowthOf(nodeChunks)))
+			{
+				TooMuch();
+				return kNone;
+			}
+
+			std::unique_ptr<Node[]> chunk(new (std::nothrow) Node[kNodesInAChunk]);
+
+			if (!chunk)
+			{
+				why = "the game had no room left for the tiles";
+				return kNone;
+			}
+
+			nodeChunks.push_back(std::move(chunk));
+		}
+
+		uint32_t const k = static_cast<uint32_t>(nodeCount++);
+		Node &n = N(k);
+		n.cost = 0.0;
+		n.cell = cell;
+		n.tile = tile;
+		n.nextInTile = tiles[tile].firstNode;
+		n.inside = nullptr;
+		n.cross = nullptr;
+		n.stamp = 0;   // no search's: the first search's number is 1
+		n.cameFrom = kNone;
+		n.crossCount = 0;
+		n.insideCount = kInsideNotMade;
+		n.how = kByStart;
+		tiles[tile].firstNode = k;
+		return k;
+	}
+
+	// Room for `count` joins side by side in the join pool: the rest of its last chunk, or a new chunk (of kJoinsInAChunk, or of `count` if
+	// that's more; what was left of the last one stays unused). A chunk never moves, so the joins stay where they're put. Null past
+	// MostBytes, or if the game has no room left (then why says which).
+	Join *AddJoins(size_t count)
+	{
+		if (count > joinsFreeCount)
+		{
+			size_t const size = count > kJoinsInAChunk ? count : kJoinsInAChunk;
+
+			if (!RoomFor(size * sizeof(Join) + GrowthOf(joinChunks)))
+			{
+				TooMuch();
+				return nullptr;
+			}
+
+			std::unique_ptr<Join[]> chunk(new (std::nothrow) Join[size]);
+
+			if (!chunk)
+			{
+				why = "the game had no room left for the tiles";
+				return nullptr;
+			}
+
+			joinsFree = chunk.get();
+			joinsFreeCount = size;
+			joinRoom += size;
+			joinChunks.push_back(std::move(chunk));
+		}
+
+		Join *const at = joinsFree;
+		joinsFree += count;
+		joinsFreeCount -= count;
+		return at;
+	}
+
+	// A cell's node, if it has one: by the cell's tile, which has to have a record already (nothing is made). kNone if it has none.
+	uint32_t FindNode(uint32_t cell) const
+	{
+		uint32_t tile = 0;
+		return grid && FindTile(cell, &tile) ? FindNodeIn(cell, tile) : kNone;
+	}
+
+	// The same, in a tile known already: its list of nodes, at most its 64 cells
+	uint32_t FindNodeIn(uint32_t cell, uint32_t tile) const
+	{
+		for (uint32_t k = tiles[tile].firstNode; k != kNone; k = N(k).nextInTile)
+		{
+			if (N(k).cell == cell)
+			{
+				return k;
+			}
+		}
+
+		return kNone;
 	}
 
 	// ROOM BEFORE IT'S TAKEN: would `more` bytes on top of what it holds now go past MostBytes? The peak is kept as it goes.
@@ -558,7 +702,7 @@ private:
 	double FarFromTheGoal(uint32_t node) const
 	{
 		double at[3];
-		return grid->Middle(nodes[node].cell, at) ? Far(at, goalAt) : 0.0;
+		return grid->Middle(N(node).cell, at) ? Far(at, goalAt) : 0.0;
 	}
 
 	// Every move a cell's body can make, by npc_grid's rules (above), to visit(cell, cost, i, j): i and j are the cell's place on the sheet
@@ -898,13 +1042,6 @@ private:
 	// sheet is known already (s, i, j), so its tile is found without a search over the sheets.
 	uint32_t NodeFor(uint32_t cell, int s = -1, int i = 0, int j = 0)
 	{
-		auto const found = nodeOfCell.find(cell);
-
-		if (found != nodeOfCell.end())
-		{
-			return found->second;
-		}
-
 		uint32_t tile = 0;
 
 		if (s >= 0 ? !TileAt(s, i, j, &tile) : !TileOf(cell, &tile))
@@ -912,19 +1049,8 @@ private:
 			return kNone;
 		}
 
-		if (!RoomFor(GrowthOf(nodes)) || !RoomInMap(&nodeOfCell))
-		{
-			TooMuch();
-			return kNone;
-		}
-
-		Node n;
-		n.cell = cell;
-		n.tile = tile;
-		uint32_t const k = static_cast<uint32_t>(nodes.size());
-		nodes.push_back(std::move(n));
-		nodeOfCell[cell] = k;
-		return k;
+		uint32_t const found = FindNodeIn(cell, tile);
+		return found != kNone ? found : AddNode(cell, tile);
 	}
 
 	bool Push(uint32_t node)
@@ -934,7 +1060,7 @@ private:
 			return false;
 		}
 
-		open.push_back(std::make_pair(nodes[node].cost + FarFromTheGoal(node), node));
+		open.push_back(std::make_pair(N(node).cost + FarFromTheGoal(node), node));
 		std::push_heap(open.begin(), open.end(), std::greater<std::pair<double, uint32_t> >());
 		return true;
 	}
@@ -942,9 +1068,9 @@ private:
 	// To node v at a new cost, from u. False past MostBytes.
 	bool Reach(uint32_t v, double cost, uint32_t u, CameBy by)
 	{
-		Node &n = nodes[v];
+		Node &n = N(v);
 
-		if (n.stamp == number && (n.done || n.cost <= cost))
+		if (n.stamp == number && ((n.how & kDone) != 0 || n.cost <= cost))
 		{
 			return true;
 		}
@@ -952,8 +1078,7 @@ private:
 		n.stamp = number;
 		n.cost = cost;
 		n.cameFrom = u;
-		n.cameBy = by;
-		n.done = false;
+		n.how = static_cast<uint8_t>(by);   // and not done
 		return Push(v);
 	}
 
@@ -961,32 +1086,32 @@ private:
 	// them tried; and, in the goal's tile, the way to the goal. False past MostBytes.
 	bool LookAt(uint32_t u)
 	{
-		uint32_t const tile = nodes[u].tile;
+		uint32_t const tile = N(u).tile;
 
 		if (!tiles[tile].made && !MakeTile(tile))
 		{
 			return false;
 		}
 
-		if (!nodes[u].insideMade && !MakeInside(u))
+		if (N(u).insideCount == kInsideNotMade && !MakeInside(u))
 		{
 			return false;
 		}
 
-		double const here = nodes[u].cost;
-		Node const &n = nodes[u];   // MakeTile and MakeInside are done, so no node is added below and n stays where it is
+		double const here = N(u).cost;
+		Node const &n = N(u);   // a node never moves (THE ROOM OF A NODE), and its joins are only read below
 
-		for (Join const &j : n.inside)
+		for (size_t k = 0; k < n.insideCount; k++)
 		{
-			if (!Reach(j.to, here + j.cost, u, kByInside))
+			if (!Reach(n.inside[k].to, here + n.inside[k].cost, u, kByInside))
 			{
 				return false;
 			}
 		}
 
-		for (Join const &j : n.cross)
+		for (size_t k = 0; k < n.crossCount; k++)
 		{
-			if (!Reach(j.to, here + j.cost, u, kByCrossing))
+			if (!Reach(n.cross[k].to, here + n.cross[k].cost, u, kByCrossing))
 			{
 				return false;
 			}
@@ -997,7 +1122,7 @@ private:
 		{
 			double cost = 0.0;
 
-			if (InsideTo(nodes[u].cell, goalCell, &cost) && !Reach(goalNode, here + cost, u, kByInside))
+			if (InsideTo(N(u).cell, tile, goalCell, &cost) && !Reach(goalNode, here + cost, u, kByInside))
 			{
 				return false;
 			}
@@ -1163,36 +1288,65 @@ private:
 		}
 
 		// Now on the nodes and the tile, all at once. A cell can be the middle of runs into several tiles (a corner cell into three): it keeps
-		// a crossing into each, and is one exit of its tile.
-		size_t more = 0;
+		// a crossing into each, and is one exit of its tile. Its exits are in the order they were found; then the crossings are put in the
+		// order of the node they leave from (a stable sort, so each node's stay in the order they were found), and all of them go into one
+		// run of the join pool, each node given its own part of it. If the room can't be had, nothing is put on a node.
 		std::vector<uint32_t> exits;
 
 		for (Crossing const &c : crossings)
 		{
-			more += sizeof(Join) * 2;   // room on the high side: a list that grows may double
-
-			if (nodes[c.from].cross.empty() && std::find(exits.begin(), exits.end(), c.from) == exits.end())
+			if (std::find(exits.begin(), exits.end(), c.from) == exits.end())
 			{
 				exits.push_back(c.from);
 			}
 		}
 
-		more += exits.size() * sizeof(uint32_t);
+		exits.shrink_to_fit();
+		std::stable_sort(crossings.begin(), crossings.end(), [](Crossing const &p, Crossing const &q) { return p.from < q.from; });
 
-		if (!RoomFor(more))
+		for (size_t k = 0, first = 0; k <= crossings.size(); k++)
+		{
+			if (k == crossings.size() || crossings[k].from != crossings[first].from)
+			{
+				if (k - first > kMostCrossingsOfANode)
+				{
+					why = "a cell crosses into more tiles than a node can keep (hostile input)";
+					return false;
+				}
+
+				first = k;
+			}
+		}
+
+		if (!RoomFor(exits.capacity() * sizeof(uint32_t)))
+		{
+			TooMuch();
+			return false;
+		}
+
+		Join *const joins = AddJoins(crossings.size());
+
+		if (!joins && !crossings.empty())
 		{
 			return false;
 		}
 
-		for (Crossing const &c : crossings)
+		for (size_t k = 0; k < crossings.size(); k++)
 		{
-			size_t const before = nodes[c.from].cross.capacity();
-			nodes[c.from].cross.push_back(Join{ c.to, c.cost });
-			listBytes += (nodes[c.from].cross.capacity() - before) * sizeof(Join);
+			joins[k] = Join{ crossings[k].to, crossings[k].cost };
+			Node &from = N(crossings[k].from);
+
+			if (k == 0 || crossings[k].from != crossings[k - 1].from)
+			{
+				from.cross = joins + k;
+				from.crossCount = 0;
+			}
+
+			from.crossCount++;
 		}
 
 		tiles[tile].exits = std::move(exits);
-		listBytes += tiles[tile].exits.capacity() * sizeof(uint32_t);
+		exitsBytes += tiles[tile].exits.capacity() * sizeof(uint32_t);
 		tiles[tile].made = true;
 		tilesMade++;
 		return true;
@@ -1308,41 +1462,46 @@ private:
 	// A node's joins inside its tile: to each of the tile's exits it reaches without leaving the tile, at the cost over its cells
 	bool MakeInside(uint32_t u)
 	{
-		uint32_t const tile = nodes[u].tile;
+		uint32_t const tile = N(u).tile;
 		std::vector<uint32_t> const &exits = tiles[tile].exits;
 		std::vector<uint32_t> targets;
 
 		for (uint32_t e : exits)
 		{
-			targets.push_back(nodes[e].cell);
+			targets.push_back(N(e).cell);
 		}
 
 		std::vector<double> costs;
-		SearchInside(nodes[u].cell, tile, targets, &costs, nullptr);
+		SearchInside(N(u).cell, tile, targets, &costs, nullptr);
 		looks += static_cast<size_t>(kNpcGridTile * kNpcGridTile);
 
-		// (This list grows before its room is asked for, as it's only this tile's exits, at most one for each of its 64 cells. Its room is
-		// counted below, before it's kept. Drake's review.)
-		std::vector<Join> joins;
+		// The joins counted first, then put in the join pool side by side: at most the tile's other exits (63), as the tile has 64 cells
+		size_t count = 0;
+
+		for (size_t k = 0; k < exits.size(); k++)
+		{
+			count += exits[k] != u && costs[k] >= 0.0 ? 1 : 0;
+		}
+
+		Join *const joins = AddJoins(count);
+
+		if (!joins && count > 0)
+		{
+			return false;
+		}
+
+		size_t put = 0;
 
 		for (size_t k = 0; k < exits.size(); k++)
 		{
 			if (exits[k] != u && costs[k] >= 0.0)
 			{
-				joins.push_back(Join{ exits[k], static_cast<float>(costs[k]) });
+				joins[put++] = Join{ exits[k], static_cast<float>(costs[k]) };
 			}
 		}
 
-		joins.shrink_to_fit();
-
-		if (!RoomFor(joins.capacity() * sizeof(Join)))
-		{
-			return false;
-		}
-
-		listBytes += joins.capacity() * sizeof(Join);
-		nodes[u].inside = std::move(joins);
-		nodes[u].insideMade = true;
+		N(u).inside = joins;
+		N(u).insideCount = static_cast<uint8_t>(count);
 		return true;
 	}
 
@@ -1356,11 +1515,11 @@ private:
 	{
 		std::vector<uint32_t> corridor;
 
-		for (uint32_t k = goalNode; k != kNone; k = nodes[k].cameFrom)
+		for (uint32_t k = goalNode; k != kNone; k = N(k).cameFrom)
 		{
-			corridor.push_back(nodes[k].tile);
+			corridor.push_back(N(k).tile);
 
-			if (corridor.size() > nodes.size())
+			if (corridor.size() > nodeCount)
 			{
 				return;
 			}
@@ -1369,7 +1528,7 @@ private:
 		std::sort(corridor.begin(), corridor.end());
 		corridor.erase(std::unique(corridor.begin(), corridor.end()), corridor.end());
 
-		uint32_t const from = nodes[startNode].cell;
+		uint32_t const from = N(startNode).cell;
 		std::unordered_map<uint32_t, std::pair<double, uint32_t> > seen;   // a cell's cost, and where it came from
 		std::unordered_map<uint32_t, bool> done;
 		std::vector<std::pair<double, uint32_t> > heap;
@@ -1455,17 +1614,10 @@ private:
 	}
 
 	// The cost from one cell to another of the same tile, over its cells: false if it doesn't get there inside the tile
-	bool InsideTo(uint32_t from, uint32_t to, double *cost)
+	bool InsideTo(uint32_t from, uint32_t tile, uint32_t to, double *cost)
 	{
-		auto const found = nodeOfCell.find(from);
-
-		if (found == nodeOfCell.end())
-		{
-			return false;
-		}
-
 		std::vector<double> costs;
-		SearchInside(from, nodes[found->second].tile, std::vector<uint32_t>(1, to), &costs, nullptr);
+		SearchInside(from, tile, std::vector<uint32_t>(1, to), &costs, nullptr);
 		looks += static_cast<size_t>(kNpcGridTile * kNpcGridTile);
 		*cost = costs[0];
 		return costs[0] >= 0.0;
@@ -1474,14 +1626,14 @@ private:
 	// The cells of the way from one cell to another of its tile, the first left out (it's on the list already), the last put in
 	bool CellsInside(uint32_t from, uint32_t to, std::vector<uint32_t> *cells) const
 	{
-		auto const found = nodeOfCell.find(from);
+		uint32_t const found = FindNode(from);
 
-		if (found == nodeOfCell.end())
+		if (found == kNone)
 		{
 			return false;
 		}
 
-		uint32_t const tile = nodes[found->second].tile;
+		uint32_t const tile = N(found).tile;
 		std::vector<double> costs;
 		std::vector<int> cameFrom;
 		SearchInside(from, tile, std::vector<uint32_t>(1, to), &costs, &cameFrom);
