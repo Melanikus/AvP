@@ -535,23 +535,47 @@ private:
 		return grid->Middle(nodes[node].cell, at) ? Far(at, goalAt) : 0.0;
 	}
 
-	// Every move a cell's body can make, by npc_grid's rules (above), to visit(cell, cost). The same code for the tiles' crossings, the tiles'
-	// own searches, the smoothing and the tests' exact search, so they can't differ.
+	// Every move a cell's body can make, by npc_grid's rules (above), to visit(cell, cost, i, j): i and j are the cell's place on the sheet
+	// for a move along it, and -1 for a link or a fall (to another sheet, as a rule). The same code for the tiles' crossings, the tiles' own
+	// searches, the smoothing and the tests' exact search, so they can't differ. This one finds the cell's place first (a search over the
+	// sheets); MovesAt is told it.
 	template <class Visit>
 	void Moves(uint32_t c, Visit visit) const
 	{
 		int s = 0, i = 0, j = 0;
-		double a[3];
 
-		if (!grid->CellPlace(c, &s, &i, &j) || !grid->Middle(c, a))
+		if (grid->CellPlace(c, &s, &i, &j))
 		{
-			return;
+			MovesAt(c, s, i, j, PriceOf(c), kStepsAndLinks, visit);
 		}
+	}
+
+	// Which of a cell's moves MovesAt gives: its steps along the sheet, its links and falls, or both
+	enum WhichMoves
+	{
+		kStepsAlongTheSheet = 1,
+		kLinksAndFalls = 2,
+		kStepsAndLinks = 3
+	};
+
+	// THE MOVES of a cell whose place on its sheet is known, at the price of its sheet's kind (PriceOf), so nothing here looks a cell up by a
+	// search over the sheets but a link's (Frost's measure, 2026-11-26: Temple's cold build was 11.3 s, mostly those searches). `which` leaves
+	// some out: a tile's making asks for the links only of the cells inside its edge, whose steps all stay in it; and a tile's own search for the
+	// steps only, as a link goes to another sheet (another tile): it can only make a way inside the tile cheaper there, never let it through,
+	// so leaving it out can make a tile's way a little dearer, never cheaper, and the smoothing (which has every move) still finds the shortcut.
+	template <class Visit>
+	void MovesAt(uint32_t c, int s, int i, int j, double price, int which, Visit visit) const
+	{
+		double a[3];
+		bool haveA = false;
+		auto const middle = [&]() -> const double * {
+			haveA = haveA || grid->Middle(c, a);
+			return haveA ? a : nullptr;
+		};
 
 		uint8_t const here = grid->Flags(c);
-		double const price = PriceOf(c);
 
-		for (int dj = -1; dj <= 1; dj++)
+		for (int dj = -1; dj <= 1 && (which & kStepsAlongTheSheet); dj++)
 		{
 			for (int di = -1; di <= 1; di++)
 			{
@@ -583,15 +607,21 @@ private:
 				if (body == kNpcGridMarine)
 				{
 					double b[3];
+					const double *const at = middle();
 
-					if (!grid->Middle(n, b) || (((grid->Flags(n) | here) & kNpcGridSteep) && b[1] < a[1]))
+					if (!at || !grid->Middle(n, b) || (((grid->Flags(n) | here) & kNpcGridSteep) && b[1] < at[1]))
 					{
 						continue;
 					}
 				}
 
-				visit(n, (di != 0 && dj != 0 ? sqrt(2.0) : 1.0) * kNpcGridCell * price + ArrivalExtra(n));
+				visit(n, (di != 0 && dj != 0 ? sqrt(2.0) : 1.0) * kNpcGridCell * price + ArrivalExtra(n), i + di, j + dj);
 			}
+		}
+
+		if (!(which & kLinksAndFalls))
+		{
+			return;
 		}
 
 		size_t count = 0;
@@ -601,12 +631,15 @@ private:
 		{
 			uint32_t const n = list[k];
 			double b[3];
+			const double *const a2 = middle();
 
 			// Every link was made between two of the grid's cells, but a number past them is turned away all the same
-			if (n >= gridCells || !Fits(n) || !grid->Middle(n, b))
+			if (!a2 || n >= gridCells || !Fits(n) || !grid->Middle(n, b))
 			{
 				continue;
 			}
+
+			double const *const a = a2;
 
 			if (body == kNpcGridMarine)
 			{
@@ -630,7 +663,7 @@ private:
 				extra = join == kNpcGridJoinOutside ? kNpcGridOutsidePrice : (join == kNpcGridJoinThrough ? kNpcGridThroughPrice : 0.0);
 			}
 
-			visit(n, Far(a, b) * PriceOf(n) + extra + ArrivalExtra(n));
+			visit(n, Far(a, b) * PriceOf(n) + extra + ArrivalExtra(n), -1, -1);
 		}
 
 		if (body == kNpcGridMarine)
@@ -640,13 +673,14 @@ private:
 			for (size_t k = 0; k < count; k++)
 			{
 				double b[3];
+				const double *const a = middle();
 
-				if (list[k] >= gridCells || !grid->Middle(list[k], b))
+				if (!a || list[k] >= gridCells || !grid->Middle(list[k], b))
 				{
 					continue;
 				}
 
-				visit(list[k], Far(a, b));
+				visit(list[k], Far(a, b), -1, -1);
 			}
 		}
 	}
@@ -698,7 +732,7 @@ public:
 				return kNpcGridFound;
 			}
 
-			Moves(c, [&](uint32_t n, double step) {
+			Moves(c, [&](uint32_t n, double step, int, int) {
 				auto const old = seen.find(n);
 
 				if (old != seen.end() && (old->second.second || old->second.first <= at + step))
@@ -731,7 +765,7 @@ private:
 
 		*ti = i / kNpcGridTile;
 		*tj = j / kNpcGridTile;
-		*key = (static_cast<uint64_t>(*s) << 44) | ((static_cast<uint64_t>(*tj) & 0x3FFFFFu) << 22) | (static_cast<uint64_t>(*ti) & 0x3FFFFFu);
+		*key = KeyOfPlace(*s, i, j);
 		return true;
 	}
 
@@ -757,18 +791,52 @@ private:
 		return true;
 	}
 
-	// The tile a cell is in, its record made if it has none (crossings not yet found). False for a cell on no sheet, or past MostBytes
-	// (then why says so).
-	bool TileOf(uint32_t cell, uint32_t *tile)
+	// The same key for a place on a sheet known already: no search over the sheets
+	static uint64_t KeyOfPlace(int s, int i, int j)
 	{
-		uint64_t key = 0;
-		int s = 0, ti = 0, tj = 0;
+		return (static_cast<uint64_t>(s) << 44) | ((static_cast<uint64_t>(j / kNpcGridTile) & 0x3FFFFFu) << 22) | (static_cast<uint64_t>(i / kNpcGridTile) & 0x3FFFFFu);
+	}
 
-		if (!KeyOf(cell, &key, &s, &ti, &tj))
+	// The tile of a place on a sheet known already, if it has a record: nothing is made
+	bool FindTileAt(int s, int i, int j, uint32_t *tile) const
+	{
+		auto const found = tileOfKey.find(KeyOfPlace(s, i, j));
+
+		if (found == tileOfKey.end())
 		{
 			return false;
 		}
 
+		*tile = found->second;
+		return true;
+	}
+
+	// Is a place on a sheet in this tile
+	bool PlaceInTile(int s, int i, int j, uint32_t tile) const
+	{
+		Tile const &t = tiles[tile];
+		return s == t.sheet && i >= t.i0 && i < t.i0 + kNpcGridTile && j >= t.j0 && j < t.j0 + kNpcGridTile;
+	}
+
+	// The tile a cell is in, its record made if it has none (crossings not yet found). False for a cell on no sheet, or past MostBytes
+	// (then why says so).
+	bool TileOf(uint32_t cell, uint32_t *tile)
+	{
+		int s = 0, i = 0, j = 0;
+
+		if (!grid->CellPlace(cell, &s, &i, &j) || s < 0 || i < 0 || j < 0)
+		{
+			return false;
+		}
+
+		return TileAt(s, i, j, tile);
+	}
+
+	// The same, for a place on a sheet known already
+	bool TileAt(int s, int i, int j, uint32_t *tile)
+	{
+		int const ti = i / kNpcGridTile, tj = j / kNpcGridTile;
+		uint64_t const key = KeyOfPlace(s, i, j);
 		auto const found = tileOfKey.find(key);
 
 		if (found != tileOfKey.end())
@@ -800,8 +868,9 @@ private:
 		return grid->CellPlace(cell, &s, &i, &j) && s == t.sheet && i >= t.i0 && i < t.i0 + kNpcGridTile && j >= t.j0 && j < t.j0 + kNpcGridTile;
 	}
 
-	// A cell's node, made if it has none: kNone past MostBytes (then why says so), or for a cell on no sheet
-	uint32_t NodeFor(uint32_t cell)
+	// A cell's node, made if it has none: kNone past MostBytes (then why says so), or for a cell on no sheet. s >= 0: the cell's place on its
+	// sheet is known already (s, i, j), so its tile is found without a search over the sheets.
+	uint32_t NodeFor(uint32_t cell, int s = -1, int i = 0, int j = 0)
 	{
 		auto const found = nodeOfCell.find(cell);
 
@@ -812,7 +881,7 @@ private:
 
 		uint32_t tile = 0;
 
-		if (!TileOf(cell, &tile))
+		if (s >= 0 ? !TileAt(s, i, j, &tile) : !TileOf(cell, &tile))
 		{
 			return kNone;
 		}
@@ -922,15 +991,20 @@ private:
 		{
 			uint32_t from, to;
 			double cost;
+			int fromI, fromJ;          // where it leaves from, on the tile's sheet
+			int toS, toI, toJ;         // where it goes to, if that's known (a step along the sheet), else toS -1
 		};
 		std::unordered_map<uint32_t, std::vector<Out> > byTile;   // by the tile they go into: each leaving cell's cheapest move there
 		bool full = false;
+		// Every cell of the tile has its sheet's kind, so its price (PriceOf) is the same for all of them
+		double price = -1.0;
 
 		for (int dj = 0; dj < kNpcGridTile && !full; dj++)
 		{
 			for (int di = 0; di < kNpcGridTile && !full; di++)
 			{
-				uint32_t const c = grid->CellAt(t.sheet, t.i0 + di, t.j0 + dj);
+				int const ci = t.i0 + di, cj = t.j0 + dj;
+				uint32_t const c = grid->CellAt(t.sheet, ci, cj);
 				looks++;
 
 				if (c == kNpcGridNoCell || !Fits(c))
@@ -938,15 +1012,23 @@ private:
 					continue;
 				}
 
-				Moves(c, [&](uint32_t n, double cost) {
+				if (price < 0.0)
+				{
+					price = PriceOf(c);
+				}
+
+				// A cell inside the tile's edge: its steps along the sheet all stay in the tile, so only its links can cross
+				bool const edge = di == 0 || dj == 0 || di == kNpcGridTile - 1 || dj == kNpcGridTile - 1;
+
+				MovesAt(c, t.sheet, ci, cj, price, edge ? kStepsAndLinks : kLinksAndFalls, [&](uint32_t n, double cost, int ni, int nj) {
 					uint32_t into = 0;
 
-					if (full || InTile(n, tile))
+					if (full || (ni >= 0 ? PlaceInTile(t.sheet, ni, nj, tile) : InTile(n, tile)))
 					{
 						return;
 					}
 
-					if (!TileOf(n, &into))
+					if (ni >= 0 ? !TileAt(t.sheet, ni, nj, &into) : !TileOf(n, &into))
 					{
 						full = why != nullptr;   // past MostBytes; a cell on no sheet is only left out
 						return;
@@ -962,13 +1044,16 @@ private:
 							{
 								o.to = n;
 								o.cost = cost;
+								o.toS = ni >= 0 ? t.sheet : -1;
+								o.toI = ni;
+								o.toJ = nj;
 							}
 
 							return;
 						}
 					}
 
-					list.push_back(Out{ c, n, cost });
+					list.push_back(Out{ c, n, cost, ci, cj, ni >= 0 ? t.sheet : -1, ni, nj });
 				});
 			}
 		}
@@ -1006,14 +1091,11 @@ private:
 
 				for (size_t k = 0; k < run.size(); k++)
 				{
-					int s = 0, i = 0, j = 0;
-					grid->CellPlace(list[run[k]].from, &s, &i, &j);
+					Out const &here = list[run[k]];
 
 					for (size_t m = 0; m < list.size(); m++)
 					{
-						int s2 = 0, i2 = 0, j2 = 0;
-
-						if (!taken[m] && grid->CellPlace(list[m].from, &s2, &i2, &j2) && abs(i2 - i) <= 1 && abs(j2 - j) <= 1)
+						if (!taken[m] && abs(list[m].fromI - here.fromI) <= 1 && abs(list[m].fromJ - here.fromJ) <= 1)
 						{
 							taken[m] = true;
 							run.push_back(m);
@@ -1026,27 +1108,23 @@ private:
 
 				for (size_t k : run)
 				{
-					int s = 0, i = 0, j = 0;
-					grid->CellPlace(list[k].from, &s, &i, &j);
-					loI = std::min(loI, i);
-					hiI = std::max(hiI, i);
-					loJ = std::min(loJ, j);
-					hiJ = std::max(hiJ, j);
+					loI = std::min(loI, list[k].fromI);
+					hiI = std::max(hiI, list[k].fromI);
+					loJ = std::min(loJ, list[k].fromJ);
+					hiJ = std::max(hiJ, list[k].fromJ);
 				}
 
 				bool const alongI = hiI - loI >= hiJ - loJ;
 				std::sort(run.begin(), run.end(), [&](size_t a, size_t b) {
-					int sa = 0, ia = 0, ja = 0, sb = 0, ib = 0, jb = 0;
-					grid->CellPlace(list[a].from, &sa, &ia, &ja);
-					grid->CellPlace(list[b].from, &sb, &ib, &jb);
-					return alongI ? (ia != ib ? ia < ib : ja < jb) : (ja != jb ? ja < jb : ia < ib);
+					Out const &p = list[a], &q = list[b];
+					return alongI ? (p.fromI != q.fromI ? p.fromI < q.fromI : p.fromJ < q.fromJ) : (p.fromJ != q.fromJ ? p.fromJ < q.fromJ : p.fromI < q.fromI);
 				});
 
 				for (size_t k = 0; k < run.size(); k += kNpcGridTile)
 				{
 					size_t const pieceEnd = std::min(run.size(), k + kNpcGridTile);
 					Out const &o = list[run[k + (pieceEnd - k) / 2]];
-					uint32_t const a = NodeFor(o.from), b = NodeFor(o.to);
+					uint32_t const a = NodeFor(o.from, t.sheet, o.fromI, o.fromJ), b = o.toS >= 0 ? NodeFor(o.to, o.toS, o.toI, o.toJ) : NodeFor(o.to);
 
 					if (a == kNone || b == kNone)
 					{
@@ -1113,15 +1191,32 @@ private:
 			cellAt[k] = grid->CellAt(t.sheet, t.i0 + k % kNpcGridTile, t.j0 + k / kNpcGridTile);
 		}
 
-		auto const placeOf = [&](uint32_t cell) -> int {
-			int s = 0, i = 0, j = 0;
+		// A cell's place in the tile, or -1, with no search over the sheets: a row of a tile is cells that follow each other on its sheet, so a
+		// cell is in row r when it's between that row's first cell and the first plus the row's cells there are (fewer at a sheet's right edge)
+		int rowCells[kNpcGridTile];
 
-			if (!grid->CellPlace(cell, &s, &i, &j) || s != t.sheet || i < t.i0 || i >= t.i0 + kNpcGridTile || j < t.j0 || j >= t.j0 + kNpcGridTile)
+		for (int r = 0; r < kNpcGridTile; r++)
+		{
+			rowCells[r] = 0;
+
+			while (rowCells[r] < kNpcGridTile && cellAt[r * kNpcGridTile + rowCells[r]] != kNpcGridNoCell)
 			{
-				return -1;
+				rowCells[r]++;
+			}
+		}
+
+		auto const placeOf = [&](uint32_t cell) -> int {
+			for (int r = 0; r < kNpcGridTile; r++)
+			{
+				uint32_t const first = cellAt[r * kNpcGridTile];
+
+				if (rowCells[r] > 0 && cell >= first && cell - first < static_cast<uint32_t>(rowCells[r]))
+				{
+					return r * kNpcGridTile + static_cast<int>(cell - first);
+				}
 			}
 
-			return (j - t.j0) * kNpcGridTile + (i - t.i0);
+			return -1;
 		};
 
 		int const start = placeOf(from);
@@ -1132,15 +1227,20 @@ private:
 			return;
 		}
 
-		std::vector<std::pair<double, int> > heap;
+		// Every cell of the tile has its sheet's kind, so one price for all (PriceOf)
+		double const price = PriceOf(from);
+		// The heap, on the stack: a cell goes on it only when its cost goes down, from one of its 8 neighbours each time, so never more than
+		// 8 times for each of the tile's cells (and once for the start). A list on the heap for each of a level's many tiles' searches was a
+		// cost of its own.
+		std::pair<double, int> heap[kNpcGridTile * kNpcGridTile * 8 + 1];
+		int heapSize = 0;
 		cost[start] = 0.0;
-		heap.push_back(std::make_pair(0.0, start));
+		heap[heapSize++] = std::make_pair(0.0, start);
 
-		while (!heap.empty())
+		while (heapSize > 0)
 		{
-			std::pop_heap(heap.begin(), heap.end(), std::greater<std::pair<double, int> >());
-			int const k = heap.back().second;
-			heap.pop_back();
+			std::pop_heap(heap, heap + heapSize, std::greater<std::pair<double, int> >());
+			int const k = heap[--heapSize].second;
 
 			if (done[k])
 			{
@@ -1150,18 +1250,20 @@ private:
 			done[k] = true;
 			double const at = cost[k];
 
-			Moves(cellAt[k], [&](uint32_t cell, double step) {
-				int const m = placeOf(cell);
+			MovesAt(cellAt[k], t.sheet, t.i0 + k % kNpcGridTile, t.j0 + k / kNpcGridTile, price, kStepsAlongTheSheet, [&](uint32_t cell, double step, int ni, int nj) {
+				// a step along the sheet: its place in the tile from its own (i, j); a link: by the rows
+				int const m = ni >= 0 ? (ni >= t.i0 && ni < t.i0 + kNpcGridTile && nj >= t.j0 && nj < t.j0 + kNpcGridTile ? (nj - t.j0) * kNpcGridTile + (ni - t.i0) : -1)
+					: placeOf(cell);
 
-				if (m < 0 || done[m] || (cost[m] >= 0.0 && cost[m] <= at + step))
+				if (m < 0 || done[m] || (cost[m] >= 0.0 && cost[m] <= at + step) || heapSize >= kNpcGridTile * kNpcGridTile * 8 + 1)
 				{
 					return;
 				}
 
 				cost[m] = at + step;
 				cameFrom[m] = k;
-				heap.push_back(std::make_pair(cost[m], m));
-				std::push_heap(heap.begin(), heap.end(), std::greater<std::pair<double, int> >());
+				heap[heapSize++] = std::make_pair(cost[m], m);
+				std::push_heap(heap, heap + heapSize, std::greater<std::pair<double, int> >());
 			});
 		}
 
@@ -1294,10 +1396,18 @@ private:
 				return;
 			}
 
-			Moves(c, [&](uint32_t n, double step) {
+			int cs = 0, ci = 0, cj = 0;
+
+			if (!grid->CellPlace(c, &cs, &ci, &cj))
+			{
+				continue;
+			}
+
+			MovesAt(c, cs, ci, cj, PriceOf(c), kStepsAndLinks, [&](uint32_t n, double step, int ni, int nj) {
 				uint32_t tile = 0;
 
-				if (!FindTile(n, &tile) || !std::binary_search(corridor.begin(), corridor.end(), tile))
+				// a step along the sheet: its tile from its own place; a link: looked up
+				if (!(ni >= 0 ? FindTileAt(cs, ni, nj, &tile) : FindTile(n, &tile)) || !std::binary_search(corridor.begin(), corridor.end(), tile))
 				{
 					return;
 				}

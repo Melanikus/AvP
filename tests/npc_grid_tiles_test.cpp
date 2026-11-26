@@ -9,6 +9,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 
 #include <limits>
 #include <unordered_map>
@@ -665,8 +666,44 @@ static void TestBreakables()
 	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay, "with none set again, no way");
 }
 
+// How long a search from nothing takes on a big world: SAID, never checked (a test's machine can be busy). For the faster cold build: the
+// same world and pair before and after a change, on the same machine, set side by side.
+static void SayHowLongACold()
+{
+	printf("How long (said, not checked)\n");
+
+	TestGrid g;
+	randomState = 777;
+	MakeWorld(&g, 400, 400, 12, false);
+
+	for (int k = 0; k < 400 * 400 / 10; k++)
+	{
+		g.Block(0, static_cast<int>(Random(400)), static_cast<int>(Random(400)));
+	}
+
+	uint32_t from = g.CellAt(0, 3, 3), to = g.CellAt(1, 390, 150);
+
+	for (int k = 4; !(g.Flags(from) & kNpcGridClings) && k < 40; k++)
+	{
+		from = g.CellAt(0, k, k);
+	}
+
+	Tiles tiles;
+	clock_t const t0 = clock();
+	tiles.Start(g, from, to, kNpcGridAlien, 10);
+	NpcGridSearch const cold = tiles.Work(1000000000);
+	clock_t const t1 = clock();
+	tiles.Start(g, from, to, kNpcGridAlien, 10);
+	NpcGridSearch const warm = tiles.Work(1000000000);
+	clock_t const t2 = clock();
+	printf("  said    400 x 400 floor and a 400 x 200 wall, 12 walls with gaps: cold %s in %.0f ms (%u tiles, %u cells' work), kept %s in %.0f ms\n",
+		cold == kNpcGridFound ? "found" : "no way", 1000.0 * (t1 - t0) / CLOCKS_PER_SEC, (unsigned)tiles.TilesMade(), (unsigned)tiles.Looks(),
+		warm == kNpcGridFound ? "found" : "no way", 1000.0 * (t2 - t1) / CLOCKS_PER_SEC);
+}
+
 int main()
 {
+	SayHowLongACold();
 	TestTheRules();
 	TestAgainstTheExact();
 	TestOverFrames();
