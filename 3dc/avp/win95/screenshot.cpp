@@ -39,14 +39,27 @@ void LogCameraPosForModuleLinking()
 	}
 	Filename[sizeof(Filename) - 1] = '\0';
 
+	// The line: the module's name, ended and padded to a whole 4 bytes, then three places. (Fixed 2026-11-26 by Melanikus (Drake) for the AvP
+	// port: the name comes from the level file, and it was copied in whole, so a name of about 236 letters or more wrote past the 300 bytes.)
+	// A name too long for the line is said and left out, before the file is even opened.
+	char output_buffer[300];
+	size_t const nameLength = strlen(playerPherModule->name);
+	size_t const nameRoom = (nameLength + 4) & ~(size_t)3;
+
+	if (nameRoom + sizeof(VECTORCH) + sizeof(MATRIXCH) + sizeof(VECTORCH) > sizeof(output_buffer))
+	{
+		LogErrorString("the camera's place for module linking: the module's name is too long for its line, so it isn't written");
+		return;
+	}
+
 	FILE* file = avp_open_userfile(Filename, "ab");
 	if (!file )return;
 
-	char output_buffer[300];
 	int length = 0;
 
-	strcpy(output_buffer,playerPherModule->name);
-	length += (strlen(playerPherModule->name)+4)&~3;
+	memset(output_buffer, 0, nameRoom);
+	memcpy(output_buffer, playerPherModule->name, nameLength);
+	length += (int)nameRoom;
 
 	*(VECTORCH*)&output_buffer[length] = playerPherModule->m_world;
 	length += sizeof(VECTORCH);

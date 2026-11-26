@@ -1204,13 +1204,23 @@ void Console_ZoneAlert(int input)
 	smptr = Global_ModulePtr[Global_Scene];
 	Global_ModuleArrayPtr = smptr->sm_marray;
 
-	if ((input==0)||(input>=ModuleArraySize))
+	// The number typed names a module; 0, or one past the level's, means the player's own. (Fixed 2026-11-26 by Melanikus (Drake) for the AvP
+	// port: a number below 0 was read as a place before the start of the module list, and the player's module is none while the player is
+	// between modules, so both read through a pointer to nothing.) A number below 1 means the player's own too, and with no module to name,
+	// nothing is alerted.
+	if ((input<=0)||(input>=ModuleArraySize))
 	{
 		target=playerPherModule;
 	}
 	else
 	{
 		target=Global_ModuleArrayPtr[input];
+	}
+
+	if (!target)
+	{
+		NewOnScreenMessage("NO MODULE TO ALERT: THE PLAYER IS IN NONE");
+		return;
 	}
 
 	// A module's name comes from the level file, so the line is held to the room tempstring has, and always ends. (Added 2026-11-14 by
