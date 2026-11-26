@@ -905,9 +905,48 @@ static void SayHowLongACold()
 		warm == kNpcGridFound ? "found" : "no way", 1000.0 * (t2 - t1) / CLOCKS_PER_SEC, (unsigned)tiles.Looks());
 }
 
+// The room of a node (frost-tiles-3, Bishop: "red first on the peak (59.4 of 64 MB on Temple's first leg)"): the most the tiles held in a
+// wide cold search, for each node they kept. Before: a node took 64 bytes, two lists of its own, an entry in a hash table from its cell, and
+// a list of all nodes that grew by a copy at twice its size. After: 40 bytes, its joins in a pool, and found by its tile. Measured on this
+// world, 32-bit: 376 bytes before (5c65c664), 283 after; the bound, 320, is between. (The rest of the peak is mostly the joins, which are
+// the same, and the smoothing's own search. On a made-up 2-million-cell world the peak went from 54.0 MB to 33.5.)
+static void TestTheRoomOfANode()
+{
+	printf("The room of a node\n");
+
+	TestGrid g;
+	randomState = 777;
+	MakeWorld(&g, 400, 400, 12, false);
+
+	for (int k = 0; k < 400 * 400 / 10; k++)
+	{
+		g.Block(0, static_cast<int>(Random(400)), static_cast<int>(Random(400)));
+	}
+
+	uint32_t from = g.CellAt(0, 3, 3), to = g.CellAt(1, 390, 150);
+
+	for (int k = 4; !(g.Flags(from) & kNpcGridClings) && k < 40; k++)
+	{
+		from = g.CellAt(0, k, k);
+	}
+
+	Tiles tiles;
+	bool const found = tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(1000000000) == kNpcGridFound;
+	size_t parts[6];
+	tiles.BytesByPart(parts);
+	double const perNode = tiles.NodesKept() > 0 ? static_cast<double>(tiles.PeakBytes()) / tiles.NodesKept() : 1e30;
+	char line[400];
+	snprintf(line, sizeof(line), "a wide cold search held at most %.0f bytes for each node it kept (%u nodes, %u tiles; peak %.2f MB; now, MB: nodes %.2f, "
+		"joins and exits %.2f, tiles %.2f, open %.2f, hash table %.2f, way %.3f; %u-bit)", perNode, (unsigned)tiles.NodesKept(), (unsigned)tiles.TilesMade(),
+		tiles.PeakBytes() / 1048576.0, parts[0] / 1048576.0, parts[1] / 1048576.0, parts[2] / 1048576.0, parts[3] / 1048576.0, parts[4] / 1048576.0,
+		parts[5] / 1048576.0, (unsigned)(sizeof(void *) * 8));
+	Check(found && perNode <= 320.0, line);
+}
+
 int main()
 {
 	SayHowLongACold();
+	TestTheRoomOfANode();
 	TestTheRules();
 	TestAgainstTheExact();
 	TestOverFrames();
