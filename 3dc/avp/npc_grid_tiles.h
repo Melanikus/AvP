@@ -27,8 +27,8 @@
 // kNpcGridTooFar, and Why says so. A level is hostile input, and the game is a 32-bit program. PeakBytes says the most it held in the last
 // search. Forget gives it all back.
 // WHO FORGETS: Start, by itself, whenever the grid is another one or another build of the same one (NpcGrid::BuildNumber: Bishop, "a build
-// number, not the pointer + size"), or the body, the price or the breakables (SetBreakables) are others. The walk may call Forget too, to give
-// the room back at once when a level ends.
+// number, not the pointer + size"), or the body, the price, the breakables (SetBreakables) or the dear cells (SetDearCells) are others. The
+// walk may call Forget too, to give the room back at once when a level ends.
 // PIECES THAT DON'T JOIN: an alien's search whose start and goal are in pieces that certainly don't join (NpcGrid::CertainlyApart, the test
 // npc_grid's own StartSearch makes) ends at once, NO WAY, without looking at a cell, as npc_grid's own does; Start says why, and BestSoFar is
 // then nothing (there was no search to find the reachable cell nearest the goal). Never with breakables set: a breakable can join two pieces.
@@ -43,7 +43,9 @@
 //     OUTSIDE join, 10000 more over a THROUGH one (JoinOf, which gives the same answer either way round, as the build stores it for both
 //     directions); a marine only onto a floor, up or down no more than a step;
 //   - a marine's fall, one way, its length; an alien never falls;
-//   - an alien's floor costs floorPrice times as much (1 to kAlienWaysMostFloorPrice); everything else costs 1 a millimetre.
+//   - an alien's floor costs floorPrice times as much (1 to kAlienWaysMostFloorPrice); everything else costs 1 a millimetre;
+//   - and the tiles' own, not npc_grid's: every move onto a breakable (SetBreakables) or a dear cell (SetDearCells), a fall too, costs that
+//     cell's extra millimetres more.
 // THE GRID it's given is any class with npc_grid's few public answers: Ready, BuildNumber, Cells, Flags, KindOf, Middle, CellPlace, CellAt,
 // LinksOf, FallsOf, JoinOf and CertainlyApart. NpcGridWaySearch below is it over the game's NpcGrid; the tests use a made-up grid with the
 // same answers.
@@ -82,6 +84,8 @@ public:
 		Reset();
 		breakables = nullptr;
 		breakablesVersion = 0;
+		dearCells = nullptr;   // and the dear cells, the same way (SetDearCells)
+		dearVersion = 0;
 	}
 
 private:
@@ -148,6 +152,21 @@ public:
 		breakablesVersion = version;
 	}
 
+	// DEAR CELLS (Vasquez, 2026-11-26, Bishop's OK: XENA's run died in Temple's FIRE11, her way 1.3 m from a flame generator's particles).
+	// Added 2026-11-26 by Melanikus (Frost) for the AvP port. Every move onto a cell in extraMmOfCell costs its extra millimetres more, as
+	// onto a breakable, so a way goes round the cells a flame reaches, and goes through them only when there's no other way. Unlike a
+	// breakable, a dear cell is no new cell to be on: one the body can't be on stays one it can't, so dear cells join no pieces, and an
+	// alien's search between pieces that certainly don't join still ends at once (PIECES THAT DON'T JOIN, above). The same checks as the
+	// breakables' (a negative extra, or not a number, is no extra; more than kNpcGridTilesMostBreakableMm counts as that), and a cell in
+	// both maps pays both. The map stays the caller's; only the pointer is kept. A new version (a flame gone out, or a new one) makes the
+	// tiles be made again at the next Start, every tile, a cold search's cost: a new version only when the set of dear cells really
+	// changes. nullptr: none. Forget lets go of it.
+	void SetDearCells(std::unordered_map<uint32_t, float> const *extraMmOfCell, uint32_t version)
+	{
+		dearCells = extraMmOfCell;
+		dearVersion = version;
+	}
+
 	// Starts a search from one cell to another, for one body: nothing if it has started, or why not, in words (then Work says kNpcGridNoWay,
 	// or kNpcGridTooFar past what it may hold). The grid has to stay as it is until the search ends (and its tiles are kept for the next one).
 	const char *Start(Grid const &onGrid, uint32_t from, uint32_t to, NpcGridBody forBody, int price)
@@ -163,7 +182,7 @@ public:
 		}
 
 		if (grid != &onGrid || gridBuild != onGrid.BuildNumber() || body != forBody || floorPrice != price || tilesBreakables != breakables
-			|| tilesBreakablesVersion != breakablesVersion)
+			|| tilesBreakablesVersion != breakablesVersion || tilesDearCells != dearCells || tilesDearVersion != dearVersion)
 		{
 			Reset();
 			grid = &onGrid;
@@ -173,6 +192,8 @@ public:
 			gridCells = onGrid.Cells();
 			tilesBreakables = breakables;
 			tilesBreakablesVersion = breakablesVersion;
+			tilesDearCells = dearCells;
+			tilesDearVersion = dearVersion;
 		}
 
 		bit = body == kNpcGridMarine ? kNpcGridStands : kNpcGridClings;
@@ -421,6 +442,10 @@ private:
 	uint32_t breakablesVersion = 0;
 	std::unordered_map<uint32_t, float> const *tilesBreakables = nullptr;  // and the ones the tiles kept were made with
 	uint32_t tilesBreakablesVersion = 0;
+	std::unordered_map<uint32_t, float> const *dearCells = nullptr;        // SetDearCells: the caller's, now
+	uint32_t dearVersion = 0;
+	std::unordered_map<uint32_t, float> const *tilesDearCells = nullptr;   // and the ones the tiles kept were made with
+	uint32_t tilesDearVersion = 0;
 	std::unordered_map<uint64_t, uint32_t> tileOfKey;
 	std::vector<Tile> tiles;
 	std::unordered_map<uint32_t, uint32_t> nodeOfCell;
@@ -499,24 +524,27 @@ private:
 		return RoomFor(kNpcGridTilesMapEntryBytes);
 	}
 
-	// A breakable cell's extra millimetres (SetBreakables), or -1 for a cell that isn't one: not in the map, or its number negative or not a
-	// number (checked, as the map comes from outside the search)
-	double ExtraOf(uint32_t cell) const
+	// A cell's extra millimetres in one of the caller's maps (SetBreakables, SetDearCells), or -1 for a cell that has none: no map, not in
+	// it, or its number negative or not a number (checked, as the map comes from outside the search). At most kNpcGridTilesMostBreakableMm.
+	static double ExtraIn(std::unordered_map<uint32_t, float> const *map, uint32_t cell)
 	{
-		if (!breakables)
+		if (!map)
 		{
 			return -1.0;
 		}
 
-		auto const found = breakables->find(cell);
+		auto const found = map->find(cell);
 
-		if (found == breakables->end() || !(found->second >= 0.0f))
+		if (found == map->end() || !(found->second >= 0.0f))
 		{
 			return -1.0;
 		}
 
 		return std::min<double>(found->second, kNpcGridTilesMostBreakableMm);
 	}
+
+	// A breakable cell's extra millimetres, or -1 for a cell that isn't one
+	double ExtraOf(uint32_t cell) const { return ExtraIn(breakables, cell); }
 
 	// Can the body be on this cell: its flag, or a breakable (above). With breakables set, a cell without its flag costs a look in their map,
 	// for every neighbour of every cell a tile's making or search looks at: a cold build's cost, only while there are breakables (Drake's NIT).
@@ -525,11 +553,11 @@ private:
 		return (grid->Flags(cell) & bit) != 0 || ExtraOf(cell) >= 0.0;
 	}
 
-	// What a move onto this cell costs on top of npc_grid's price: a breakable's extra, or nothing
+	// What a move onto this cell costs on top of npc_grid's price: a breakable's extra and a dear cell's, either, both, or nothing
 	double ArrivalExtra(uint32_t cell) const
 	{
-		double const extra = ExtraOf(cell);
-		return extra > 0.0 ? extra : 0.0;
+		double const extra = ExtraOf(cell), dear = ExtraIn(dearCells, cell);
+		return (extra > 0.0 ? extra : 0.0) + (dear > 0.0 ? dear : 0.0);
 	}
 
 	double PriceOf(uint32_t cell) const
@@ -693,7 +721,9 @@ private:
 					continue;
 				}
 
-				visit(list[k], Far(a, b), -1, -1);
+				// its length, and as every move onto a cell, a breakable's or a dear cell's extra where it lands (frost-dearcells: before it,
+				// a fall was the one move that didn't pay it)
+				visit(list[k], Far(a, b) + ArrivalExtra(list[k]), -1, -1);
 			}
 		}
 	}
