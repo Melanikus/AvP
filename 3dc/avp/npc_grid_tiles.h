@@ -373,6 +373,19 @@ public:
 
 	size_t PeakBytes() const { return peakBytes; }
 
+	// What it holds now, part by part, as BytesHeld counts it: for a log line that says where the room goes (Vasquez, 2026-11-26: Temple's
+	// first leg came to 59.4 MB of the 64). In order: the nodes' list, the nodes' own joins and the tiles' exits, the tiles' list, the
+	// search's open list, the two hash tables (their entries and buckets, on the high side), the smoothed way.
+	void BytesByPart(size_t parts[6]) const
+	{
+		parts[0] = nodes.capacity() * sizeof(Node);
+		parts[1] = listBytes;
+		parts[2] = tiles.capacity() * sizeof(Tile);
+		parts[3] = open.capacity() * sizeof(std::pair<double, uint32_t>);
+		parts[4] = (tileOfKey.size() + nodeOfCell.size()) * kNpcGridTilesMapEntryBytes + (tileOfKey.bucket_count() + nodeOfCell.bucket_count()) * kNpcGridTilesBucketBytes;
+		parts[5] = smoothWay.capacity() * sizeof(uint32_t);
+	}
+
 private:
 	static uint32_t const kNone = 0xFFFFFFFFu;
 
