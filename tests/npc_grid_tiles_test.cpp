@@ -9,7 +9,10 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 
+#include <limits>
+#include <unordered_map>
 #include <vector>
 
 #include "npc_grid_tiles.h"
@@ -67,6 +70,15 @@ public:
 
 	// npc_grid's answers
 	bool Ready() const { return ready; }
+	uint32_t buildNumber = 1;   // as npc_grid's BuildNumber: the tests make it another when they "build again"
+	uint32_t BuildNumber() const { return buildNumber; }
+	std::vector<int> pieceOf;   // made-up pieces, as npc_grid_pieces.h's: empty, or each cell's piece (-1: not known)
+
+	bool CertainlyApart(uint32_t a, uint32_t b) const
+	{
+		return a < pieceOf.size() && b < pieceOf.size() && pieceOf[a] >= 0 && pieceOf[b] >= 0 && pieceOf[a] != pieceOf[b];
+	}
+
 	size_t Cells() const { return flags.size(); }
 	size_t Sheets() const { return sheets.size(); }
 
@@ -199,8 +211,9 @@ static uint32_t Random(uint32_t below)
 	return (randomState >> 8) % below;
 }
 
-// Is this way a real one, move by move, by the exact search's own moves, from `from` to `to`? Its cost, in *cost.
-static bool IsARealWay(TestGrid const &g, std::vector<uint32_t> const &way, uint32_t from, uint32_t to, NpcGridBody body, int price, double *cost)
+// Is this way a real one, move by move, by the exact search's own moves (with the same breakables, if any), from `from` to `to`? Its cost, in *cost.
+static bool IsARealWay(TestGrid const &g, std::vector<uint32_t> const &way, uint32_t from, uint32_t to, NpcGridBody body, int price, double *cost,
+	std::unordered_map<uint32_t, float> const *breakables = nullptr)
 {
 	*cost = 0.0;
 
@@ -212,6 +225,7 @@ static bool IsARealWay(TestGrid const &g, std::vector<uint32_t> const &way, uint
 	for (size_t k = 1; k < way.size(); k++)
 	{
 		Tiles one;
+		one.SetBreakables(breakables, 1);
 		double step = -1.0;
 		size_t looked = 0;
 
@@ -510,28 +524,200 @@ static void TestWhatItHolds()
 		(unsigned)tiles.NodesKept(), (unsigned)tiles.TilesMade());
 	Check(tiles.NodesKept() == 0 && tiles.TilesMade() == 0 && tiles.BytesHeld() < 1024 && before > 10 * 1024, line);
 
-	// The same grid at the same place, with one more link: its tiles are forgotten, and made again for it
+	// The same grid at the same place, built again (one more link, and its BuildNumber another, as npc_grid's build gives): its tiles are
+	// forgotten, and made again for it (Bishop: "a build number, not the pointer + size")
 	Tiles kept;
 	kept.Start(g, from, to, kNpcGridAlien, 10);
 	kept.Work(100000000);
 	size_t const made = kept.TilesMade();
 	g.Link(g.CellAt(0, 30, 30), g.CellAt(1, 30, 5));
+	g.buildNumber++;
 	kept.Start(g, from, to, kNpcGridAlien, 10);
 	kept.Work(100000000);
 	Tiles fresh;
 	fresh.Start(g, from, to, kNpcGridAlien, 10);
 	fresh.Work(100000000);
 	Check(made > 0 && kept.TilesMade() == fresh.TilesMade() && fabs(kept.CostOfTheWay() - fresh.CostOfTheWay()) < 1e-6,
-		"a grid with another number of links: its old tiles are forgotten, and it searches as a fresh one does");
+		"the grid built again (another build number): its old tiles are forgotten, and it searches as a fresh one does");
+
+	// The same build again: its tiles are kept (the build number is what names the grid)
+	size_t const madeNow = kept.TilesMade();
+	kept.Start(g, from, to, kNpcGridAlien, 10);
+	kept.Work(100000000);
+	Check(kept.TilesMade() == madeNow, "the same build: its tiles kept, no new one made");
+}
+
+// PIECES THAT DON'T JOIN: an alien's search across two pieces npc_grid knows can't join ends at once; with breakables, never
+static void TestPieces()
+{
+	printf("Pieces that don't join\n");
+
+	TestGrid g;
+	int const a = g.AddSheet(20, 20, 0, 0, 0, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	int const b = g.AddSheet(20, 20, 0, 0, 30000, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	g.pieceOf.assign(g.Cells(), 0);
+
+	for (int j = 0; j < 20; j++)
+	{
+		for (int i = 0; i < 20; i++)
+		{
+			g.pieceOf[g.CellAt(b, i, j)] = 1;
+		}
+	}
+
+	uint32_t const from = g.CellAt(a, 2, 2), to = g.CellAt(b, 5, 5);
+	Tiles tiles;
+	const char *const why = tiles.Start(g, from, to, kNpcGridAlien, 10);
+	Check(why != nullptr && tiles.Work(100000000) == kNpcGridNoWay && tiles.Looks() == 0 && tiles.BestSoFar() == kNpcGridNoCell,
+		"in pieces that certainly don't join: no way at once, not a cell looked at, and no best so far");
+
+	// Breakables set (even none in the map): a breakable can join two pieces, so the pieces don't answer, and the search looks
+	std::unordered_map<uint32_t, float> none;
+	tiles.SetBreakables(&none, 1);
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay && tiles.Looks() > 0,
+		"with breakables set, the pieces don't answer: it looks, and finds no way itself");
+
+	// A marine's search: the pieces are an alien's, so they never answer for him
+	Tiles marine;
+	Check(marine.Start(g, from, to, kNpcGridMarine, 10) == nullptr && marine.Work(100000000) == kNpcGridNoWay && marine.Looks() > 0,
+		"and never for a marine, whose pieces they aren't");
+}
+
+// BREAKABLES (the owner: "brekables need to have a cost but be transpassable for her"): a floor cut in two by a row an alien can't be on (a
+// breakable object's room), and that row's cells given as breakables
+static void TestBreakables()
+{
+	printf("Breakables: passable at a cost\n");
+
+	TestGrid g;
+	int const s = g.AddSheet(30, 20, 0, 0, 0, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+
+	for (int i = 0; i < 30; i++)
+	{
+		g.Block(s, i, 10);
+	}
+
+	uint32_t const from = g.CellAt(s, 2, 2), to = g.CellAt(s, 25, 17);
+	Tiles tiles, exact;
+	double exactCost = 0.0, cost = 0.0;
+	size_t looked = 0;
+
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay
+		&& exact.ExactSearch(g, from, to, kNpcGridAlien, 10, &exactCost, &looked) == kNpcGridNoWay, "with the row unbreakable, no way, the tiles and the exact search alike");
+
+	// The row's cells breakable at 4000 mm each, but for two with numbers that can't be (a negative one, and one that isn't a number)
+	std::unordered_map<uint32_t, float> extra;
+
+	for (int i = 0; i < 30; i++)
+	{
+		extra[g.CellAt(s, i, 10)] = 4000.0f;
+	}
+
+	extra[g.CellAt(s, 24, 10)] = -5.0f;
+	extra[g.CellAt(s, 25, 10)] = std::numeric_limits<float>::quiet_NaN();
+	tiles.SetBreakables(&extra, 1);
+	exact.SetBreakables(&extra, 1);
+	bool const found = tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridFound;
+	NpcGridSearch const exactFound = exact.ExactSearch(g, from, to, kNpcGridAlien, 10, &exactCost, &looked);
+	std::vector<uint32_t> way;
+	bool const real = found && tiles.WayTo(to, &way) && IsARealWay(g, way, from, to, kNpcGridAlien, 10, &cost, &extra);
+	// it had to cross the row somewhere: through a cell of it
+	bool crossed = false, crossedABadOne = false;
+
+	for (uint32_t c : way)
+	{
+		int sh = 0, i = 0, j = 0;
+		g.CellPlace(c, &sh, &i, &j);
+		crossed = crossed || j == 10;
+		crossedABadOne = crossedABadOne || (j == 10 && (i == 24 || i == 25));
+	}
+
+	char line[300];
+	snprintf(line, sizeof(line), "breakable, a way through it (tiles %.0f, exact %.0f), never cheaper than exact and at most %.2f times as dear", tiles.CostOfTheWay(), exactCost, kMostDearer);
+	Check(found && exactFound == kNpcGridFound && tiles.CostOfTheWay() >= exactCost - 1.0 && tiles.CostOfTheWay() <= kMostDearer * exactCost, line);
+	Check(real && crossed, "the way is a real one, move by move by the same rule, through the row");
+	Check(!crossedABadOne, "and never through a cell whose number can't be (negative, or not a number): that cell is no breakable");
+
+	// The extra is paid: the way costs at least the walk across the floor (23 x 300 mm of floor at 10, as the crow flies) plus one
+	// breakable's 4000 mm
+	Check(found && tiles.CostOfTheWay() >= 23 * 300 * 10.0 + 4000.0 - 1.0, "and it pays a breakable's extra to cross");
+
+	// A breakable broken: the map without the row's middle third, at a new version. The tiles are made again, and the search is as a fresh one's.
+	size_t const madeBefore = tiles.TilesMade();
+	std::unordered_map<uint32_t, float> fewer;
+
+	for (int i = 0; i < 10; i++)
+	{
+		fewer[g.CellAt(s, i, 10)] = 4000.0f;
+	}
+
+	tiles.SetBreakables(&fewer, 2);
+	tiles.Start(g, from, to, kNpcGridAlien, 10);
+	tiles.Work(100000000);
+	Tiles fresh;
+	fresh.SetBreakables(&fewer, 2);
+	fresh.Start(g, from, to, kNpcGridAlien, 10);
+	fresh.Work(100000000);
+	Check(madeBefore > 0 && tiles.TilesMade() == fresh.TilesMade() && fabs(tiles.CostOfTheWay() - fresh.CostOfTheWay()) < 1e-6,
+		"a new version of the breakables: the tiles are made again, and it searches as a fresh one does");
+
+	// Forget lets go of the breakables too (Drake's review): a walk that frees its map at a level's end and forgets leaves no pointer to it
+	// here. The map is still alive in this test, so a search that read it would find the way through the row: this one must find none.
+	tiles.SetBreakables(&extra, 4);
+	tiles.Forget();
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay, "Forget lets go of the breakables: no way, as with none");
+
+	// None again: no way
+	tiles.SetBreakables(nullptr, 3);
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay, "with none set again, no way");
+}
+
+// How long a search from nothing takes on a big world: SAID, never checked (a test's machine can be busy). For the faster cold build: the
+// same world and pair before and after a change, on the same machine, set side by side.
+static void SayHowLongACold()
+{
+	printf("How long (said, not checked)\n");
+
+	TestGrid g;
+	randomState = 777;
+	MakeWorld(&g, 400, 400, 12, false);
+
+	for (int k = 0; k < 400 * 400 / 10; k++)
+	{
+		g.Block(0, static_cast<int>(Random(400)), static_cast<int>(Random(400)));
+	}
+
+	uint32_t from = g.CellAt(0, 3, 3), to = g.CellAt(1, 390, 150);
+
+	for (int k = 4; !(g.Flags(from) & kNpcGridClings) && k < 40; k++)
+	{
+		from = g.CellAt(0, k, k);
+	}
+
+	Tiles tiles;
+	clock_t const t0 = clock();
+	tiles.Start(g, from, to, kNpcGridAlien, 10);
+	NpcGridSearch const cold = tiles.Work(1000000000);
+	clock_t const t1 = clock();
+	size_t const coldLooks = tiles.Looks();   // before the second search starts its own count
+	tiles.Start(g, from, to, kNpcGridAlien, 10);
+	NpcGridSearch const warm = tiles.Work(1000000000);
+	clock_t const t2 = clock();
+	printf("  said    400 x 400 floor and a 400 x 200 wall, 12 walls with gaps: cold %s in %.0f ms (%u tiles, %u cells' work), kept %s in %.0f ms (%u cells' work)\n",
+		cold == kNpcGridFound ? "found" : "no way", 1000.0 * (t1 - t0) / CLOCKS_PER_SEC, (unsigned)tiles.TilesMade(), (unsigned)coldLooks,
+		warm == kNpcGridFound ? "found" : "no way", 1000.0 * (t2 - t1) / CLOCKS_PER_SEC, (unsigned)tiles.Looks());
 }
 
 int main()
 {
+	SayHowLongACold();
 	TestTheRules();
 	TestAgainstTheExact();
 	TestOverFrames();
 	TestTheMarine();
 	TestWhatItHolds();
+	TestBreakables();
+	TestPieces();
 
 	if (checksFailed > 0)
 	{

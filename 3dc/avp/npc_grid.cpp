@@ -204,6 +204,7 @@ void NpcGrid::Clear()
 void NpcGrid::LetGo()
 {
 	ready = false;
+	buildNumber = 0;
 	GiveBack(&sheets);
 	GiveBack(&flags);
 	GiveBack(&room);
@@ -1672,6 +1673,11 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 
 	bytesKept += pieces.BytesKept();
 	bytesBuilding = 0;
+
+	// A number no build before this one in this run of the game has had (BuildNumber, npc_grid.h). Builds run on their own thread, so the
+	// count is atomic. Added 2026-11-26 by Melanikus (Frost) for the AvP port.
+	static std::atomic<uint32_t> builds(0);
+	buildNumber = ++builds;
 	ready = true;
 	return nullptr;
 }
