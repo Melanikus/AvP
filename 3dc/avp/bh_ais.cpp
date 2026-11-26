@@ -1137,11 +1137,15 @@ void NPCGetMovementTarget(STRATEGYBLOCK *sbPtr, STRATEGYBLOCK *target, VECTORCH 
     LOCALASSERT(targetPosition);
     LOCALASSERT(targetIsAirduct);
     LOCALASSERT(target);
-    GLOBALASSERT(playerPherModule);
+    // (no GLOBALASSERT(playerPherModule) any more: a player in no room is a state this handles, below)
 
-    if (target==Player->ObStrategyBlock) 
+    if (target==Player->ObStrategyBlock)
 	{
-        if (sbPtr->containingModule->m_aimodule != playerPherModule->m_aimodule)
+        // THE PLAYER (OR THIS NPC) IN NO MODULE (fixed 2026-11-26 by Melanikus (Vasquez) for the AvP port): the GLOBALASSERT that stood above is gone in a
+        // release build, and this read the player's room's m_aimodule through playerPherModule while it was NULL. XENA's run 195719 crashed here (C0000005 at
+        // NPCGetMovementTarget +0x2a) while a marine targeted her: a slide with the level's walls off can leave the player between modules for a moment.
+        // Then, as when no entry point is found below, the NPC heads for the player's own targeting point
+        if (playerPherModule && sbPtr->containingModule && sbPtr->containingModule->m_aimodule != playerPherModule->m_aimodule)
         {
             int epFound;
             VECTORCH epPosn;
