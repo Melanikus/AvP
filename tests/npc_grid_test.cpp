@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -1308,6 +1309,123 @@ static void Stopping()
 	Check(grid.Build(world, map) == nullptr, "with no stop asked, it builds");
 }
 
+// The cells in a box, the slow way: every cell of the grid, one by one, by its flag and its Middle, in the order of their numbers
+static std::vector<uint32_t> InBoxOneByOne(NpcGrid const &grid, double const lo[3], double const hi[3], uint8_t bit)
+{
+	std::vector<uint32_t> found;
+
+	for (uint32_t c = 0; c < grid.Cells(); c++)
+	{
+		double m[3];
+
+		if ((grid.Flags(c) & bit) && grid.Middle(c, m) && m[0] >= lo[0] && m[0] <= hi[0] && m[1] >= lo[1] && m[1] <= hi[1] && m[2] >= lo[2]
+			&& m[2] <= hi[2])
+		{
+			found.push_back(c);
+		}
+	}
+
+	return found;
+}
+
+// CellsInBox (Vasquez's flames, 2026-11-26): the cells a body fits on whose middles are in a box, the same as every cell looked at one by one,
+// and a box from hostile data refused
+static void CellsInABox()
+{
+	printf("The cells in a box\n");
+	AlienWaysMap map;
+	NpcGrid grid;
+	const char *why;
+
+	if (!Build(PillarRoom(), &map, &grid, &why))
+	{
+		Check(false, "the room with the pillar builds");
+		return;
+	}
+
+	// Boxes of every size and place in and round the room (x and z from -600 to 6600, y from -3600 to 600), for both bodies: the same cells
+	// as one by one, every time
+	uint32_t state = 2026;
+	auto const next = [&state](double below) {
+		state = state * 1664525u + 1013904223u;
+		return (state >> 8) % 1000000 / 1000000.0 * below;
+	};
+	size_t boxes = 0, same = 0, cellsFound = 0, emptyBoxes = 0;
+
+	for (int k = 0; k < 400; k++)
+	{
+		double lo[3] = { -600.0 + next(7200.0), -3600.0 + next(4200.0), -600.0 + next(7200.0) };
+		double hi[3] = { lo[0] + next(4000.0), lo[1] + next(2000.0), lo[2] + next(4000.0) };
+		NpcGridBody const body = (k & 1) ? kNpcGridMarine : kNpcGridAlien;
+		std::vector<uint32_t> got;
+		bool const ok = grid.CellsInBox(lo, hi, body, 100000, &got);
+		std::vector<uint32_t> const want = InBoxOneByOne(grid, lo, hi, body == kNpcGridMarine ? kNpcGridStands : kNpcGridClings);
+		boxes++;
+		same += ok && got == want ? 1 : 0;
+		cellsFound += got.size();
+		emptyBoxes += want.empty() ? 1 : 0;
+	}
+
+	// (and the boxes are of both sorts, some with cells and some with none, so the same answers aren't only empty ones)
+	Check(same == boxes && cellsFound > 1000 && emptyBoxes > 0 && emptyBoxes < boxes, "400 boxes, both bodies: the same cells as every cell looked at one by one ("
+		+ Number(same) + " of " + Number(boxes) + " the same; " + Number(cellsFound) + " cells; " + Number(emptyBoxes) + " boxes with none)");
+
+	// The faces are in: a box that is one cell's middle exactly, lo = hi, gives that cell
+	uint32_t floorCell = kNpcGridNoCell;
+
+	for (uint32_t c = 0; c < grid.Cells() && floorCell == kNpcGridNoCell; c++)
+	{
+		floorCell = (grid.Flags(c) & kNpcGridStands) ? c : kNpcGridNoCell;
+	}
+
+	double m[3] = { 0.0, 0.0, 0.0 };
+	grid.Middle(floorCell, m);
+	std::vector<uint32_t> got;
+	Check(grid.CellsInBox(m, m, kNpcGridMarine, 10, &got) && got.size() == 1 && got[0] == floorCell, "a box that is one cell's middle, lo = hi: that cell");
+
+	// The bodies: a box round the middle of a wall, a metre each way from it, holds only wall cells: an alien's, never a marine's
+	double const wallLo[3] = { -10.0, -2000.0, 2000.0 }, wallHi[3] = { 10.0, -1000.0, 3000.0 };
+	std::vector<uint32_t> alien, marine;
+	// (called first, then checked: the message's count is read after the call, whatever order the compiler takes the arguments in)
+	bool const onWall = grid.CellsInBox(wallLo, wallHi, kNpcGridAlien, 1000, &alien) && grid.CellsInBox(wallLo, wallHi, kNpcGridMarine, 1000, &marine);
+	Check(onWall && !alien.empty() && marine.empty() && alien == InBoxOneByOne(grid, wallLo, wallHi, kNpcGridClings),
+		"on a wall, an alien's cells (" + Number(alien.size()) + "), never a marine's");
+
+	// More than `most`: false, and out empty. Exactly `most`: all of them.
+	double const allLo[3] = { -1000.0, -4000.0, -1000.0 }, allHi[3] = { 7000.0, 1000.0, 7000.0 };
+	std::vector<uint32_t> all;
+	bool const allOk = grid.CellsInBox(allLo, allHi, kNpcGridAlien, 100000, &all);
+	got.assign(5, 7);
+	Check(allOk && all.size() > 100 && !grid.CellsInBox(allLo, allHi, kNpcGridAlien, all.size() - 1, &got) && got.empty(),
+		"one more cell than `most` (" + Number(all.size()) + " in the box, " + Number(all.size() - 1) + " allowed): false, and out empty");
+	Check(grid.CellsInBox(allLo, allHi, kNpcGridAlien, all.size(), &got) && got == all && all == InBoxOneByOne(grid, allLo, allHi, kNpcGridClings),
+		"exactly `most`: all of them, the same as one by one");
+
+	// A box from hostile data: a side that isn't a number, an endless one, past 1e12, or the wrong way round. Each is false, out emptied.
+	double const nan = std::numeric_limits<double>::quiet_NaN(), endless = std::numeric_limits<double>::infinity();
+	double const bad[5][2][3] = {
+		{ { nan, 0.0, 0.0 }, { 100.0, 100.0, 100.0 } },
+		{ { 0.0, 0.0, 0.0 }, { 100.0, nan, 100.0 } },
+		{ { -endless, 0.0, 0.0 }, { 100.0, 100.0, 100.0 } },
+		{ { 0.0, 0.0, -2e12 }, { 100.0, 100.0, 100.0 } },
+		{ { 0.0, 200.0, 0.0 }, { 100.0, 100.0, 100.0 } },
+	};
+	size_t refused = 0;
+
+	for (int k = 0; k < 5; k++)
+	{
+		got.assign(3, 1);
+		refused += !grid.CellsInBox(bad[k][0], bad[k][1], kNpcGridAlien, 100000, &got) && got.empty() ? 1 : 0;
+	}
+
+	Check(refused == 5, "a box that isn't a number, endless, past 1e12 or the wrong way round: false, and out empty (" + Number(refused) + " of 5)");
+
+	// A grid that isn't ready gives none
+	NpcGrid none;
+	got.assign(3, 1);
+	Check(!none.CellsInBox(allLo, allHi, kNpcGridAlien, 100000, &got) && got.empty(), "a grid that isn't ready: false, and out empty");
+}
+
 static void Again()
 {
 	printf("Built again\n");
@@ -1647,6 +1765,7 @@ int main()
 	Limits();
 	EdgeOfTheWorld();
 	Stopping();
+	CellsInABox();
 	Again();
 
 	if (checksFailed)
