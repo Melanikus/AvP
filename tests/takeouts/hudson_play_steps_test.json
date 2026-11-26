@@ -796,22 +796,12 @@
 			]
 		},
 		{
-			"name": "he never backs up",
+			"name": "he backs up first, before nudging left",
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "case 0: return kHudsonPlayBackUp;",
-					"to": "case 0: return kHudsonPlayStepLeft;"
-				}
-			]
-		},
-		{
-			"name": "he cheats without stepping left",
-			"changes": [
-				{
-					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "case 1: return kHudsonPlayStepLeft;",
-					"to": "case 1: return kHudsonPlayTeleport;"
+					"from": "case 0: return kHudsonPlayStepLeft;",
+					"to": "case 0: return kHudsonPlayBackUp;"
 				}
 			]
 		},
@@ -820,8 +810,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "case 2: return kHudsonPlayStepRight;",
-					"to": "case 2: return kHudsonPlayTeleport;"
+					"from": "case 1: return kHudsonPlayStepRight;",
+					"to": "case 1: return kHudsonPlayTeleport;"
 				}
 			]
 		},
@@ -830,8 +820,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "case 3: return kHudsonPlayFindTheWayAgain;",
-					"to": "case 3: return kHudsonPlayTeleport;"
+					"from": "case 2: return kHudsonPlayFindTheWayAgain;",
+					"to": "case 2: return kHudsonPlayTeleport;"
 				}
 			]
 		},
@@ -840,8 +830,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "case 4: return kHudsonPlayCrouch;",
-					"to": "case 4: return kHudsonPlayTeleport;"
+					"from": "case 3: return kHudsonPlayCrouch;",
+					"to": "case 3: return kHudsonPlayTeleport;"
 				}
 			]
 		},
@@ -850,18 +840,18 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "case 5: return kHudsonPlayJump;",
-					"to": "case 5: return kHudsonPlayTeleport;"
+					"from": "case 4: return kHudsonPlayJump;",
+					"to": "case 4: return kHudsonPlayTeleport;"
 				}
 			]
 		},
 		{
-			"name": "he gets no second go, backing up",
+			"name": "he cheats without backing up",
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "case 6: return kHudsonPlayBackUp;",
-					"to": "case 6: return kHudsonPlayTeleport;"
+					"from": "case 5: return kHudsonPlayBackUp;",
+					"to": "case 5: return kHudsonPlayTeleport;"
 				}
 			]
 		},
@@ -870,8 +860,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "case 7: return kHudsonPlayStepRight;",
-					"to": "case 7: return kHudsonPlayTeleport;"
+					"from": "case 6: return kHudsonPlayStepRight;",
+					"to": "case 6: return kHudsonPlayTeleport;"
 				}
 			]
 		},
@@ -880,8 +870,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "case 8: return kHudsonPlayStepLeft;",
-					"to": "case 8: return kHudsonPlayTeleport;"
+					"from": "case 7: return kHudsonPlayStepLeft;",
+					"to": "case 7: return kHudsonPlayTeleport;"
 				}
 			]
 		},
@@ -890,7 +880,17 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_play_steps.h",
-					"from": "case 9: return kHudsonPlayFindTheWayAgain;",
+					"from": "case 8: return kHudsonPlayFindTheWayAgain;",
+					"to": "case 8: return kHudsonPlayTeleport;"
+				}
+			]
+		},
+		{
+			"name": "he gets no second go, backing up",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_play_steps.h",
+					"from": "case 9: return kHudsonPlayBackUp;",
 					"to": "case 9: return kHudsonPlayTeleport;"
 				}
 			]
