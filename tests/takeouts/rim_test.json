@@ -344,8 +344,8 @@
 			"changes": [
 				{
 					"file": "3dc/RimLoader.cpp",
-					"from": "\tif (bodyLeft == 0)\n\t{\n\t\tproblem = (chunkSize > MostBodyBytes()) ? kRimBodyTooLong : kRimRanOut;\n\t\tranOut = true;\n\t\treturn 0;\n\t}\n\n\tbodyLeft--;\n",
-					"to": ""
+					"from": "\tif (bodyLeft == 0)\n\t{\n\t\tproblem = (chunkSize > MostBodyBytes()) ? kRimBodyTooLong : kRimRanOut;\n\t\tranOut = true;\n\t\treturn 0;\n\t}\n\n\tif (bodyReadAt >= bodyRead.size())\n\t{\n\t\tbodyRead.assign((size_t)(std::min)(bodyLeft, (uint64_t)kRimBodyRead), 0);\n\t\tfile.ReadBytes(bodyRead.data(), bodyRead.size());\n\t\tbodyReadAt = 0;\n\t}\n\n\tbodyLeft--;\n",
+					"to": "\tif (bodyReadAt >= bodyRead.size())\n\t{\n\t\tbodyRead.assign((size_t)(std::min)(bodyLeft, (uint64_t)kRimBodyRead), 0);\n\t\tfile.ReadBytes(bodyRead.data(), bodyRead.size());\n\t\tbodyReadAt = 0;\n\t}\n\n"
 				}
 			]
 		},
@@ -1119,8 +1119,8 @@
 			"changes": [
 				{
 					"file": "3dc/RimLoader.cpp",
-					"from": "\tsaidLevelIsFull = false;\n}",
-					"to": "}"
+					"from": "\tbytesThisLevel = 0;\n\tsaidLevelIsFull = false;\n\tlevelsStarted++;\n}",
+					"to": "\tbytesThisLevel = 0;\n\tlevelsStarted++;\n}"
 				}
 			]
 		},
