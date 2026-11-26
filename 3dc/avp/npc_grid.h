@@ -250,6 +250,14 @@ public:
 	// The cell nearest to a point, among those a body fits on, no further than within millimetres, or kNpcGridNoCell
 	uint32_t NearestCell(double x, double y, double z, NpcGridBody body, int within) const;
 
+	// Added 2026-11-26 by Melanikus (Frost) for the AvP port (XENA's flames: Vasquez's walk prices the cells a flame reaches; Bishop's OK).
+	// Every cell the body fits on whose middle (Middle) lies in a box with sides along the world's axes, from lo to hi, its faces included,
+	// into out, in the order of the cells' numbers. A box can come from a level's data, which is hostile input, so this is false, with out
+	// empty, for a grid that isn't ready, a box whose lo or hi isn't a number or is endless (past 1e12 mm either way), a box whose lo is past
+	// its hi on any axis, or one with more than `most` cells in it (it stops as soon as it finds one more). Only the sheets whose plane goes
+	// through the box are looked at, and on each only the cells the box can reach, so no cell is looked at twice.
+	bool CellsInBox(double const lo[3], double const hi[3], NpcGridBody body, size_t most, std::vector<uint32_t> *out) const;
+
 	// The cells a cell is linked to, both ways (*count of them), and the ones a marine falls to from it, one way. nullptr and 0 if none.
 	const uint32_t *LinksOf(uint32_t cell, size_t *count) const;
 	const uint32_t *FallsOf(uint32_t cell, size_t *count) const;

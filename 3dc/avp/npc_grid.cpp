@@ -440,6 +440,110 @@ uint32_t NpcGrid::NearestCell(double x, double y, double z, NpcGridBody body, in
 	return best;
 }
 
+// Added 2026-11-26 by Melanikus (Frost) for the AvP port (XENA's flames, Vasquez's walk). npc_grid.h says what it gives.
+bool NpcGrid::CellsInBox(double const lo[3], double const hi[3], NpcGridBody body, size_t most, std::vector<uint32_t> *out) const
+{
+	out->clear();
+
+	if (!ready)
+	{
+		return false;
+	}
+
+	// A side that isn't a number, or is endless, or a box the wrong way round, is no box (Tao 3). A number that isn't one fails every
+	// comparison, so it fails this one too.
+	for (int axis = 0; axis < 3; axis++)
+	{
+		if (!(fabs(lo[axis]) < 1e12 && fabs(hi[axis]) < 1e12 && lo[axis] <= hi[axis]))
+		{
+			return false;
+		}
+	}
+
+	uint8_t const bit = body == kNpcGridMarine ? kNpcGridStands : kNpcGridClings;
+
+	for (size_t number = 0; number < sheets.size(); number++)
+	{
+		Sheet const &s = sheets[number];
+
+		// Where the box's eight corners are: how far off the sheet's plane, and where along its two axes. Every point of the box lies between
+		// the least and the most of each. So the sheet's plane, where all its cells' middles are, goes through the box only if it's between
+		// the least and the most way off it; and the cells whose middles can be in the box are between the least and the most along u and v.
+		double offLow = 1e300, offHigh = -1e300, aLow = 1e300, aHigh = -1e300, bLow = 1e300, bHigh = -1e300;
+
+		for (int k = 0; k < 8; k++)
+		{
+			double const corner[3] = { (k & 1) ? hi[0] : lo[0], (k & 2) ? hi[1] : lo[1], (k & 4) ? hi[2] : lo[2] };
+			double const r[3] = { corner[0] - s.n[0] * s.d, corner[1] - s.n[1] * s.d, corner[2] - s.n[2] * s.d };
+			double const off = Dot(corner, s.n) - s.d, a = Dot(r, s.u), b = Dot(r, s.v);
+			offLow = std::min(offLow, off);
+			offHigh = std::max(offHigh, off);
+			aLow = std::min(aLow, a);
+			aHigh = std::max(aHigh, a);
+			bLow = std::min(bLow, b);
+			bHigh = std::max(bHigh, b);
+		}
+
+		// (A cell's slack each way, here and along the axes, for the sums' rounding: each cell found is tested exactly below, so the slack only
+		// means a few more cells looked at, never a cell more or less given.)
+		if (!(offLow <= kNpcGridCell && offHigh >= -kNpcGridCell))
+		{
+			continue;
+		}
+
+		// The cells along u and v whose middles, at (place + i0 + 0.5) cells, can be between the least and the most: clipped to the sheet's
+		// grid while still a double, so no number past an int's range is ever made one
+		double const iFrom = std::max(0.0, floor(aLow / kNpcGridCell - s.i0 - 0.5) - 1.0);
+		double const iTo = std::min(static_cast<double>(s.w) - 1.0, ceil(aHigh / kNpcGridCell - s.i0 - 0.5) + 1.0);
+		double const jFrom = std::max(0.0, floor(bLow / kNpcGridCell - s.j0 - 0.5) - 1.0);
+		double const jTo = std::min(static_cast<double>(s.h) - 1.0, ceil(bHigh / kNpcGridCell - s.j0 - 0.5) + 1.0);
+
+		if (!(iFrom <= iTo && jFrom <= jTo))
+		{
+			continue;
+		}
+
+		for (int j = static_cast<int>(jFrom); j <= static_cast<int>(jTo); j++)
+		{
+			for (int i = static_cast<int>(iFrom); i <= static_cast<int>(iTo); i++)
+			{
+				uint32_t const c = s.first + static_cast<uint32_t>(j) * static_cast<uint32_t>(s.w) + static_cast<uint32_t>(i);
+
+				if (!(flags[c] & bit))
+				{
+					continue;
+				}
+
+				// Its middle, by Middle's own sums in Middle's own order, so a cell is in the box here exactly when its Middle is
+				double const a = (static_cast<double>(i) + s.i0 + 0.5) * kNpcGridCell;
+				double const b = (static_cast<double>(j) + s.j0 + 0.5) * kNpcGridCell;
+				bool inside = true;
+
+				for (int axis = 0; axis < 3 && inside; axis++)
+				{
+					double const m = s.n[axis] * s.d + s.u[axis] * a + s.v[axis] * b;
+					inside = m >= lo[axis] && m <= hi[axis];
+				}
+
+				if (!inside)
+				{
+					continue;
+				}
+
+				if (out->size() >= most)
+				{
+					out->clear();
+					return false;
+				}
+
+				out->push_back(c);
+			}
+		}
+	}
+
+	return true;
+}
+
 // The links (or falls) from one cell: the run of it in a list sorted by the cell they're from
 static const uint32_t *RunOf(const std::vector<uint32_t> &from, const std::vector<uint32_t> &to, uint32_t cell, size_t *count)
 {

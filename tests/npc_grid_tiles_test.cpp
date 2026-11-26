@@ -211,9 +211,10 @@ static uint32_t Random(uint32_t below)
 	return (randomState >> 8) % below;
 }
 
-// Is this way a real one, move by move, by the exact search's own moves (with the same breakables, if any), from `from` to `to`? Its cost, in *cost.
+// Is this way a real one, move by move, by the exact search's own moves (with the same breakables and dear cells, if any), from `from` to `to`?
+// Its cost, in *cost.
 static bool IsARealWay(TestGrid const &g, std::vector<uint32_t> const &way, uint32_t from, uint32_t to, NpcGridBody body, int price, double *cost,
-	std::unordered_map<uint32_t, float> const *breakables = nullptr)
+	std::unordered_map<uint32_t, float> const *breakables = nullptr, std::unordered_map<uint32_t, float> const *dear = nullptr)
 {
 	*cost = 0.0;
 
@@ -226,6 +227,7 @@ static bool IsARealWay(TestGrid const &g, std::vector<uint32_t> const &way, uint
 	{
 		Tiles one;
 		one.SetBreakables(breakables, 1);
+		one.SetDearCells(dear, 1);
 		double step = -1.0;
 		size_t looked = 0;
 
@@ -672,6 +674,201 @@ static void TestBreakables()
 	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay, "with none set again, no way");
 }
 
+// Does the way go over a cell in the map (with a real extra: not negative, a number)?
+static bool GoesOver(std::vector<uint32_t> const &way, std::unordered_map<uint32_t, float> const &dear)
+{
+	for (uint32_t c : way)
+	{
+		auto const found = dear.find(c);
+
+		if (found != dear.end() && found->second >= 0.0f)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// DEAR CELLS (Vasquez, Bishop's OK: XENA's run died in Temple's FIRE11, her way 1.3 m from a flame): a move onto a dear cell costs its
+// extra, so a way goes round them, and through them only when there's no other way; but a dear cell is no new cell to be on
+static void TestDearCells()
+{
+	printf("Dear cells: round them if there's a way round\n");
+
+	// A floor 30 x 20, and a "flame": a square of 5 x 5 cells across the straight way from one side to the other, 100 m each
+	TestGrid g;
+	int const s = g.AddSheet(30, 20, 0, 0, 0, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	uint32_t const from = g.CellAt(s, 2, 10), to = g.CellAt(s, 27, 10);
+	std::unordered_map<uint32_t, float> flame;
+
+	for (int j = 8; j <= 12; j++)
+	{
+		for (int i = 13; i <= 17; i++)
+		{
+			flame[g.CellAt(s, i, j)] = 100000.0f;
+		}
+	}
+
+	Tiles tiles, exact;
+	double plain = 0.0, exactCost = 0.0, cost = 0.0;
+	size_t looked = 0;
+	std::vector<uint32_t> way;
+	bool const plainFound = tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridFound && tiles.WayTo(to, &way);
+	plain = tiles.CostOfTheWay();
+	Check(plainFound && GoesOver(way, flame), "with no dear cells, the straight way goes through the flame's square");
+
+	tiles.SetDearCells(&flame, 1);
+	exact.SetDearCells(&flame, 1);
+	bool const found = tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridFound && tiles.WayTo(to, &way);
+	NpcGridSearch const exactFound = exact.ExactSearch(g, from, to, kNpcGridAlien, 10, &exactCost, &looked);
+	bool const real = found && IsARealWay(g, way, from, to, kNpcGridAlien, 10, &cost, nullptr, &flame);
+	char line[300];
+	snprintf(line, sizeof(line), "with the flame's cells dear, the way goes round it (%.0f, was %.0f straight; exact %.0f), a real one, no cheaper than exact and at most %.2f times as dear",
+		tiles.CostOfTheWay(), plain, exactCost, kMostDearer);
+	Check(found && !GoesOver(way, flame) && real && exactFound == kNpcGridFound && tiles.CostOfTheWay() >= exactCost - 1.0
+		&& tiles.CostOfTheWay() <= kMostDearer * exactCost && tiles.CostOfTheWay() < plain + 100000.0, line);
+
+	// The same version: the tiles are kept, no new one made. A new version, the flame gone out (an empty map): made again, and the straight
+	// way back, as a fresh search's
+	size_t const madeNow = tiles.TilesMade();
+	tiles.Start(g, from, to, kNpcGridAlien, 10);
+	tiles.Work(100000000);
+	Check(tiles.TilesMade() == madeNow, "the same version: the tiles kept, no new one made");
+	std::unordered_map<uint32_t, float> out;
+	tiles.SetDearCells(&out, 2);
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridFound && fabs(tiles.CostOfTheWay() - plain) < 1e-6,
+		"a new version (the flame out): the tiles made again, and the straight way's cost back");
+
+	// Forget lets go of them (the map is still alive here, so a search that read it would go round)
+	tiles.SetDearCells(&flame, 3);
+	tiles.Forget();
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridFound && fabs(tiles.CostOfTheWay() - plain) < 1e-6,
+		"Forget lets go of the dear cells: the straight way's cost, as with none");
+
+	// A row of dear cells across the whole floor, 50 m each: no way round, so through it, paying one cell's extra. Then two of the row's
+	// numbers can't be (negative, not a number): those cells have no extra, so the way crosses at one of them, as the exact search does (the
+	// way round to them is about 3.5 cells longer, 10,500 at the floor's price, far less than 50,000). Then all of them past the cap: 1 km.
+	std::unordered_map<uint32_t, float> row;
+
+	for (int i = 0; i < 30; i++)
+	{
+		row[g.CellAt(s, i, 10)] = 50000.0f;
+	}
+
+	Tiles across, acrossExact;
+	uint32_t const low = g.CellAt(s, 2, 2), high = g.CellAt(s, 25, 17);
+	across.SetDearCells(&row, 1);
+	acrossExact.SetDearCells(&row, 1);
+	bool const crossed = across.Start(g, low, high, kNpcGridAlien, 10) == nullptr && across.Work(100000000) == kNpcGridFound;
+	acrossExact.ExactSearch(g, low, high, kNpcGridAlien, 10, &exactCost, &looked);
+	snprintf(line, sizeof(line), "a row across the floor: through it, paying its extra (%.0f; exact %.0f; at least %.0f)", across.CostOfTheWay(), exactCost,
+		23 * 300 * 10.0 + 50000.0);
+	Check(crossed && across.CostOfTheWay() >= 23 * 300 * 10.0 + 50000.0 - 1.0 && across.CostOfTheWay() >= exactCost - 1.0
+		&& across.CostOfTheWay() <= kMostDearer * exactCost, line);
+
+	row[g.CellAt(s, 24, 10)] = -5.0f;
+	row[g.CellAt(s, 25, 10)] = std::numeric_limits<float>::quiet_NaN();
+	across.SetDearCells(&row, 2);
+	acrossExact.SetDearCells(&row, 2);
+	bool const crossedFree = across.Start(g, low, high, kNpcGridAlien, 10) == nullptr && across.Work(100000000) == kNpcGridFound && across.WayTo(high, &way);
+	acrossExact.ExactSearch(g, low, high, kNpcGridAlien, 10, &exactCost, &looked);
+	bool atAFreeOne = false;
+
+	for (uint32_t c : way)
+	{
+		atAFreeOne = atAFreeOne || c == g.CellAt(s, 24, 10) || c == g.CellAt(s, 25, 10);
+	}
+
+	// It pays none: the way's own cost, move by move with the same map, is what the tiles say, and it goes over no cell with a real extra
+	bool const realFree = crossedFree && IsARealWay(g, way, low, high, kNpcGridAlien, 10, &cost, nullptr, &row);
+	snprintf(line, sizeof(line), "a cell whose number can't be (negative, not a number) has no extra: the way crosses there, paying none (%.0f, move by move %.0f; exact %.0f)",
+		across.CostOfTheWay(), cost, exactCost);
+	Check(realFree && atAFreeOne && !GoesOver(way, row) && fabs(cost - across.CostOfTheWay()) < 1.0 && across.CostOfTheWay() >= exactCost - 1.0
+		&& across.CostOfTheWay() <= kMostDearer * exactCost && exactCost < 50000.0 + 23 * 300 * 10.0, line);
+
+	std::unordered_map<uint32_t, float> huge;
+
+	for (int i = 0; i < 30; i++)
+	{
+		huge[g.CellAt(s, i, 10)] = 1e30f;
+	}
+
+	across.SetDearCells(&huge, 3);
+	bool const crossedHuge = across.Start(g, low, high, kNpcGridAlien, 10) == nullptr && across.Work(100000000) == kNpcGridFound;
+	snprintf(line, sizeof(line), "an extra past the cap counts as 1 km (%.0f)", across.CostOfTheWay());
+	Check(crossedHuge && across.CostOfTheWay() >= kNpcGridTilesMostBreakableMm && across.CostOfTheWay() < kNpcGridTilesMostBreakableMm + 23 * 300 * 10.0 * 2,
+		line);
+
+	// A dear cell is no new cell to be on: the same row, blocked (a breakable object's room) and given as dear, stays a wall
+	TestGrid walled;
+	int const w = walled.AddSheet(30, 20, 0, 0, 0, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	std::unordered_map<uint32_t, float> wallRow;
+
+	for (int i = 0; i < 30; i++)
+	{
+		walled.Block(w, i, 10);
+		wallRow[walled.CellAt(w, i, 10)] = 5000.0f;
+	}
+
+	Tiles blocked, blockedExact;
+	blocked.SetDearCells(&wallRow, 1);
+	blockedExact.SetDearCells(&wallRow, 1);
+	Check(blocked.Start(walled, walled.CellAt(w, 2, 2), walled.CellAt(w, 25, 17), kNpcGridAlien, 10) == nullptr && blocked.Work(100000000) == kNpcGridNoWay
+		&& blockedExact.ExactSearch(walled, walled.CellAt(w, 2, 2), walled.CellAt(w, 25, 17), kNpcGridAlien, 10, &exactCost, &looked) == kNpcGridNoWay,
+		"a cell the body can't be on, given as dear, stays one it can't: no way, the tiles and the exact search alike");
+
+	// So the pieces still answer: an alien's search between pieces that certainly don't join ends at once, dear cells set or not
+	TestGrid apart;
+	int const a = apart.AddSheet(20, 20, 0, 0, 0, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	int const b = apart.AddSheet(20, 20, 0, 0, 30000, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	apart.pieceOf.assign(apart.Cells(), 0);
+	std::unordered_map<uint32_t, float> everywhere;
+
+	for (int j = 0; j < 20; j++)
+	{
+		for (int i = 0; i < 20; i++)
+		{
+			apart.pieceOf[apart.CellAt(b, i, j)] = 1;
+			everywhere[apart.CellAt(a, i, j)] = 100.0f;
+			everywhere[apart.CellAt(b, i, j)] = 100.0f;
+		}
+	}
+
+	Tiles pieces;
+	pieces.SetDearCells(&everywhere, 1);
+	Check(pieces.Start(apart, apart.CellAt(a, 2, 2), apart.CellAt(b, 5, 5), kNpcGridAlien, 10) != nullptr && pieces.Work(100000000) == kNpcGridNoWay
+		&& pieces.Looks() == 0, "with dear cells set, pieces that certainly don't join still end at once, not a cell looked at");
+
+	// A marine's fall onto a dear cell pays its extra, as every move onto one (the fall is the only way down)
+	TestGrid drop;
+	int const top = drop.AddSheet(10, 10, 0, -3000, 0, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	int const bottom = drop.AddSheet(10, 10, 0, 0, 0, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	drop.Fall(drop.CellAt(top, 9, 9), drop.CellAt(bottom, 9, 9));
+	std::unordered_map<uint32_t, float> landing;
+	landing[drop.CellAt(bottom, 9, 9)] = 7000.0f;
+	Tiles marine;
+	bool const fell = marine.Start(drop, drop.CellAt(top, 0, 0), drop.CellAt(bottom, 0, 0), kNpcGridMarine, 10) == nullptr && marine.Work(1000000) == kNpcGridFound;
+	double const fellPlain = marine.CostOfTheWay();
+	marine.SetDearCells(&landing, 1);
+	bool const fellDear = marine.Start(drop, drop.CellAt(top, 0, 0), drop.CellAt(bottom, 0, 0), kNpcGridMarine, 10) == nullptr && marine.Work(1000000) == kNpcGridFound;
+	snprintf(line, sizeof(line), "a marine's fall onto a dear cell pays its extra (%.0f, was %.0f)", marine.CostOfTheWay(), fellPlain);
+	Check(fell && fellDear && fabs(marine.CostOfTheWay() - fellPlain - 7000.0) < 1e-3, line);
+
+	// A cell that is both breakable and dear pays both: one move of 300 mm of floor at 10, onto a cell with 1000 and 2000 more
+	TestGrid strip;
+	int const t = strip.AddSheet(3, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, kAlienWaysFloor);
+	std::unordered_map<uint32_t, float> breakable, dearToo;
+	breakable[strip.CellAt(t, 1, 0)] = 1000.0f;
+	dearToo[strip.CellAt(t, 1, 0)] = 2000.0f;
+	Tiles both;
+	both.SetBreakables(&breakable, 1);
+	both.SetDearCells(&dearToo, 1);
+	NpcGridSearch const bothState = both.ExactSearch(strip, strip.CellAt(t, 0, 0), strip.CellAt(t, 1, 0), kNpcGridAlien, 10, &exactCost, &looked);
+	snprintf(line, sizeof(line), "a cell both breakable and dear pays both (%.0f: 3000 + 1000 + 2000)", exactCost);
+	Check(bothState == kNpcGridFound && fabs(exactCost - 6000.0) < 1e-6, line);
+}
+
 // How long a search from nothing takes on a big world: SAID, never checked (a test's machine can be busy). For the faster cold build: the
 // same world and pair before and after a change, on the same machine, set side by side.
 static void SayHowLongACold()
@@ -757,6 +954,7 @@ int main()
 	TestWhatItHolds();
 	TestBreakables();
 	TestPieces();
+	TestDearCells();
 
 	if (checksFailed > 0)
 	{
