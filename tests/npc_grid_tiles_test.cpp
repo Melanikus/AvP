@@ -15,9 +15,11 @@
 #include "npc_grid_tiles.h"
 
 static int checksFailed = 0;
+static int checksRun = 0;   // said at the end, so the count in a report is the program's own (Drake's review: 21, not the 22 first said)
 
 static void Check(bool passed, char const *what)
 {
+	checksRun++;
 	printf("  %s  %s\n", passed ? "ok    " : "FAILED", what);
 
 	if (!passed)
@@ -66,6 +68,31 @@ public:
 	// npc_grid's answers
 	bool Ready() const { return ready; }
 	size_t Cells() const { return flags.size(); }
+	size_t Sheets() const { return sheets.size(); }
+
+	size_t SurfaceCells() const
+	{
+		size_t n = 0;
+
+		for (uint8_t f : flags)
+		{
+			n += f ? 1 : 0;
+		}
+
+		return n;
+	}
+
+	size_t Links() const
+	{
+		size_t n = 0;
+
+		for (auto const &l : links)
+		{
+			n += l.size();
+		}
+
+		return n;
+	}
 	uint8_t Flags(uint32_t cell) const { return cell < flags.size() ? flags[cell] : 0; }
 
 	AlienWaysKind KindOf(uint32_t cell) const
@@ -443,12 +470,68 @@ static void TestTheMarine()
 		"and an alien never falls");
 }
 
+// What it holds (Drake's review): counted, capped before it grows, given back by Forget; and a grid that has changed is a grid it forgets
+static void TestWhatItHolds()
+{
+	printf("What it holds, and a grid that changed\n");
+
+	TestGrid g;
+	MakeWorld(&g, 60, 60, 4, false);
+	uint32_t const from = g.CellAt(0, 2, 2), to = g.CellAt(1, 50, 20);
+	Tiles tiles;
+
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridFound && tiles.PeakBytes() > 0
+		&& tiles.PeakBytes() <= tiles.MostBytes() && tiles.BytesHeld() <= tiles.PeakBytes(),
+		"a search says the most it held, under its cap, and holds no more than that after");
+
+	// A cap far below what the search needs: it ends kNpcGridTooFar, says why, and never held more than the cap
+	Tiles small;
+	small.SetMostBytes(16 * 1024);
+	NpcGridSearch state = kNpcGridSearching;
+
+	if (small.Start(g, from, to, kNpcGridAlien, 10) == nullptr)
+	{
+		state = small.Work(100000000);
+	}
+	else
+	{
+		state = kNpcGridTooFar;
+	}
+
+	char line[300];
+	snprintf(line, sizeof(line), "under a cap too small, it ends too far (state %d), says why (%s), and never went past the cap (held %u, peak %u, cap %u)",
+		(int)state, small.Why() ? small.Why() : "nothing", (unsigned)small.BytesHeld(), (unsigned)small.PeakBytes(), (unsigned)small.MostBytes());
+	Check(state == kNpcGridTooFar && small.Why() != nullptr && small.BytesHeld() <= small.MostBytes() && small.PeakBytes() <= small.MostBytes(), line);
+
+	// Forget gives back what it held: nothing kept but a hash table's few empty buckets
+	size_t const before = tiles.BytesHeld();
+	tiles.Forget();
+	snprintf(line, sizeof(line), "Forget gives back what it held (%u bytes before, %u after; %u nodes, %u tiles kept)", (unsigned)before, (unsigned)tiles.BytesHeld(),
+		(unsigned)tiles.NodesKept(), (unsigned)tiles.TilesMade());
+	Check(tiles.NodesKept() == 0 && tiles.TilesMade() == 0 && tiles.BytesHeld() < 1024 && before > 10 * 1024, line);
+
+	// The same grid at the same place, with one more link: its tiles are forgotten, and made again for it
+	Tiles kept;
+	kept.Start(g, from, to, kNpcGridAlien, 10);
+	kept.Work(100000000);
+	size_t const made = kept.TilesMade();
+	g.Link(g.CellAt(0, 30, 30), g.CellAt(1, 30, 5));
+	kept.Start(g, from, to, kNpcGridAlien, 10);
+	kept.Work(100000000);
+	Tiles fresh;
+	fresh.Start(g, from, to, kNpcGridAlien, 10);
+	fresh.Work(100000000);
+	Check(made > 0 && kept.TilesMade() == fresh.TilesMade() && fabs(kept.CostOfTheWay() - fresh.CostOfTheWay()) < 1e-6,
+		"a grid with another number of links: its old tiles are forgotten, and it searches as a fresh one does");
+}
+
 int main()
 {
 	TestTheRules();
 	TestAgainstTheExact();
 	TestOverFrames();
 	TestTheMarine();
+	TestWhatItHolds();
 
 	if (checksFailed > 0)
 	{
@@ -456,6 +539,6 @@ int main()
 		return 1;
 	}
 
-	printf("All checks passed\n");
+	printf("All %d checks passed\n", checksRun);
 	return 0;
 }
