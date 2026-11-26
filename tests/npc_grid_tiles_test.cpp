@@ -661,6 +661,12 @@ static void TestBreakables()
 	Check(madeBefore > 0 && tiles.TilesMade() == fresh.TilesMade() && fabs(tiles.CostOfTheWay() - fresh.CostOfTheWay()) < 1e-6,
 		"a new version of the breakables: the tiles are made again, and it searches as a fresh one does");
 
+	// Forget lets go of the breakables too (Drake's review): a walk that frees its map at a level's end and forgets leaves no pointer to it
+	// here. The map is still alive in this test, so a search that read it would find the way through the row: this one must find none.
+	tiles.SetBreakables(&extra, 4);
+	tiles.Forget();
+	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay, "Forget lets go of the breakables: no way, as with none");
+
 	// None again: no way
 	tiles.SetBreakables(nullptr, 3);
 	Check(tiles.Start(g, from, to, kNpcGridAlien, 10) == nullptr && tiles.Work(100000000) == kNpcGridNoWay, "with none set again, no way");

@@ -74,8 +74,19 @@ class NpcGridTilesSearch
 public:
 	NpcGridTilesSearch() { Forget(); }
 
-	// Lets go of every tile it has made, and gives back the room its lists held. Call it at each level's start (see WHO FORGETS, above).
+	// Lets go of every tile it has made, gives back the room its lists held, and lets go of the breakables it was given (SetBreakables): a
+	// walk that frees its map at a level's end, and forgets, leaves no pointer here to the freed map; it gives them again after (Drake's
+	// review). Start forgets the tiles by itself when it has to (WHO FORGETS, above), but keeps the breakables it was given.
 	void Forget()
+	{
+		Reset();
+		breakables = nullptr;
+		breakablesVersion = 0;
+	}
+
+private:
+	// Forget's letting go of the tiles and their room, without the breakables the caller gave: what Start does by itself
+	void Reset()
 	{
 		grid = nullptr;
 		body = kNpcGridAlien;
@@ -118,6 +129,7 @@ public:
 		smoothCost = 0.0;
 	}
 
+public:
 	// The most it may hold, from the next search on (kNpcGridTilesMostBytes unless this says otherwise: the walk gives the grid's own cap)
 	void SetMostBytes(size_t bytes) { mostBytes = bytes; }
 	size_t MostBytes() const { return mostBytes; }
@@ -153,7 +165,7 @@ public:
 		if (grid != &onGrid || gridBuild != onGrid.BuildNumber() || body != forBody || floorPrice != price || tilesBreakables != breakables
 			|| tilesBreakablesVersion != breakablesVersion)
 		{
-			Forget();
+			Reset();
 			grid = &onGrid;
 			gridBuild = onGrid.BuildNumber();
 			body = forBody;
@@ -506,7 +518,8 @@ private:
 		return std::min<double>(found->second, kNpcGridTilesMostBreakableMm);
 	}
 
-	// Can the body be on this cell: its flag, or a breakable (above)
+	// Can the body be on this cell: its flag, or a breakable (above). With breakables set, a cell without its flag costs a look in their map,
+	// for every neighbour of every cell a tile's making or search looks at: a cold build's cost, only while there are breakables (Drake's NIT).
 	bool Fits(uint32_t cell) const
 	{
 		return (grid->Flags(cell) & bit) != 0 || ExtraOf(cell) >= 0.0;
@@ -546,7 +559,7 @@ private:
 
 		if (grid->CellPlace(c, &s, &i, &j))
 		{
-			MovesAt(c, s, i, j, PriceOf(c), kStepsAndLinks, visit);
+			MovesAt(c, s, i, j, PriceOf(c), kEveryMove, visit);
 		}
 	}
 
@@ -555,7 +568,7 @@ private:
 	{
 		kStepsAlongTheSheet = 1,
 		kLinksAndFalls = 2,
-		kStepsAndLinks = 3
+		kEveryMove = 3
 	};
 
 	// THE MOVES of a cell whose place on its sheet is known, at the price of its sheet's kind (PriceOf), so nothing here looks a cell up by a
@@ -689,7 +702,7 @@ public:
 	// The exact search over every cell, by the same moves: for the tests, which set the tiles' ways beside the exact ones. Not for a frame.
 	NpcGridSearch ExactSearch(Grid const &onGrid, uint32_t from, uint32_t to, NpcGridBody forBody, int price, double *cost, size_t *cellsLooked)
 	{
-		Forget();
+		Reset();   // the breakables it was given stay: the tests set the same ones on it as on the tiles
 		grid = &onGrid;
 		body = forBody;
 		floorPrice = price;
@@ -1020,7 +1033,7 @@ private:
 				// A cell inside the tile's edge: its steps along the sheet all stay in the tile, so only its links can cross
 				bool const edge = di == 0 || dj == 0 || di == kNpcGridTile - 1 || dj == kNpcGridTile - 1;
 
-				MovesAt(c, t.sheet, ci, cj, price, edge ? kStepsAndLinks : kLinksAndFalls, [&](uint32_t n, double cost, int ni, int nj) {
+				MovesAt(c, t.sheet, ci, cj, price, edge ? kEveryMove : kLinksAndFalls, [&](uint32_t n, double cost, int ni, int nj) {
 					uint32_t into = 0;
 
 					if (full || (ni >= 0 ? PlaceInTile(t.sheet, ni, nj, tile) : InTile(n, tile)))
@@ -1403,7 +1416,7 @@ private:
 				continue;
 			}
 
-			MovesAt(c, cs, ci, cj, PriceOf(c), kStepsAndLinks, [&](uint32_t n, double step, int ni, int nj) {
+			MovesAt(c, cs, ci, cj, PriceOf(c), kEveryMove, [&](uint32_t n, double step, int ni, int nj) {
 				uint32_t tile = 0;
 
 				// a step along the sheet: its tile from its own place; a link: looked up
