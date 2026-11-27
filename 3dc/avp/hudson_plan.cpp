@@ -198,6 +198,9 @@ const char *const kHudsonRefusedSiegeFarEmpty = "siegefar= has no room name";
 const char *const kHudsonRefusedSiegeFarTooLong = "siegefar= has a room name that's too long";
 const char *const kHudsonRefusedCustomMapEmpty = "custommap= has no map name";
 const char *const kHudsonRefusedCustomMapName = "custommap= isn't a name a custom map can have (see custom_map_name.h)";
+const char *const kHudsonRefusedMenuReadValue = "menuread= can only be all";
+const char *const kHudsonRefusedMenuReadWithoutCustomMap = "menuread=all reads the Custom maps page, so it needs custommap=";
+const char *const kHudsonRefusedLevelStart = "levelstart= is a whole number of seconds from 10 to 600";
 const char *const kHudsonRefusedSiegeFarCharacter = "siegefar= has a character a room name can't have here: write a space as _";
 const char *const kHudsonRefusedSiegeFarWithoutSiege = "siegefar= says where a siege's xenoborgs come from, so it needs siege=";
 const char *const kHudsonRefusedSiegeFromTooLong = "siegefrom= has a room name that's too long";
@@ -722,6 +725,8 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenRemoteRelay = false;
 	bool seenSiegeFar = false;
 	bool seenCustomMap = false;
+	bool seenMenuRead = false;
+	bool seenLevelStart = false;
 	bool seenScreen = false;
 	bool seenWindowSlot = false;
 	bool seenWindowsOf = false;
@@ -2442,6 +2447,40 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedCustomMapName;
 			}
 		}
+		// menuread=all (#229, Frost 2026-11-27): the one value, so that a word nobody meant can't switch it on
+		else if (WordIs(place, nameLength, "menuread"))
+		{
+			if (seenMenuRead)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenMenuRead = true;
+
+			if (!WordIs(value, valueLength, "all"))
+			{
+				return kHudsonRefusedMenuReadValue;
+			}
+
+			plan->menuReadAll = true;
+		}
+		// levelstart=<seconds> (#229): long enough for the biggest stock level to load on a slow machine, and short enough that a broken copy
+		// whose set-up hangs ends as one that never got into its level, not at the run's own time limit
+		else if (WordIs(place, nameLength, "levelstart"))
+		{
+			if (seenLevelStart)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenLevelStart = true;
+
+			if (!ReadNumber(value, valueLength, &plan->levelStartSeconds) || plan->levelStartSeconds < 10 || plan->levelStartSeconds > 600)
+			{
+				plan->levelStartSeconds = 0;
+				return kHudsonRefusedLevelStart;
+			}
+		}
 		else if (WordIs(place, nameLength, "siegefar"))
 		{
 			if (seenSiegeFar)
@@ -3103,6 +3142,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->showWindow && !plan->machineShared)
 	{
 		return kHudsonRefusedShowWithoutSharing;
+	}
+
+	if (plan->menuReadAll && !plan->customMap[0])
+	{
+		return kHudsonRefusedMenuReadWithoutCustomMap;
 	}
 
 	if ((plan->coop || plan->coopWalk || (plan->coopEndSeconds != 0 && !plan->listPlaceAsked && !plan->customMap[0])) && plan->netMode == kHudsonNetNone)

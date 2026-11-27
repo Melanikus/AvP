@@ -25,6 +25,9 @@
 //   hoston= names the server a host through the rows chooses on the Host on row, and joinon= the server whose game a Find games run joins
 // Modified 2026-11-18 by Melanikus (Drake) for the AvP port:
 //   meetsagain= has a meets=yes run say where he is a second time, that many seconds in
+// Modified 2026-11-27 by Melanikus (Frost) for the AvP port (#229, RIF-HOSTILE-1: broken copies of levels tried through a player's own custom-map path):
+//   menuread=all, with custommap=, has the Custom maps page read every map it lists, as a player's menu does: its size and sum, and its picture
+//   levelstart= ends a run that hasn't reached its level's first frame within that many seconds (kHudsonExitNeverInLevel), saying how far it got
 // What a Hudson run has been asked to do, read from the command line. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // Hudson is a marine the camera follows, so that the game can be measured with nobody at the keyboard: see hudson.cpp. A run is asked for like this:
@@ -285,6 +288,8 @@ struct HudsonPlan
 	char siegeRoom[kHudsonLongestWallName + 1]; // siege=: after the smoke test both players go to the room of this name, armed and unable to die, and the host keeps enemies coming. Nothing means none
 	char siegeFar[kHudsonLongestWallName + 1];  // siegefar=: the room a siege's xenoborgs are made in, further off, so that they have time to wake. Nothing means where the others come from
 	char customMap[kCustomMapNameMost + 1]; // custommap=: a custom map made for single player, played instead of level=, which still says who plays. Nothing means none
+	bool menuReadAll;     // menuread=all, with custommap=: the Custom maps page reads every map it lists (its size and sum, its picture), each said in the run's lines
+	int levelStartSeconds; // levelstart=: the run ends, kHudsonExitNeverInLevel, if the level's first frame hasn't come within this many seconds, 10 to 600. 0: no such limit
 	char siegeFrom[kHudsonLongestWallName + 1]; // siegefrom=: the room a siege's enemies are made in, with _ for a space in its name. Nothing means the far side of siegeRoom
 	char remoteRelay[kHudsonLongestRelayAddress + 1]; // remoterelay=: the one relay beyond this machine a run with net= may use, by its address, as its server's servers.cfg line gives it (server #14's run through a relay on another machine, 2026-11-09; an address since 2026-11-10, #175). Nothing means none: this machine only
 	bool lookAllTheTime;  // look=yes or look=no: after the smoke test, a player the fight isn't aiming goes on looking at the nearest of what's being fought, or else at the other player. Unless a run asks, a fight or a kill on the campaign does
@@ -612,6 +617,9 @@ extern const char *const kHudsonRefusedSiegeFarTooLong;
 extern const char *const kHudsonRefusedSiegeFarCharacter;
 extern const char *const kHudsonRefusedCustomMapEmpty;
 extern const char *const kHudsonRefusedCustomMapName;
+extern const char *const kHudsonRefusedMenuReadValue;
+extern const char *const kHudsonRefusedMenuReadWithoutCustomMap;
+extern const char *const kHudsonRefusedLevelStart;
 extern const char *const kHudsonRefusedSiegeFarWithoutSiege;
 extern const char *const kHudsonRefusedLookNeedsAPair;
 extern const char *const kHudsonRefusedFilmSkipNotANumber;

@@ -464,6 +464,30 @@ static void TestBadPlans()
 	Refused("-hudson level=derelict frames=5 custommap=CON", kHudsonRefusedCustomMapName);
 	Refused("-hudson level=derelict frames=5 custommap=1234567890123456789012345678901234567890", kHudsonRefusedCustomMapName);
 	Refused("-hudson level=derelict frames=5 custommap=a custommap=b", kHudsonRefusedAskedTwice);
+	// #229 (RIF-HOSTILE-1): menuread=all and levelstart= (Frost 2026-11-27)
+	{
+		HudsonPlan plan;
+
+		Check(HudsonPlan_Read("-hudson level=derelict frames=600 custommap=My_map menuread=all levelstart=60", &plan) == 0 && plan.menuReadAll &&
+			plan.levelStartSeconds == 60, "menuread=all and levelstart=60 with custommap=: the page reads every map, and the level has 60 s to start");
+		Check(HudsonPlan_Read("-hudson level=derelict frames=5", &plan) == 0 && !plan.menuReadAll && plan.levelStartSeconds == 0,
+			"without them: no reading of the page, and no limit on the level's start");
+		Check(HudsonPlan_Read("-hudson level=derelict frames=5 levelstart=10", &plan) == 0 && plan.levelStartSeconds == 10,
+			"levelstart= goes with any run, not only a custom map's: 10 is the least");
+		Check(HudsonPlan_Read("-hudson level=derelict frames=5 levelstart=600", &plan) == 0 && plan.levelStartSeconds == 600, "and 600 the most");
+	}
+
+	Refused("-hudson level=derelict frames=5 custommap=My_map menuread=yes", kHudsonRefusedMenuReadValue);
+	Refused("-hudson level=derelict frames=5 custommap=My_map menuread=", kHudsonRefusedMenuReadValue);
+	Refused("-hudson level=derelict frames=5 menuread=all", kHudsonRefusedMenuReadWithoutCustomMap);
+	Refused("-hudson level=derelict frames=5 custommap=My_map menuread=all menuread=all", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=derelict frames=5 levelstart=9", kHudsonRefusedLevelStart);
+	Refused("-hudson level=derelict frames=5 levelstart=601", kHudsonRefusedLevelStart);
+	Refused("-hudson level=derelict frames=5 levelstart=0", kHudsonRefusedLevelStart);
+	Refused("-hudson level=derelict frames=5 levelstart=-5", kHudsonRefusedLevelStart);
+	Refused("-hudson level=derelict frames=5 levelstart=", kHudsonRefusedLevelStart);
+	Refused("-hudson level=derelict frames=5 levelstart=6x", kHudsonRefusedLevelStart);
+	Refused("-hudson level=derelict frames=5 levelstart=60 levelstart=60", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host coop=yes siege=a siegefar=", kHudsonRefusedSiegeFarEmpty);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host coop=yes siege=a siegefar=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", kHudsonRefusedSiegeFarTooLong);
 	Refused("-hudson level=invasion frames=5 machine=shared net=host coop=yes siege=a siegefar=a.b", kHudsonRefusedSiegeFarCharacter);

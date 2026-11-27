@@ -311,6 +311,11 @@ static const char *refusalFromReading = 0;
 static int episode = -1;
 static int environment = -1;
 static int customMapPlace = -1;
+// custommap=: how far the run got with its map, for the result (custommap_stage) and for levelstart=: "listed" once the game finds it as the
+// Custom maps page does, "page" once the page is shown with it chosen, "starting" once the menus start the level, "inlevel" at the level's first
+// frame. One word at a time, set on the game's thread and read on the watchdog's, so a pointer to a fixed word is all that's shared (#229)
+static const char *volatile customMapStage = "none";
+static int menuReadMaps = 0, menuReadSums = 0, menuReadPictures = 0;   // menuread=all: the maps the page listed, and of them, those whose sum and picture it read
 static DWORD startedAt = 0;
 static DWORD lastTouchAtStart = 0;
 
@@ -697,6 +702,13 @@ static void WriteResult(const char *howItEnded, int code)
 			fprintf(file, "%s\n", playLine);
 		}
 
+		// custommap=: how far it got with the map, and with menuread=all what the page read (#229)
+		if (plan.customMap[0])
+		{
+			fprintf(file, "custommap=%s custommap_stage=%s menuread=%s menuread_maps=%d menuread_sums=%d menuread_pictures=%d\n", plan.customMap, customMapStage,
+				plan.menuReadAll ? "all" : "no", menuReadMaps, menuReadSums, menuReadPictures);
+		}
+
 		// Always, so that nobody has to guess whether a run has a film, or where. run-hudson.ps1 changes this to where it moves the film to.
 		fprintf(file, "film=%s\n", videoFacts.written > 0 ? (std::string(folder ? folder : "") + videoName).c_str() : "none");
 
@@ -856,6 +868,14 @@ static unsigned __stdcall WatchdogThread(void *)
 			EndAtOnce("it went past its time limit", kHudsonExitOutOfTime);
 		}
 
+		// levelstart= (#229): the level's first frame hasn't come in that many seconds from the run's start, so it never got into the level. Its own
+		// end, so that a broken copy whose set-up hangs reads as that, with how far it got, and not as a run that merely ran out of time
+		if (plan.levelStartSeconds > 0 && framesDone == 0 && GetTickCount() - startedAt > (DWORD)plan.levelStartSeconds * 1000)
+		{
+			EndAtOnce(plan.customMap[0] ? (std::string("it never got into the level (custommap_stage=") + customMapStage + ")").c_str() : "it never got into the level",
+				kHudsonExitNeverInLevel);
+		}
+
 		// #198: someone asked it to end, with a hudson-stop file. It ends the same way as at its time limit: the result written and the
 		// film finished (WriteResult), then the game ended. Looked for once a second, not every turn, since it asks the disk.
 		if (GetTickCount() - stopLookedAt >= 1000)
@@ -997,6 +1017,8 @@ int Hudson_CheckBeforeStarting()
 			WriteResult("custommap= isn't one of the custom maps made for single player in avp_rifs/Custom", kHudsonExitNoSuchLevel);
 			return kHudsonExitNoSuchLevel;
 		}
+
+		customMapStage = "listed";
 	}
 
 	// listplace= has to say the same level as level=, or the run's name and folder would be for the wrong one
@@ -1435,6 +1457,57 @@ int Hudson_Environment()
 int Hudson_CustomMapPlace()
 {
 	return HudsonRunIsOn ? customMapPlace : -1;
+}
+
+// THE PAGE'S OWN READ (menuread=all, #229 RIF-HOSTILE-1, added 2026-11-27 by Melanikus (Frost)). A player's menu reads every custom map it lists before
+// one is played: CustomMaps_Find read each file as hostile input to list it, and the page asks each one's size and MD5 (CustomMaps_SizeAndSum) and
+// its picture (CustomMaps_Picture). So does this, for every map the page lists, so that a broken copy is tried by the menu's read too, and not only by
+// the level's load. Each answer is a line of the log; the counts go in the result.
+void Hudson_ReadTheCustomMapsPage()
+{
+	if (!HudsonRunIsOn || customMapPlace < 0)
+	{
+		return;
+	}
+
+	customMapStage = "page";
+
+	if (!plan.menuReadAll)
+	{
+		return;
+	}
+
+	menuReadMaps = CustomMaps_Count();
+
+	for (int map = 0; map < menuReadMaps; map++)
+	{
+		const char *const name = CustomMaps_Name(map);
+		unsigned int size = 0;
+		unsigned char sum[16] = { 0 };
+		bool const summed = CustomMaps_SizeAndSum(map, &size, sum);
+		bool const pictured = CustomMaps_Picture(map) != MISSING_TEXTURE;
+		char hex[33] = { 0 };
+
+		for (int i = 0; i < 16; i++)
+		{
+			_snprintf(hex + 2 * i, 3, "%02x", sum[i]);
+		}
+
+		menuReadSums += summed ? 1 : 0;
+		menuReadPictures += pictured ? 1 : 0;
+		LogString(std::string("hudson: menuread: ") + (name ? name : "(no name)") + ": " + (summed ? std::to_string(size) + " bytes, md5 " + hex : std::string("its size and sum couldn't be read")) +
+			(pictured ? ", its picture read" : ", no picture"));
+	}
+}
+
+void Hudson_LevelIsStarting()
+{
+	if (!HudsonRunIsOn || customMapPlace < 0)
+	{
+		return;
+	}
+
+	customMapStage = "starting";
 }
 
 bool Hudson_PlayAsAlien()
@@ -6542,6 +6615,11 @@ void Hudson_EndOfFrame()
 	}
 
 	LONG const done = InterlockedIncrement(&framesDone);
+
+	if (done == 1 && customMapPlace >= 0)
+	{
+		customMapStage = "inlevel";
+	}
 
 	Hudson_BotFightSayWhenThePlayerDies(done);
 	Hudson_GhostLogEachFrame();

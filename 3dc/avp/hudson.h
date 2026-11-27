@@ -76,6 +76,7 @@ enum HudsonExitCode
 	kHudsonExitPlayStuck = 46,         // play=yes: there was no grid for him to find his way on
 	kHudsonExitPlayFinishedWithCheats = 47, // play=yes: the game ended the level, but only with cheats, so this doesn't show a player can
 	kHudsonExitPlayAlone = 48,         // play=yes in a pair: the other's body never came, or the two never saw each other, so neither played on alone
+	kHudsonExitNeverInLevel = 49,      // levelstart=: the level's first frame never came in time; the result's custommap_stage says how far it got
 	kHudsonExitNoSuchWall = 32,        // wall= asked for a wall this level hasn't
 	kHudsonExitNoSuchStrategy = 33,    // strategy= asked for one this level hasn't, or there's nowhere to stand to see it
 	kHudsonExitStrategyDidNothing = 34,// it was asked to go on, and its state never changed
@@ -139,6 +140,11 @@ int Hudson_MarineEpisode();
 int Hudson_Environment();
 // custommap=: the place in the custom maps' list of the one this run plays instead of level=, or -1 for none
 int Hudson_CustomMapPlace();
+// custommap=, the Custom maps page shown as a player would see it (menus.cpp): with menuread=all, every map it lists is read as the page reads it,
+// its size and sum and its picture, and the run says each. Added 2026-11-27 by Melanikus (Frost) for #229 (RIF-HOSTILE-1)
+void Hudson_ReadTheCustomMapsPage();
+// The menus have started the level: for the result's custommap_stage, and levelstart= (hudson_plan.h). Added 2026-11-27 by Melanikus (Frost)
+void Hudson_LevelIsStarting();
 // A picture of what's about to be shown, for a page of the menus
 void Hudson_SaveThePage(const char *name);
 // custommap= with coopend=: has the map been finished? And each frame of the menus after that: is the Custom maps page back?

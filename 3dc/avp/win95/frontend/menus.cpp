@@ -712,6 +712,7 @@ static void ShowTheCustomMapsPageForHudsonRun(void)
 	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
 	SetupNewMenu(AVPMENU_CUSTOMMAPS);
 	CustomMapToPlay = Hudson_CustomMapPlace();
+	Hudson_ReadTheCustomMapsPage();   // menuread=all: the page's own read of every map it lists (#229)
 
 	LogString(std::string("hudson: custommap: the page lists ") + std::to_string(CustomMaps_Count()) + " maps");
 
@@ -1312,6 +1313,7 @@ static int StartLevelForHudsonRun(void)
 
 	AvPMenus.MenusState = MENUSSTATE_STARTGAME;
 
+	Hudson_LevelIsStarting();   // custommap=: the run's stage, for its result and levelstart= (#229)
 	Hudson_SetTheMode();
 
 	// A run skips a level's opening film unless it's asked for one. This is the call the menus make.
