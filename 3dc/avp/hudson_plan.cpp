@@ -185,6 +185,10 @@ const char *const kHudsonRefusedMeetsNotYes = "meets= can only be yes";
 const char *const kHudsonRefusedMeetsAgainNotANumber = "meetsagain= isn't a number of seconds from 1 to 3600";
 const char *const kHudsonRefusedMeetsAgainWithoutMeets = "meetsagain= needs meets=yes, whose first reading it is the second of";
 const char *const kHudsonRefusedDieAtNotANumber = "dieat= isn't a number of seconds from 1 to 3600";
+const char *const kHudsonRefusedSaveNotANumber = "save= isn't a number of seconds from 1 to 3600";
+const char *const kHudsonRefusedSaveInANetGame = "save= saves a single-player game: the game saves none in a network game (savegame.cpp, SaveGameAllowed)";
+const char *const kHudsonRefusedSaveOnACustomMap = "save= saves a campaign level: a save names its level by campaign and episode, so the game saves none on a custom map";
+const char *const kHudsonRefusedSaveInASkirmish = "save= saves a single-player game: class= and listplace= start a skirmish, which the game plays as a network game of one (InitAVPNetGameForHost) and saves none in";
 const char *const kHudsonRefusedLevelFilmsNotYes = "levelfilms= can only be yes";
 const char *const kHudsonRefusedScreenWord = "screen= is second or main";
 const char *const kHudsonRefusedWindowSlot = "windowslot= is a number from 0 to 3, and less than windowsof=";
@@ -2646,6 +2650,20 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 				return kHudsonRefusedDieAtNotANumber;
 			}
 		}
+		else if (WordIs(place, nameLength, "save"))
+		{
+			// save=: this many seconds in, the game saved as the console's QUICKSAVE saves it (hudson.cpp, SaveIfItIsTime). Added 2026-11-23 by
+			// Melanikus (Frost) for the AvP port, Bishop 2's card for #294's Hudson round
+			if (plan->saveAtSeconds != 0)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			if (!ReadNumber(value, valueLength, &plan->saveAtSeconds) || plan->saveAtSeconds < 1 || plan->saveAtSeconds > 3600)
+			{
+				return kHudsonRefusedSaveNotANumber;
+			}
+		}
 		else if (WordIs(place, nameLength, "difficulty"))
 		{
 			if (seenDifficulty)
@@ -3149,6 +3167,24 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		{
 			return kHudsonRefusedNetNotAlone;
 		}
+	}
+
+	// save= where the game itself saves nothing (savegame.cpp, SaveGameAllowed) would only ever say "not written": refused here, saying why
+	if (plan->saveAtSeconds != 0 && plan->netMode != kHudsonNetNone)
+	{
+		return kHudsonRefusedSaveInANetGame;
+	}
+
+	if (plan->saveAtSeconds != 0 && plan->customMap[0] != 0)
+	{
+		return kHudsonRefusedSaveOnACustomMap;
+	}
+
+	// class= and listplace= start a skirmish, which the game plays as a network game of one (InitAVPNetGameForHost: AvP.Network = I_Host), so
+	// it saves none there either (Drake's review, MUST 1)
+	if (plan->saveAtSeconds != 0 && (plan->classSlider != 0 || plan->listPlaceAsked))
+	{
+		return kHudsonRefusedSaveInASkirmish;
 	}
 
 	// The lamp is off in every run unless it asks with lamp=on or lamp=blink. The user, 2026-11-08: "Hudson tests weirdly show the marine shoulder lamp all the time,
