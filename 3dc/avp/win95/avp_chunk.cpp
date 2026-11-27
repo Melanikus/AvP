@@ -394,6 +394,10 @@ Global_Generator_Data_Chunk::Global_Generator_Data_Chunk(Chunk_With_Children* pa
 	HiveStateChangeTime=*(int*)data;
 	data+=sizeof(int);
 
+	// The hive waits this long between attacking and regrouping, held in 65536ths of a second in a whole number, which holds 32,767 s and no more; a
+	// wait of 0 or less would turn it round every frame. The game's own levels ask for 10 s to 32,000 s.
+	HiveStateChangeTime=max(GlobalGenerator_ShortestHiveSeconds,min(HiveStateChangeTime,GlobalGenerator_LongestHiveSeconds));
+
 	spare1=*(int*)data;
 	data+=sizeof(int);
 	spare2=*(int*)data;
@@ -571,7 +575,10 @@ size_t AVP_Power_Cable_Chunk::size_chunk()
 }
 
 //////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("AVPENVIR",AVP_Environment_Settings_Chunk)
+// A level's sky and its starting kit. Every block of these the game writes holds 24 bytes, as all the game's own levels do, so a chunk holding less is
+// refused (KeepIfItHoldsTooLittle, chunk.cpp) rather than read: it used to be given 24 bytes of memory nothing had written, and kept whatever that held
+// for the fields it didn't have.
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("AVPENVIR",AVP_Environment_Settings_Chunk,24)
 
 
 AVP_Environment_Settings_Chunk::AVP_Environment_Settings_Chunk(Chunk_With_Children* parent,const char* data,size_t data_size)
@@ -579,17 +586,23 @@ AVP_Environment_Settings_Chunk::AVP_Environment_Settings_Chunk(Chunk_With_Childr
 {
 	size_t size=max(data_size,sizeof(AVP_Environment_Settings));
 
-	settings_block=new unsigned char[size];
+	// all zeros to start with, so no field is ever whatever the memory held before
+	settings_block=new unsigned char[size]();
 	settings=(AVP_Environment_Settings*)settings_block;
 	memcpy(settings,data,data_size);
 
-	if(settings->data_size<16)
+	// An older, shorter block keeps the defaults below for what it doesn't hold: one of under 16 bytes has no sky, and one of under 24 no kit. The block
+	// starts with its own size, but that's only what the file says, so only the bytes the chunk really holds count (a tool can make the chunk straight
+	// from its bytes, with no loader to refuse a short one).
+	size_t const holds=(data_size>=sizeof(int) && settings->data_size>0) ? min((size_t)settings->data_size,data_size) : 0;
+
+	if(holds<16)
 	{
 		settings->sky_colour_red=200;
 		settings->sky_colour_green=200;
 		settings->sky_colour_blue=200;
 	}
-	if(settings->data_size<24)
+	if(holds<24)
 	{
 		settings->predator_pistol=1;
 		settings->predator_plasmacaster=1;
@@ -601,6 +614,10 @@ AVP_Environment_Settings_Chunk::AVP_Environment_Settings_Chunk(Chunk_With_Childr
 		settings->stars_in_sky=0;
 		settings->spare_bits=0;
 	}
+
+	// The game gives the Predator 65536 rounds a spear (inventory.cpp), a sum that runs over a whole number past 32,767 spears, and there can't be
+	// fewer than none
+	settings->predator_num_spears=max(0,min(settings->predator_num_spears,AVPEnvironment_MostSpears));
 
 	settings->data_size=size;
 }
