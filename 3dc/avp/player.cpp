@@ -1791,6 +1791,15 @@ void ShowAdjacencies(void) {
 	AIMODULE *ModuleListPointer;
 
 	/* Utility function... */
+
+	// The player in no module (between modules for a moment, or outside the level), or in one with no AI module: nothing to list. (Fixed
+	// 2026-11-26 by Melanikus (Drake) for the AvP port: with SHOWADJACENCIES on, this read both through a pointer to nothing every frame.)
+	if (!playerPherModule || !playerPherModule->m_aimodule)
+	{
+		PrintDebuggingText("Adjacencies: the player is in no module now\n");
+		return;
+	}
+
 	PrintDebuggingText("Adjacencies FROM Player's Module (%s):\n",
 		(*(playerPherModule->m_aimodule->m_module_ptrs))->name);
 

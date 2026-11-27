@@ -34,6 +34,14 @@ extern void TogglePaintBallMode(void)
 
 extern void PaintBallMode_DrawCurrentDecalAtTarget(void)
 {
+	// The player in no module (between modules for a moment): no decal to draw, as it needs the module to lie in. (Fixed 2026-11-26 by
+	// Melanikus (Drake) for the AvP port: with paintball mode on, its module was read from the player's through a pointer to nothing every
+	// frame.)
+	if (!playerPherModule)
+	{
+		return;
+	}
+
 	DECAL_DESC *decalDescPtr = &DecalDescription[PaintBallMode.CurrentDecalID];
 	
 	MATRIXCH orientation;
