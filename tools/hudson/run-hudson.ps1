@@ -87,6 +87,7 @@ The exit code here is the game's own, so another script can read it:
   46       -Play: there was no grid for him to find his way on
   47       -Play: the game ended the level, but only with cheats, so it does not show a player can. play_cheats= in the result counts them, and each is a "play: cheat" line in the log
   48       -Play in a pair: the other one's body never came, or the two never looked at each other, so neither played on alone. The log's "play:" lines say which
+  49       -LevelStart: the level's first frame never came in that many seconds. With -CustomMap, the result's custommap_stage says how far it got (#229)
   31       -Lighting or -Shadows asked for something this machine can't draw
   32       -Wall asked for a wall this level hasn't
   33       -Strategy asked for one this level hasn't, or there's nowhere to stand to see it
@@ -178,6 +179,8 @@ param(
     [string]$SiegeFar = '',  # the room a siege's xenoborgs are made in, further off so they have time to wake, with _ for a space in its name
     [string]$SiegeFrom = '', # the room a siege's enemies are made in, with _ for a space in its name. Left out, the far side of the siege's own room
     [string]$CustomMap = '', # a custom map made for single player, by its name in avp_rifs\Custom, played instead of -Level, which still says who plays
+    [switch]$MenuRead,     # with -CustomMap: menuread=all, the Custom maps page reads every map it lists (its size and sum, its picture), each in the log (#229)
+    [int]$LevelStart = 0,  # levelstart=: the run ends (exit 49) if the level's first frame hasn't come within this many seconds, 10 to 600; 0 leaves it out (#229)
     [string]$Siege = '',   # a pair stands in the room of this name, armed and unable to die, against every kind of enemy the host can make. Needs -Coop
     [ValidateSet('', 'yes', 'no')][string]$Look = '', # a player of a pair looks at what's going on. Left out, a fight or a kill looks all the time, and otherwise each level's start does
     [int]$FilmSkip = 0,    # a film stops this many seconds in, as if a key had been pressed. Needs -LevelFilms
@@ -483,6 +486,8 @@ if ($Meets) { $arguments += " meets=yes" }
 if ($LevelFilms) { $arguments += " levelfilms=yes" }
 if ($Look) { $arguments += " look=$Look" }
 if ($CustomMap) { $arguments += " custommap=$CustomMap" }
+if ($MenuRead) { $arguments += " menuread=all" }
+if ($LevelStart -ne 0) { $arguments += " levelstart=$LevelStart" }
 if ($Siege) { $arguments += " siege=$Siege" }
 if ($SiegeFrom) { $arguments += " siegefrom=$SiegeFrom" }
 if ($SiegeFar) { $arguments += " siegefar=$SiegeFar" }
