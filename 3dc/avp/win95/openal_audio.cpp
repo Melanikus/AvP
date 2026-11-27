@@ -19,6 +19,10 @@
 //   the sound streams (AudioStream) moved, as they were, to openal_stream.cpp, so a test can build them on their own, and GetALFormat
 //   to openal_shared.h, which both files share. What a stream needs of the sound system's state is given by three small functions at
 //   the end of this file
+// Modified 2026-11-27 by Melanikus (Drake) for the AvP port:
+//   a WAV's header is read in one place for both loaders (WavHeader_Read, wav_chunks.h) and checked against what the game plays and the
+//   file's own bytes before any memory is asked for its sound; a WAV that fails is refused with its name and reason in the log, where
+//   three asserts were, and one refused from a sound bank is stepped over, so the next sound is still found
 
 #ifdef USE_OPENAL
 
@@ -40,6 +44,7 @@
 #include <math.h>
 #include <new>
 #include "wav_chunks.h"
+#include "plain_file_name.h"
 #include "reverb_choice.h"
 #include <AL\al.h>
 #include <AL\alc.h>
@@ -1292,6 +1297,17 @@ int ReturnInvalidWAV()
 	return 0;
 }
 
+// A WAV the game won't play: said in the console as before, and in the log with its name, printable as a name from a file has to be, and why. This
+// sound alone stays silent.
+static int RefusedWAV(const std::string &name, const char *why)
+{
+	LogString("sound: refused the WAV " + PlainFileName_Printable(name.c_str()) + ": " + why);
+	return ReturnInvalidWAV();
+}
+
+// wav_chunks.h refuses a rate the sound system can't play, so its two limits are the sound system's own
+static_assert(kWavSlowestRate == (uint32_t)FREQUENCY_MINPLAT && kWavFastestRate == (uint32_t)FREQUENCY_MAXPLAT, "wav_chunks.h's rates are psndplat.h's");
+
 // The most sound data one WAV file may hold. The largest of the 1,656 sounds in the stock game is 172,282 bytes, and
 // 64 MB is about six minutes of CD-quality stereo, so this leaves plenty of room for a mod.
 static const uint32_t kMaxWavDataBytes = 64 * 1024 * 1024;
@@ -1321,48 +1337,20 @@ int LoadWavFile(int soundNum, const std::string &fileName)
 		return 0;
 	}
 
-	// Read the WAV RIFF header
-	uint32_t chunkID = fStream.GetUint32BE();
-	if (chunkID != 'RIFF') {
-		return ReturnInvalidWAV();
-	}
+	// The header, checked against what the game plays and against the file's own bytes before any memory is asked for (wav_chunks.h)
+	WavHeader header;
+	const char *const refused = WavHeader_Read(fStream, kMaxWavDataBytes, &header);
 
-	uint32_t chunkSize = fStream.GetUint32LE();
-	uint32_t format    = fStream.GetUint32BE();
-	if (format != 'WAVE') {
-		return ReturnInvalidWAV();
-	}
-
-	uint32_t subChunkID = fStream.GetUint32BE();
-	if (subChunkID != 'fmt ') {
-		return ReturnInvalidWAV();
-	}
-
-	uint32_t subChunkSize = fStream.GetUint32LE();
-
-	uint16_t wFormatTag      = fStream.GetUint16LE();
-	uint16_t nChannels       = fStream.GetUint16LE();
-	uint32_t nSamplesPerSec  = fStream.GetUint32LE();
-	uint32_t nAvgBytesPerSec = fStream.GetUint32LE();
-	uint16_t nBlockAlign     = fStream.GetUint16LE();
-	uint16_t wBitsPerSample  = fStream.GetUint16LE();
-
-	// if not PCM
-	if (subChunkSize == 18) {
-		uint16_t cbSize = fStream.GetUint16LE();
-		assert(cbSize == 0);
-	}
-	else if (subChunkSize != 16) {
-		Con_PrintError("Only PCM WAV files are supported");
-		return 0;
-	}
-
-	if (!FindWavDataChunk(fStream))
+	if (refused)
 	{
-		return ReturnInvalidWAV();
+		return RefusedWAV(fileName, refused);
 	}
 
-	uint32_t nAudioBytes = fStream.GetUint32LE();
+	uint32_t const nAudioBytes     = header.dataBytes;
+	uint16_t const nChannels       = header.format.channels;
+	uint32_t const nSamplesPerSec  = header.format.samplesPerSec;
+	uint32_t const nAvgBytesPerSec = header.format.avgBytesPerSec;
+	uint16_t const wBitsPerSample  = header.format.bitsPerSample;
 
 	ALenum alFormat = GetALFormat(wBitsPerSample, nChannels);
 
@@ -1375,10 +1363,10 @@ int LoadWavFile(int soundNum, const std::string &fileName)
 	uint32_t nBytesRead = fStream.ReadBytes(GameSounds[soundNum].audioBuffer, nAudioBytes);
 	if (nBytesRead != nAudioBytes)
 	{
-		LOCALASSERT(1==0);
+		// the header said the file holds this much, so it changed or the disk failed while it was read: this sound alone is lost
 		delete[] GameSounds[soundNum].audioBuffer;
 		GameSounds[soundNum].audioBuffer = NULL;
-		return 0;
+		return RefusedWAV(fileName, "its sound couldn't all be read");
 	}
 
 	// create and store audio buffer
@@ -1420,52 +1408,29 @@ int ExtractWavFile(int soundNum, FileStream &fStream)
 	// skip string null terminator
 	fStream.GetByte();
 
-	// Read the RIFF chunk header
-	uint32_t chunkID = fStream.GetUint32BE();
-	if (chunkID != 'RIFF') {
-		return ReturnInvalidWAV();
-	}
+	// The header, checked against what the game plays and against the bank's own bytes before any memory is asked for (wav_chunks.h)
+	WavHeader header;
+	const char *const refused = WavHeader_Read(fStream, kMaxWavDataBytes, &header);
 
-	uint32_t chunkSize = fStream.GetUint32LE();
+	startOffset = header.riffStart;
+	totalChunkSize = header.riffSize;
 
-	totalChunkSize = chunkSize;
-	startOffset = fStream.GetCurrentPos();
-
-	uint32_t format = fStream.GetUint32BE();
-	if (format != 'WAVE') {
-		return ReturnInvalidWAV();
-	}
-
-	uint32_t subChunkID = fStream.GetUint32BE();
-	if (subChunkID != 'fmt ') {
-		return ReturnInvalidWAV();
-	}
-
-	uint32_t subChunkSize = fStream.GetUint32LE();
-
-	uint16_t wFormatTag      = fStream.GetUint16LE();
-	uint16_t nChannels       = fStream.GetUint16LE();
-	uint32_t nSamplesPerSec  = fStream.GetUint32LE();
-	uint32_t nAvgBytesPerSec = fStream.GetUint32LE();
-	uint16_t nBlockAlign     = fStream.GetUint16LE();
-	uint16_t wBitsPerSample  = fStream.GetUint16LE();
-
-	// if not PCM
-	if (subChunkSize == 18) {
-		uint16_t cbSize = fStream.GetUint16LE();
-		assert(cbSize == 0);
-	}
-	else if (subChunkSize != 16) {
-		Con_PrintError("Only PCM WAV files are supported");
-		return 0;
-	}
-
-	if (!FindWavDataChunk(fStream))
+	if (refused)
 	{
-		return ReturnInvalidWAV();
+		// step over this sound when its size was read, so that the next one in the sound bank is still found
+		if (header.riffSizeRead)
+		{
+			fStream.Seek(startOffset + totalChunkSize, FileStream::SeekStart);
+		}
+
+		return RefusedWAV(GameSounds[soundNum].wavName, refused);
 	}
 
-	uint32_t nAudioBytes = fStream.GetUint32LE();
+	uint32_t const nAudioBytes     = header.dataBytes;
+	uint16_t const nChannels       = header.format.channels;
+	uint32_t const nSamplesPerSec  = header.format.samplesPerSec;
+	uint32_t const nAvgBytesPerSec = header.format.avgBytesPerSec;
+	uint16_t const wBitsPerSample  = header.format.bitsPerSample;
 
 	ALenum alFormat = GetALFormat(wBitsPerSample, nChannels);
 
@@ -1481,10 +1446,11 @@ int ExtractWavFile(int soundNum, FileStream &fStream)
 
 	if (nBytesRead != nAudioBytes)
 	{
-		LOCALASSERT(1==0);
+		// the header said the bank holds this much, so it changed or the disk failed while it was read: this sound alone is lost, and stepped over
 		delete[] GameSounds[soundNum].audioBuffer;
 		GameSounds[soundNum].audioBuffer = NULL;
-		return 0;
+		fStream.Seek(startOffset + totalChunkSize, FileStream::SeekStart);
+		return RefusedWAV(GameSounds[soundNum].wavName, "its sound couldn't all be read");
 	}
 
 	// create and store audio buffer

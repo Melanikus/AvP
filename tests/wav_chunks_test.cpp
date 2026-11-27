@@ -361,7 +361,9 @@ static void TestTheGamesLoops()
 	std::string const wavFile = Between(audio, "int LoadWavFile(int soundNum, const std::string &fileName)", "int ExtractWavFile(int soundNum, FileStream &fStream)");
 	std::string const bankWav = Between(audio, "int ExtractWavFile(int soundNum, FileStream &fStream)", "alBufferData");
 
-	Check(Has(wavFile, "if (!FindWavDataChunk(fStream))") && Has(bankWav, "if (!FindWavDataChunk(fStream))"), "both WAV loaders look for the sound with the search tested above");
+	std::string const header = ReadSourceFile("3dc/avp/win95/wav_chunks.h");
+	Check(Has(wavFile, "WavHeader_Read(fStream, kMaxWavDataBytes, &header)") && Has(bankWav, "WavHeader_Read(fStream, kMaxWavDataBytes, &header)"), "both WAV loaders read the header with the reader tested above");
+	Check(Has(Between(header, "inline char const *WavHeader_Read(", "#endif"), "if (!FindWavDataChunk(stream))"), "which looks for the sound with the search tested above");
 	Check(!Has(wavFile, "while (1)") && !Has(bankWav, "while (1)"), "and neither has a search of its own");
 
 	std::string const bank = ReadSourceFile("3dc/avp/psndproj.cpp");
@@ -397,6 +399,293 @@ static void TestTheSizesInSoundFiles()
 	Check(CountOf(scream, "AllocateScreamList(") == 4 && !Has(scream, "PoolAllocateMem(num_voice") && !Has(scream, "PoolAllocateMem(cat->num_sounds"), "and all three lists get their memory that way");
 }
 
+// ---- A WAV'S HEADER (wav_chunks.h, WavHeader_Read). Added 2026-11-27 by Melanikus (Drake). ----
+
+static void Put16(std::string &to, uint16_t value)
+{
+	to.append(reinterpret_cast<const char *>(&value), 2);
+}
+
+static void Put32(std::string &to, uint32_t value)
+{
+	to.append(reinterpret_cast<const char *>(&value), 4);
+}
+
+// A WAV file's bytes. As given, it's like most of the game's own: plain PCM, mono, 8 bits, 11,025 a second, and 100 bytes of sound. A size can be
+// claimed apart from the bytes there, as a damaged file can claim any it likes.
+struct WavMaker
+{
+	uint16_t tag = 1;
+	uint16_t channels = 1;
+	uint32_t rate = 11025;
+	uint32_t avg = 11025;
+	uint16_t align = 1;
+	uint16_t bits = 8;
+	uint32_t formatBytes = 16;     // 18 puts cbSize after the 16
+	uint16_t cbSize = 0;
+	std::string before;            // chunks before the sound
+	std::string sound = std::string(100, 'x');
+	int64_t claimedSound = -1;     // the data chunk's size, when it isn't the sound's
+	int64_t claimedRiff = -1;      // the RIFF chunk's, when it isn't the true one
+	std::string after;             // what comes after the RIFF chunk: the next sound, in a bank
+
+	std::string Bytes() const
+	{
+		std::string format;
+		Put16(format, tag);
+		Put16(format, channels);
+		Put32(format, rate);
+		Put32(format, avg);
+		Put16(format, align);
+		Put16(format, bits);
+
+		if (formatBytes == 18)
+		{
+			Put16(format, cbSize);
+		}
+
+		std::string const body = "WAVE" + Chunk("fmt ", formatBytes, format) + before + Chunk("data", claimedSound < 0 ? (uint32_t)sound.size() : (uint32_t)claimedSound, sound);
+		std::string riff = "RIFF";
+		Put32(riff, claimedRiff < 0 ? (uint32_t)body.size() : (uint32_t)claimedRiff);
+		return riff + body + after;
+	}
+};
+
+static uint32_t const kTheMostSound = 64 * 1024 * 1024;   // openal_audio.cpp's kMaxWavDataBytes
+
+// What the game's reader says of these bytes: 0 when it reads them, else why not
+static const char *HeaderSays(const std::string &bytes, WavHeader *header, uint32_t mostBytes = kTheMostSound)
+{
+	WriteTestFile(bytes);
+	FileStream stream;
+
+	if (!OpenTestFile(stream))
+	{
+		return "the test couldn't open its own file";
+	}
+
+	return WavHeader_Read(stream, mostBytes, header);
+}
+
+static bool Read(const WavMaker &wav)
+{
+	WavHeader header;
+	return HeaderSays(wav.Bytes(), &header) == 0;
+}
+
+static bool Refused(const WavMaker &wav)
+{
+	WavHeader header;
+	const char *const why = HeaderSays(wav.Bytes(), &header);
+	return why != 0 && why[0] != 0;
+}
+
+static void TestTheHeader()
+{
+	puts("the header of a WAV");
+
+	WavMaker const stock = WavMaker();
+
+	{
+		WavHeader header;
+		Check(HeaderSays(stock.Bytes(), &header) == 0, "a WAV like most of the game's own (plain PCM, mono, 8 bits, 11,025 a second) is read");
+		Check(header.format.channels == 1 && header.format.bitsPerSample == 8 && header.format.samplesPerSec == 11025 && header.dataBytes == 100,
+			"and what it says is kept");
+	}
+
+	{
+		WriteTestFile(stock.Bytes());
+		FileStream stream;
+		OpenTestFile(stream);
+		WavHeader header;
+		Check(WavHeader_Read(stream, kTheMostSound, &header) == 0 && header.dataStart == 44 && stream.GetByte() == 'x', "and it stops at the start of the sound, 44 bytes in");
+	}
+
+	WavMaker stereo;
+	stereo.channels = 2;
+	stereo.bits = 16;
+	stereo.rate = 44100;
+	stereo.align = 4;
+	stereo.avg = 176400;
+	Check(Read(stereo), "stereo, 16 bits, 44,100 a second, as the game's own stereo sounds are, is read");
+
+	WavMaker eighteen;
+	eighteen.formatBytes = 18;
+	Check(Read(eighteen), "an 18-byte format that says it has nothing extra, as 13 of the game's own have, is read");
+
+	WavMaker chunksFirst;
+	chunksFirst.before = Chunk("smpl", 4, "abcd") + Chunk("LIST", 2, "ab") + Chunk("fact", 0, "");
+	Check(Read(chunksFirst), "chunks before the sound, as the game's own smpl, LIST and fact, are stepped over");
+
+	WavMaker slowest;
+	slowest.rate = slowest.avg = 100;
+	WavMaker fastest;
+	fastest.rate = fastest.avg = 100000;
+	Check(Read(slowest) && Read(fastest), "the slowest and the fastest rates the sound system plays, 100 and 100,000 a second, are read");
+
+	// What it says has to be what the game plays
+	WavMaker extra = eighteen;
+	extra.cbSize = 2;
+	Check(Refused(extra), "an 18-byte format that says it has extra bytes is refused, not an assert");
+
+	WavMaker adpcm;
+	adpcm.tag = 2;
+	Check(Refused(adpcm), "a WAV that isn't plain PCM (format tag 2, ADPCM) is refused");
+	adpcm.tag = 3;
+	Check(Refused(adpcm), "and so is one of floating-point samples (tag 3)");
+	adpcm.tag = 0xFFFE;
+	Check(Refused(adpcm), "and one that says it's an extended format (0xFFFE)");
+
+	WavMaker channels;
+	channels.channels = 0;
+	channels.align = 0;
+	channels.avg = 0;
+	Check(Refused(channels), "a WAV of no channels is refused");
+	channels.channels = 3;
+	channels.align = 3;
+	channels.avg = 33075;
+	Check(Refused(channels), "and one of 3, not an assert");
+
+	WavMaker bits;
+	bits.bits = 24;
+	bits.align = 3;
+	bits.avg = 33075;
+	Check(Refused(bits), "a WAV of 24-bit samples is refused, not an assert");
+	bits.bits = 4;
+	bits.align = 0;
+	bits.avg = 0;
+	Check(Refused(bits), "and one of 4-bit samples");
+	bits.bits = 0;
+	Check(Refused(bits), "and one of 0-bit samples");
+
+	WavMaker rate;
+	rate.rate = rate.avg = 0;
+	Check(Refused(rate), "a WAV that plays 0 samples a second is refused");
+	rate.rate = rate.avg = 99;
+	Check(Refused(rate), "and one a sample slower than the sound system plays");
+	rate.rate = rate.avg = 100001;
+	Check(Refused(rate), "and one a sample faster");
+	rate.rate = rate.avg = 0xFFFFFFFF;
+	Check(Refused(rate), "and the fastest a number holds");
+
+	WavMaker align;
+	align.align = 2;
+	align.avg = 22050;
+	Check(Refused(align), "a WAV whose block size isn't its channels times its bytes a sample is refused");
+
+	WavMaker avg;
+	avg.avg = 0;
+	Check(Refused(avg), "a WAV that says it plays 0 bytes a second is refused (the game works out its length from it)");
+	avg.avg = 11026;
+	Check(Refused(avg), "and one whose bytes a second aren't its rate times its block size");
+
+	WavMaker none;
+	none.sound.clear();
+	Check(Refused(none), "a WAV with no sound in it is refused");
+
+	WavMaker blocks;
+	blocks.bits = 16;
+	blocks.align = 2;
+	blocks.avg = 22050;
+	Check(Read(blocks), "16-bit sound of 100 bytes, 50 blocks, is read");
+	blocks.sound += "x";
+	Check(Refused(blocks), "and of 101 bytes, half a block over, is refused");
+
+	// Its sizes have to be the file's own
+	WavMaker more;
+	more.claimedSound = 1000;
+	Check(Refused(more), "a WAV that says it holds more sound than the file has is refused, before any memory is asked for");
+	more.claimedSound = 0xFFFFFFFF;
+	Check(Refused(more), "and one that says it holds 4 GB");
+
+	{
+		WavHeader header;
+		Check(HeaderSays(stock.Bytes(), &header, 99) != 0, "a sound of more than the most the game takes from one WAV is refused");
+	}
+
+	{
+		std::string bytes = stock.Bytes();
+		bytes[3] = 'X';
+		WavHeader header;
+		Check(HeaderSays(bytes, &header) != 0 && !header.riffSizeRead, "a file that doesn't start with RIFF is refused, and has no size to step over");
+	}
+
+	{
+		std::string bytes = stock.Bytes();
+		bytes[8] = 'X';
+		WavHeader header;
+		Check(HeaderSays(bytes, &header) != 0 && header.riffSizeRead, "a RIFF that isn't a WAVE is refused, and says where it ends");
+	}
+
+	{
+		std::string riff = "RIFF";
+		std::string body = "WAVE" + Chunk("LIST", 4, "abcd") + stock.Bytes().substr(12);
+		Put32(riff, (uint32_t)body.size());
+		WavHeader header;
+		Check(HeaderSays(riff + body, &header) != 0, "a WAV whose first chunk isn't its format is refused");
+	}
+
+	WavMaker twenty;
+	twenty.formatBytes = 20;
+	Check(Refused(twenty), "a format of 20 bytes, which plain PCM never has, is refused");
+
+	{
+		WavHeader header;
+		Check(HeaderSays(stock.Bytes().substr(0, 30), &header) != 0, "a WAV that ends inside its format is refused");
+		Check(HeaderSays(stock.Bytes().substr(0, 40), &header) != 0, "and one that ends inside the size of its sound");
+	}
+
+	{
+		std::string const bytes = stock.Bytes();
+		std::string riff = "RIFF";
+		std::string const body = bytes.substr(8, 28);   // WAVE and its format, and no sound
+		Put32(riff, (uint32_t)body.size());
+		WavHeader header;
+		Check(HeaderSays(riff + body, &header) != 0, "a WAV with no data chunk is refused");
+	}
+
+	// Its RIFF chunk has to fit: a sound bank steps over it to the next sound
+	{
+		WavMaker inABank;
+		inABank.after = std::string(200, 'n');
+		WavHeader header;
+		Check(HeaderSays(inABank.Bytes(), &header) == 0, "a WAV with another sound after it, as in a sound bank, is read");
+		Check(header.riffStart + header.riffSize == 8 + 36 + 100, "and its RIFF chunk ends where the next sound starts");
+
+		WavMaker pastTheEnd;
+		pastTheEnd.claimedRiff = 36 + 100 + 1000;
+		Check(Refused(pastTheEnd), "a WAV whose RIFF chunk says it runs past the end of the file is refused");
+
+		WavMaker shortRiff;
+		shortRiff.claimedRiff = 30;
+		shortRiff.after = std::string(200, 'n');
+		Check(Refused(shortRiff), "and so is one whose sound runs past its own RIFF chunk, into the next sound");
+
+		WavMaker refusedButStepped = adpcm;
+		refusedButStepped.after = std::string(200, 'n');
+		Check(HeaderSays(refusedButStepped.Bytes(), &header) != 0 && header.riffSizeRead && header.riffStart + header.riffSize == 8 + 36 + 100,
+			"a WAV refused for its format still says where its RIFF chunk ends, so a bank can step over it");
+	}
+}
+
+// The loaders refuse what the header's reader refuses, before any memory, and say so in the log (added 2026-11-27 by Melanikus (Drake))
+static void TestTheLoadersRefuse()
+{
+	puts("the WAV loaders refuse what the header's reader refuses");
+
+	std::string const audio = ReadSourceFile("3dc/avp/win95/openal_audio.cpp");
+	std::string const wavFile = Between(audio, "int LoadWavFile(int soundNum, const std::string &fileName)", "int ExtractWavFile(int soundNum, FileStream &fStream)");
+	std::string const bankWav = Between(audio, "int ExtractWavFile(int soundNum, FileStream &fStream)", "alBufferData");
+
+	Check(ComesBefore(wavFile, "return RefusedWAV(fileName, refused);", "AllocateWavData(soundNum, nAudioBytes)"), "a WAV file the reader refuses is refused before any memory is asked for it");
+	Check(ComesBefore(bankWav, "return RefusedWAV(GameSounds[soundNum].wavName, refused);", "AllocateWavData(soundNum, nAudioBytes)"), "and so is one in a sound bank");
+	Check(ComesBefore(bankWav, "if (header.riffSizeRead)\n\t\t{\n\t\t\tfStream.Seek(startOffset + totalChunkSize, FileStream::SeekStart);", "return RefusedWAV(GameSounds[soundNum].wavName, refused);"),
+		"and a refused one in a bank is stepped over when its size was read, so the next one is still found");
+	Check(!Has(wavFile, "assert(") && !Has(bankWav, "assert(") && !Has(wavFile, "LOCALASSERT(") && !Has(bankWav, "LOCALASSERT("), "neither loader has an assert left: a bad WAV is refused and said in the log");
+	Check(Has(audio, "LogString(\"sound: refused the WAV \" + PlainFileName_Printable(name.c_str()) + \": \" + why);"), "and the log names it, printable, and says why");
+	Check(Has(audio, "static_assert(kWavSlowestRate == (uint32_t)FREQUENCY_MINPLAT && kWavFastestRate == (uint32_t)FREQUENCY_MAXPLAT"), "the rates it refuses are the sound system's own limits");
+}
+
 int main()
 {
 	TestReadingToTheEnd();
@@ -405,9 +694,13 @@ int main()
 	TestPeekByte();
 	TestANameThatNeverEnds();
 	TestFindingTheSound();
+	TestFindingTheSound();
+	TestTheHeader();
 	TestFailedReadsAndStartingAfresh();
 	TestTheGamesLoops();
 	TestTheSizesInSoundFiles();
+	TestTheSizesInSoundFiles();
+	TestTheLoadersRefuse();
 
 	remove(kTestFile);
 
