@@ -21,6 +21,8 @@
 #include "bh_marine.h"
 #include "pfarlocs.h"
 #include "bh_generator.h"
+#include "hive_waits.h"
+#include <limits.h>
 #include "pvisible.h"
 #include "pheromone.h"
 #include "bh_far.h"
@@ -633,10 +635,13 @@ static void ResetGeneratorTimer(GENERATOR_BLOCK *genBlock)
 	/* shouldn't be doing this for a net game */
 //	LOCALASSERT(AvP.Network == I_No_Network);
 
+	// in 64 bits, as a level's numbers can ask for a wait no whole number holds (hive_waits.h says why)
+	int64_t baseTime;
+
 	if(genBlock->use_own_rate_values)
 	{
 		// the rate comes from the level file, and 0 would divide by nothing
-		genBlock->Timer	= (genBlock->GenerationRate > 0) ? (60 * ONE_FIXED *100)/genBlock->GenerationRate : GENERATORTIME_MAX;
+		baseTime = (genBlock->GenerationRate > 0) ? (60 * ONE_FIXED *100)/genBlock->GenerationRate : GENERATORTIME_MAX;
 	}
 	else
 	{
@@ -645,35 +650,22 @@ static void ResetGeneratorTimer(GENERATOR_BLOCK *genBlock)
 		LOCALASSERT(NPCHive.generatorNPCsPerMinute>0);
 
 		/* set the timer */
-		genBlock->Timer	= (((60 * ONE_FIXED)/max(NPCHive.generatorNPCsPerMinute,1))*NPCHive.numGenerators);
+		baseTime = HiveWaits_SharedGeneratorTime(NPCHive.generatorNPCsPerMinute, NPCHive.numGenerators);
 	}
-	/* randomise +- an eighth */
-	{
-		int baseTime = genBlock->Timer;
-		int spread = baseTime/4;
 
-		// a time this short has no eighth to spare, and the sum would divide by nothing
-		genBlock->Timer = ((baseTime*7)/8) + (spread ? FastRandom()%spread : 0);
-	}
-	/* clamp */
-	if(genBlock->Timer>GENERATORTIME_MAX) genBlock->Timer=GENERATORTIME_MAX;
-	if(genBlock->Timer<GENERATORTIME_MIN) genBlock->Timer=GENERATORTIME_MIN;
-
+	/* randomise +- an eighth, and clamp */
+	genBlock->Timer = HiveWaits_Kept(HiveWaits_AnEighthEitherWay(baseTime, FastRandom), GENERATORTIME_MIN, GENERATORTIME_MAX);
 }
 
 static void ResetHiveStateTime(void)
 {
-	int baseTime; 
-
 	/* shouldn't be doing this for a net game */
 //	LOCALASSERT(AvP.Network == I_No_Network);
 
 	/* set the timer, +- an eighth */
-	baseTime = LoadedHiveData.hiveStateBaseTime;
-
-	// this time comes from the level file, and one too short has no eighth to spare
-	NPCHive.hiveStateTimer = ((baseTime*7)/8) + ((baseTime/4) ? FastRandom()%(baseTime/4) : 0);
-
+	// The time comes from the level file, kept from 1 s to 32,767 s as it's read (avp_chunk.cpp). The sum is in 64 bits (hive_waits.h says why), and
+	// as an eighth more than the longest is more than the timer's whole number holds, the wait is kept to the most it does, just under 32,768 s.
+	NPCHive.hiveStateTimer = HiveWaits_Kept(HiveWaits_AnEighthEitherWay(LoadedHiveData.hiveStateBaseTime, FastRandom), 0, INT_MAX);
 }
 
 

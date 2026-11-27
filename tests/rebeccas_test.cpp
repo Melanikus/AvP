@@ -5549,6 +5549,170 @@ static void TestWaypointRooms()
 	}
 }
 
+// 53. A level's sky and starting kit, its AVPENVIR chunk. (Added 2026-11-27 by Melanikus (Drake).) Every block of these the game writes holds 24 bytes,
+// as all the game's own levels do. A shorter chunk used to be read anyway. Its block got 24 bytes of memory that nothing had written; the block's own size,
+// the first number in it, which the FILE gives, chose which fields took the defaults; and a block that said it held 24 bytes kept whatever that memory held
+// for the rest: the sky, the kit and the spears. So a chunk holding less than 24 bytes is refused now, and one made straight from its bytes (as the tools
+// do, with no loader to check it) counts only the bytes it really holds. And the Predator starts with 65536 rounds a spear (inventory.cpp), a sum that
+// runs over a whole number past 32,767 spears, so that's the most a level gets, and none is the fewest.
+//
+// A level's environment holding one AVPENVIR chunk of `holds` bytes, as a level file gives it to the loader. Its block says it holds saysItHolds, its sky
+// is 1, 2, 3, its kit only the jetpack and the stars (0x60), and its spears `spears`, as far as the chunk has room for them.
+static int const SettingsBytes = 24;
+static int const JetpackAndStars = 0x60;
+
+static void PutSettings(char * at, size_t holds, int saysItHolds, int spears)
+{
+	int const block[6] = { saysItHolds, 1, 2, 3, JetpackAndStars, spears };
+	memcpy(at, block, holds);
+}
+
+static AVP_Environment_Settings const * SettingsInALevel(File_Chunk & file, std::unique_ptr<Environment_Data_Chunk> & level, size_t holds, int saysItHolds,
+	int spears)
+{
+	alignas(int) static char bytes[ChunkHeaderBytes + SettingsBytes];
+	PutSettings(PutChunk(bytes, "AVPENVIR", holds), holds, saysItHolds, spears);
+
+	level.reset(new Environment_Data_Chunk(&file, bytes, ChunkHeaderBytes + holds));
+
+	AVP_Environment_Settings_Chunk const * const settings = dynamic_cast<AVP_Environment_Settings_Chunk const *>(level->lookup_single_child("AVPENVIR"));
+	return settings ? settings->settings : 0;
+}
+
+static bool SettingsAccepted(size_t holds, int saysItHolds)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	std::unique_ptr<Environment_Data_Chunk> level;
+	bool const accepted = SettingsInALevel(file, level, holds, saysItHolds, 30) != 0 && file.error_code == 0;
+
+	Parent_File = 0;
+	return accepted;
+}
+
+// The spears a level of the game's own size gives, with this many in its block
+static int SpearsFromALevel(int spears)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	std::unique_ptr<Environment_Data_Chunk> level;
+	AVP_Environment_Settings const * const settings = SettingsInALevel(file, level, SettingsBytes, SettingsBytes, spears);
+	int const given = settings ? settings->predator_num_spears : -12345;
+
+	Parent_File = 0;
+	return given;
+}
+
+static bool IsTheDefaultKit(AVP_Environment_Settings const * s)
+{
+	return s->predator_pistol == 1 && s->predator_plasmacaster == 1 && s->predator_disc == 1 && s->predator_medicomp == 1 && s->predator_grappling_hook == 0 &&
+		s->marine_jetpack == 0 && s->stars_in_sky == 0 && s->predator_num_spears == 30;
+}
+
+static void TestEnvironmentSettings()
+{
+	puts("53. a level's sky and starting kit");
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		std::unique_ptr<Environment_Data_Chunk> level;
+		AVP_Environment_Settings const * const s = SettingsInALevel(file, level, SettingsBytes, SettingsBytes, 50);
+
+		Check(s != 0 && file.error_code == 0, "settings of the size every one of the game's own levels has are accepted");
+		Check(s && s->sky_colour_red == 1 && s->sky_colour_green == 2 && s->sky_colour_blue == 3, "and their sky is the level's");
+		Check(s && s->marine_jetpack == 1 && s->stars_in_sky == 1 && s->predator_pistol == 0 && s->predator_num_spears == 50, "and so are their kit and spears");
+		Parent_File = 0;
+	}
+
+	Check(!SettingsAccepted(23, SettingsBytes), "settings one byte short of the block are refused");
+	Check(!SettingsAccepted(20, SettingsBytes), "settings with no room for the spears are refused");
+	Check(!SettingsAccepted(16, 16), "settings holding only a size and a sky are refused");
+	Check(!SettingsAccepted(4, SettingsBytes), "settings holding only their size are refused");
+	Check(!SettingsAccepted(0, 0), "settings holding nothing are refused");
+
+	// Made straight from its bytes, with no loader to refuse it: only the bytes the chunk really holds count, and the rest take the defaults
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		alignas(int) static char bytes[SettingsBytes];
+		PutSettings(bytes, 20, SettingsBytes, 50);
+		std::unique_ptr<AVP_Environment_Settings_Chunk> const made(new AVP_Environment_Settings_Chunk(&file, bytes, 20));
+		AVP_Environment_Settings const * const s = made->settings;
+
+		Check(s->sky_colour_red == 1 && s->sky_colour_green == 2 && s->sky_colour_blue == 3, "20 bytes that say they're 24, made straight from them: the sky they hold is kept");
+		Check(IsTheDefaultKit(s), "and as they're shorter than the block, the kit and the spears are the defaults, not what the memory held");
+
+		PutSettings(bytes, 3, SettingsBytes, 50);
+		std::unique_ptr<AVP_Environment_Settings_Chunk> const tiny(new AVP_Environment_Settings_Chunk(&file, bytes, 3));
+		Check(tiny->settings->sky_colour_red == 200 && tiny->settings->sky_colour_green == 200 && tiny->settings->sky_colour_blue == 200 &&
+			IsTheDefaultKit(tiny->settings), "3 bytes, too few for even the block's size: everything is the defaults");
+
+		PutSettings(bytes, 16, 16, 50);
+		std::unique_ptr<AVP_Environment_Settings_Chunk> const older(new AVP_Environment_Settings_Chunk(&file, bytes, 16));
+		Check(older->settings->sky_colour_green == 2 && IsTheDefaultKit(older->settings), "an older block of 16 bytes, made straight from them: its sky, and the default kit");
+
+		PutSettings(bytes, SettingsBytes, 16, 50);
+		std::unique_ptr<AVP_Environment_Settings_Chunk> const saysLess(new AVP_Environment_Settings_Chunk(&file, bytes, SettingsBytes));
+		Check(saysLess->settings->sky_colour_green == 2 && IsTheDefaultKit(saysLess->settings), "24 bytes whose block says 16: the block's own size still counts, as it did");
+
+		PutSettings(bytes, SettingsBytes, -1, 50);
+		std::unique_ptr<AVP_Environment_Settings_Chunk> const negative(new AVP_Environment_Settings_Chunk(&file, bytes, SettingsBytes));
+		Check(negative->settings->sky_colour_red == 200 && IsTheDefaultKit(negative->settings), "24 bytes whose block says a negative size: everything is the defaults");
+
+		Check(file.error_code == 0, "and none of them stops the file");
+		Parent_File = 0;
+	}
+
+	Check(SpearsFromALevel(30) == 30, "the game's own 30 spears are 30");
+	Check(SpearsFromALevel(50) == 50, "and one of its own levels' 50 are 50");
+	Check(SpearsFromALevel(0) == 0, "no spears are none");
+	Check(SpearsFromALevel(AVPEnvironment_MostSpears) == AVPEnvironment_MostSpears, "32,767 spears, the most whose rounds a whole number holds, are kept");
+	Check(SpearsFromALevel(AVPEnvironment_MostSpears + 1) == AVPEnvironment_MostSpears, "one more is kept to 32,767, whose rounds don't run over");
+	Check(SpearsFromALevel(0x7fffffff) == AVPEnvironment_MostSpears, "and so are the most a number holds");
+	Check(SpearsFromALevel(-1) == 0, "a negative number of spears is none, not rounds below 0");
+	Check(SpearsFromALevel((int)0x80000000) == 0, "and so is the most negative");
+}
+
+// 54. The hive's time, how long it waits between attacking and regrouping, in its GLOGENDC chunk. (Added 2026-11-27 by Melanikus (Drake).) The game holds
+// the wait in 65536ths of a second in a whole number, which holds 32,767 s and no more, and a wait of 0 or less turned the hive round every frame. The
+// game's own levels ask for 10 s to 32,000 s. (How the wait is worked out from it is hive_waits_test's.)
+static int HiveSecondsFromALevel(int seconds)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	alignas(int) static char generator[28];
+	memset(generator, 0, sizeof(generator));
+	PutNumber(generator, 16, seconds);
+
+	std::unique_ptr<Global_Generator_Data_Chunk> const made(new Global_Generator_Data_Chunk(&file, generator, sizeof(generator)));
+	int const kept = (file.error_code == 0) ? made->HiveStateChangeTime : -12345;
+
+	Parent_File = 0;
+	return kept;
+}
+
+static void TestHiveTime()
+{
+	puts("54. the hive's time between attacking and regrouping");
+
+	Check(HiveSecondsFromALevel(60) == 60, "the game's own 60 s is 60 s");
+	Check(HiveSecondsFromALevel(10) == 10, "and its shortest, 10 s, is 10 s");
+	Check(HiveSecondsFromALevel(32000) == 32000, "and 32,000 s, as 21 of its levels ask, is 32,000 s, kept whole");
+	Check(HiveSecondsFromALevel(GlobalGenerator_ShortestHiveSeconds) == 1, "1 s, the shortest a level can ask for, is kept");
+	Check(HiveSecondsFromALevel(GlobalGenerator_LongestHiveSeconds) == 32767, "32,767 s, the longest a whole number holds in 65536ths, is kept");
+	Check(HiveSecondsFromALevel(GlobalGenerator_LongestHiveSeconds + 1) == 32767, "one second more is kept to 32,767 s, not run over");
+	Check(HiveSecondsFromALevel(0x7fffffff) == 32767, "and so are the most a number holds");
+	Check(HiveSecondsFromALevel(0) == 1, "no time at all is 1 s, not a hive that turns round every frame");
+	Check(HiveSecondsFromALevel(-1) == 1, "a negative time is 1 s");
+	Check(HiveSecondsFromALevel((int)0x80000000) == 1, "and so is the most negative");
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -5600,6 +5764,8 @@ int main()
 	TestModuleMasters();
 	TestFlagsFromAFile();
 	TestWaypointRooms();
+	TestEnvironmentSettings();
+	TestHiveTime();
 
 	if (checksFailed)
 	{

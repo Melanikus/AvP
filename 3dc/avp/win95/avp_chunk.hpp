@@ -193,6 +193,12 @@ enum Generated_Enemies
 	Generate_Marines,	
 };
 
+// The shortest and the longest wait a level can ask for between the hive's attacking and its regrouping, in seconds (Global_Generator_Data_Chunk keeps a
+// level's between them). The game holds the wait in 65536ths of a second in a whole number, which holds 32,767 s and no more, and a wait of 0 or less
+// would turn the hive round every frame.
+int const GlobalGenerator_ShortestHiveSeconds = 1;
+int const GlobalGenerator_LongestHiveSeconds = 32767;
+
 class Global_Generator_Data_Chunk : public Chunk
 {
 public :	
@@ -253,6 +259,10 @@ public :
 };
 
 class AVP_Environment_Settings_Chunk;
+
+// The most spears a level can give the Predator to start with (AVP_Environment_Settings_Chunk keeps a level's from 0 to this). The game gives 65536 rounds
+// a spear (inventory.cpp), and that sum runs over a whole number past 32,767 spears.
+int const AVPEnvironment_MostSpears = 32767;
 
 struct AVP_Environment_Settings
 {

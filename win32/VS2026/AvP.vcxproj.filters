@@ -1208,6 +1208,9 @@
     <ClInclude Include="..\..\3dc\avp\gameflow.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\hive_waits.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\hmodel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
