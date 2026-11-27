@@ -3171,6 +3171,7 @@ void setup_generators (Environment_Data_Chunk * envd)
 				GLOBALASSERT("Invalid enemy type"==0);
 				
 		}
+		// the chunk keeps the hive's time from 1 s to 32,767 s as it's read (avp_chunk.cpp), so this, in 65536ths of a second, fits a whole number
 		SetHiveParamaters(generator_enemy,ggdc->MaxNPCSOnLevel,ggdc->NPCSPerMinute,ggdc->NPCAcceleration,ggdc->HiveStateChangeTime*ONE_FIXED);
 
 	}
