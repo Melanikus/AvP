@@ -19,6 +19,9 @@
 //   the sound streams (AudioStream) moved, as they were, to openal_stream.cpp, so a test can build them on their own, and GetALFormat
 //   to openal_shared.h, which both files share. What a stream needs of the sound system's state is given by three small functions at
 //   the end of this file
+// Modified 2026-11-25 by Melanikus (Vasquez) for the AvP port:
+//   a 3D sound is refused while there is no listener (no view yet, before a level makes one), instead of reading the view through a
+//   pointer that is 0 (tests/sound_no_listener_test.cpp)
 
 #ifdef USE_OPENAL
 
@@ -1136,6 +1139,14 @@ int PlatDo3dSound(int activeIndex)
 	// nothing to play it on: see PlatStopSound
 	if (!ActiveSounds[activeIndex].source) {
 		return 1;
+	}
+
+	// nobody to hear it: how loud a 3D sound is depends on how far it is from the listener, the game's view, and there is no view
+	// until a level makes one (Global_VDB_Ptr starts at 0, view.cpp). With none there is no distance to work out, so the sound is
+	// refused: PlatPlaySound then stops it and gives its source back, and a frame's update (SoundSys_Management, Sound_ChangeVolume)
+	// leaves a playing one as it was until the view is back
+	if (!Global_VDB_Ptr) {
+		return SOUND_PLATFORMERROR;
 	}
 
 	// find the distance of the sound

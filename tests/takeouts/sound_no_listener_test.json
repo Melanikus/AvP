@@ -1,0 +1,49 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "a 3D sound reads the view with no listener there, as it did before",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "\tif (!Global_VDB_Ptr) {\n\t\treturn SOUND_PLATFORMERROR;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a 3D sound with no listener passes as heard, so it plays with nobody to hear it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "\tif (!Global_VDB_Ptr) {\n\t\treturn SOUND_PLATFORMERROR;\n\t}\n",
+					"to": "\tif (!Global_VDB_Ptr) {\n\t\treturn 1;\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a 3D sound refused as it starts keeps its source",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "\t\tif (PlatDo3dSound(activeIndex) == SOUND_PLATFORMERROR)\n\t\t{\n\t\t\tPlatStopSound(activeIndex);\n\t\t\treturn SOUND_PLATFORMERROR;\n\t\t}",
+					"to": "\t\tif (PlatDo3dSound(activeIndex) == SOUND_PLATFORMERROR)\n\t\t{\n\t\t\treturn SOUND_PLATFORMERROR;\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "a 3D sound refused as it starts plays anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "\t\tif (PlatDo3dSound(activeIndex) == SOUND_PLATFORMERROR)\n\t\t{\n\t\t\tPlatStopSound(activeIndex);\n\t\t\treturn SOUND_PLATFORMERROR;\n\t\t}",
+					"to": "\t\tPlatDo3dSound(activeIndex);"
+				}
+			]
+		}
+	]
+}
