@@ -1,0 +1,63 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a teardown is not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\tteardowns++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "the count is never given",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\treturn teardowns;",
+					"to": "\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "a holder giving its sound back is counted as a teardown",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\tLOADED_SOUND * ucls = *ucls_p;\n",
+					"to": "\tLOADED_SOUND * ucls = *ucls_p;\n\tteardowns++;\n"
+				}
+			]
+		},
+		{
+			"name": "a teardown is counted only after the sounds are freed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\tteardowns++;\n\n\tLOADED_SOUND* ls;",
+					"to": "\tLOADED_SOUND* ls;"
+				},
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\t\tDeallocateMem (ls);\n\t}\n}",
+					"to": "\t\tDeallocateMem (ls);\n\t}\n\n\tteardowns++;\n}"
+				}
+			]
+		},
+		{
+			"name": "an empty teardown is not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "\tteardowns++;\n",
+					"to": "\tif (loaded_sounds.size()) teardowns++;\n"
+				}
+			]
+		}
+	]
+}
